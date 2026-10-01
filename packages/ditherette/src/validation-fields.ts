@@ -11,6 +11,22 @@ import {
 /** Private working-space tags, in ABI order. */
 export const spaces = ['srgb', 'linear-rgb', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr'];
 const sizes = ['2', '4', '8', '16'];
+/** Private ordered-tile and diffusion-kernel tags, in ABI order. */
+const tiles = ['3x1', '4x1', '4x2', '5x3'];
+const kernels = [
+	'floyd-steinberg',
+	'sierra',
+	'sierra-lite',
+	'atkinson',
+	'jarvis-judice-ninke',
+	'stucki',
+	'burkes',
+	'two-row-sierra',
+	'fan',
+	'shiau-fan',
+	'shiau-fan-2',
+	'simple-2d'
+];
 const maximumF32 = 3.4028234663852886e38;
 
 function scalar(value: unknown, path: string): number {
@@ -28,16 +44,20 @@ function normalizePolicy(value: unknown, path: string) {
 	);
 	const inputField = object(
 		field(policy, 'field'),
-		['algorithm', 'size', 'seed'],
+		['algorithm', 'size', 'seed', 'tile'],
 		'invalid-settings',
 		`${path}.field`
 	);
 	const algorithm = field(inputField, 'algorithm');
+	const onlyControl = (control: 'size' | 'seed' | 'tile' | null, message: string) => {
+		for (const key of ['size', 'seed', 'tile'])
+			if (key !== control && Object.hasOwn(inputField, key))
+				throw new DitheretteError('invalid-settings', `${path}.field.${key}`, message);
+	};
 	let fieldTag: number;
 	let parameter: number;
 	if (algorithm === 'bayer') {
-		if (Object.hasOwn(inputField, 'seed'))
-			throw new DitheretteError('invalid-settings', `${path}.field.seed`, 'Bayer has no seed.');
+		onlyControl('size', 'Bayer takes only a size.');
 		const size = field(inputField, 'size');
 		if (typeof size !== 'string' || !sizes.includes(size))
 			throw new DitheretteError(
@@ -48,12 +68,7 @@ function normalizePolicy(value: unknown, path: string) {
 		fieldTag = 0;
 		parameter = Number(size);
 	} else if (algorithm === 'random') {
-		if (Object.hasOwn(inputField, 'size'))
-			throw new DitheretteError(
-				'invalid-settings',
-				`${path}.field.size`,
-				'Random has no matrix size.'
-			);
+		onlyControl('seed', 'Random takes only a seed.');
 		const seed = field(inputField, 'seed');
 		if (typeof seed !== 'number' || !Number.isInteger(seed) || seed < 0 || seed > 4_294_967_295)
 			throw new DitheretteError(
@@ -64,15 +79,20 @@ function normalizePolicy(value: unknown, path: string) {
 		fieldTag = 1;
 		parameter = seed;
 	} else if (algorithm === 'blue-noise') {
-		for (const key of ['size', 'seed'])
-			if (Object.hasOwn(inputField, key))
-				throw new DitheretteError(
-					'invalid-settings',
-					`${path}.field.${key}`,
-					'Blue noise has no size or seed control.'
-				);
+		onlyControl(null, 'Blue noise has no size, seed, or tile control.');
 		fieldTag = 2;
 		parameter = 0;
+	} else if (algorithm === 'ordered') {
+		onlyControl('tile', 'Ordered takes only a tile.');
+		const tile = field(inputField, 'tile');
+		parameter = typeof tile === 'string' ? tiles.indexOf(tile) : -1;
+		if (parameter < 0)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.field.tile`,
+				`Expected ordered tile ${tiles.join(', ')}.`
+			);
+		fieldTag = 3;
 	} else
 		throw new DitheretteError(
 			'invalid-settings',
@@ -221,10 +241,7 @@ export function validateDitherAndQuantize(value: unknown) {
 				'dither'
 			);
 			const kernel = field(dither, 'kernel');
-			const kernelTag =
-				typeof kernel === 'string'
-					? ['floyd-steinberg', 'sierra', 'sierra-lite', 'atkinson'].indexOf(kernel)
-					: -1;
+			const kernelTag = typeof kernel === 'string' ? kernels.indexOf(kernel) : -1;
 			if (kernelTag < 0)
 				throw new DitheretteError('invalid-settings', 'dither.kernel', 'Unknown diffusion kernel.');
 			const feedback = field(dither, 'feedback');

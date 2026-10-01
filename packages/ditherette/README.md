@@ -266,6 +266,8 @@ const indexed = processor.ditherAndQuantize({
 Bayer sizes are string tags `2`, `4`, `8`, and `16`.
 Random uses `{ algorithm: 'random', seed: 0 }`, with an unsigned 32-bit integer seed.
 Blue noise uses `{ algorithm: 'blue-noise' }`, with a fixed 32×32 tile and no size or seed controls.
+Ordered uses `{ algorithm: 'ordered', tile: '4x2' }`. Tiles are `3x1`, `4x1`, `4x2`, and `5x3`, named width by height.
+Each tile repeats from the image's top-left pixel. Their threshold orders are listed in the crate's `spec/dither_modes/ordered.md`.
 Random values depend on the global pixel index, so row scheduling does not change the sequence.
 Working spaces are `srgb`, `linear-rgb`, `oklab`, `oklch`, `cielab`, `cielch`, and `ycbcr`.
 They are independent of palette matching settings.
@@ -293,7 +295,9 @@ const indexed = processor.ditherAndQuantize({
 });
 ```
 
-Kernels are `floyd-steinberg`, `sierra`, `sierra-lite`, and `atkinson`.
+Kernels are `floyd-steinberg`, `sierra`, `sierra-lite`, `atkinson`, `jarvis-judice-ninke`, `stucki`, `burkes`,
+`two-row-sierra`, `fan`, `shiau-fan`, `shiau-fan-2`, and `simple-2d`.
+Sierra3 is `sierra`, and Sierra-2-4A (Filter Lite) is `sierra-lite`.
 `srgb-bytes` feedback rounds and clips before matching. `matching` feedback keeps unrounded coordinates in the selected matching space.
 Serpentine scanning reverses alternate rows. Adaptive placement uses the unchanged source and the matching space.
 Preserved transparent pixels discard incoming error and emit none. Palette order, duplicates, and warnings follow direct quantization.

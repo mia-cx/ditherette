@@ -42,6 +42,7 @@ export type {
 	PerturbPolicy,
 	PerturbRequest,
 	DitherAndQuantizeRequest,
+	DiffusionKernel,
 	RecipeV1,
 	ProcessRequest,
 	Ditherette,
