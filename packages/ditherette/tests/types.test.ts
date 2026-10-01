@@ -342,7 +342,26 @@ processor.then((instance) => {
 	});
 	const step: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 1, recipe };
 	const auto: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 0.5, recipe: null };
-	void [step, auto];
+	const masked: import('../src/index.js').Effect = {
+		effect: 'exposure',
+		enabled: true,
+		stops: 1,
+		mask: [
+			{ x: { model: 'oklch', channel: 'lightness' }, points: [[0, 1], [1, 0]] },
+			{
+				x: { model: 'oklch', channel: 'hue' },
+				x2: { model: 'oklch', channel: 'chroma' },
+				grid: { columns: [0, 0.5], rows: [0, 1], values: [[1, 0], [1, 1]] }
+			}
+		]
+	};
+	const unmixed: import('../src/index.js').MaskCurve = {
+		x: { model: 'srgb', channel: 'red' },
+		points: [[0, 1], [1, 0]],
+		// @ts-expect-error A mask curve has no output channel.
+		y: { model: 'srgb', channel: 'red' }
+	};
+	void [step, auto, masked, unmixed];
 	// @ts-expect-error Analysis needs a working space.
 	instance.analyzeRecolour({ version: 1, source: request.source, effects: [], context: { palette: quantize.palette } });
 });

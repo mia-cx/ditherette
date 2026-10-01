@@ -862,3 +862,103 @@ test('isEffect vets one step without Wasm', () => {
 	])
 		assert.equal(isEffect(step), false, JSON.stringify(step));
 });
+
+const lightness = { model: 'oklch', channel: 'lightness' };
+/** A mask curve that is `value` everywhere. */
+const constant = (value) => ({
+	x: lightness,
+	points: [
+		[0, value],
+		[1, value]
+	]
+});
+/** Full strength where red is low, none where it is high: the ramp covers both. */
+const lowRed = {
+	x: { model: 'srgb', channel: 'red' },
+	points: [
+		[0, 1],
+		[0.5, 0],
+		[1, 0]
+	]
+};
+
+test('masks hold a step back per colour, and full or empty masks change nothing', () =>
+	withProcessor((processor) => {
+		const source = ramp();
+		const steps = [grading.exposure, grading.curves, grading['hue-saturation']];
+		for (const step of steps) {
+			const unmasked = apply(processor, [step]).data;
+			assert.deepEqual(apply(processor, [{ ...step, mask: [] }]).data, unmasked);
+			assert.deepEqual(apply(processor, [{ ...step, mask: [constant(1)] }]).data, unmasked);
+			assert.deepEqual(apply(processor, [{ ...step, mask: [constant(0)] }]).data, source.data);
+			const masked = apply(processor, [{ ...step, mask: [lowRed] }]).data;
+			assert.notDeepEqual(masked, unmasked, step.effect);
+			assert.notDeepEqual(masked, source.data, step.effect);
+			for (let index = 3; index < source.data.length; index += 4)
+				assert.equal(masked[index], source.data[index]);
+		}
+		const recolour = { effect: 'recolour', enabled: true, strength: 1, recipe: null };
+		const context = { context: { palette, space: 'oklab' } };
+		assert.deepEqual(
+			apply(processor, [{ ...recolour, mask: [constant(0)] }], context).data,
+			source.data
+		);
+		assert.ok(isEffect({ ...grading.exposure, mask: [lowRed, constant(0.5)] }));
+	}));
+
+test('masks validate their limits and curves with indexed paths', () =>
+	withProcessor((processor) => {
+		const fails = (mask, path) =>
+			assert.throws(
+				() => apply(processor, [halve, { ...grading.exposure, enabled: false, mask }]),
+				(error) => error.code === 'invalid-settings' && error.path === path,
+				path
+			);
+		fails(Array(5).fill(constant(1)), 'effects.1.mask');
+		fails({}, 'effects.1.mask');
+		fails(
+			[constant(1), { ...constant(1), x: { model: 'hsl', channel: 'chroma' } }],
+			'effects.1.mask.1.x.channel'
+		);
+		// Shape errors name the exact field, finer than Rust's `effects.1`.
+		fails([{ ...constant(1), y: lightness }], 'effects.1.mask.0.y');
+		fails([{ ...constant(1), kind: 'remap' }], 'effects.1.mask.0.kind');
+		fails(
+			[
+				{
+					x: lightness,
+					points: [
+						[0, 1],
+						[1, 1.5]
+					]
+				}
+			],
+			'effects.1.mask.0.points.1.1'
+		);
+		fails(
+			[
+				{
+					x: { model: 'hsv', channel: 'hue' },
+					points: [
+						[0, 1],
+						[1, 0]
+					]
+				}
+			],
+			'effects.1.mask.0.points.1.1'
+		);
+		const grid = { x: twoInputCurve.x, x2: twoInputCurve.x2, grid: twoInputCurve.grid };
+		fails([{ ...grid, x2: grid.x }], 'effects.1.mask.0.x2');
+		fails(
+			[
+				{ ...grid, grid: { ...grid.grid, values: grid.grid.values.map((row) => row.map(() => 2)) } }
+			],
+			'effects.1.mask.0.grid.values.0.0'
+		);
+		// Arguments are checked before the mask, as in Rust.
+		assert.throws(
+			() => apply(processor, [{ ...grading.exposure, stops: 9, mask: Array(5).fill(constant(1)) }]),
+			(error) => error.path === 'effects.0.stops'
+		);
+		assert.ok(apply(processor, [{ ...grading.exposure, mask: [grid] }]));
+	}));
