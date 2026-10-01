@@ -1,6 +1,6 @@
 import { persistentAtom } from '@nanostores/persistent';
 import { computed } from 'nanostores';
-import { isEffect, type Effect } from 'ditherette';
+import { isEffect, type Effect, type MaskCurve } from 'ditherette';
 import { EFFECTS, MAX_EFFECT_LAYERS, type EffectKind } from '$lib/effects/catalog';
 
 /** One named instance in the effect pipeline. The name only labels it; `step` is what runs. */
@@ -110,6 +110,14 @@ export function renameEffect(id: string, name: string) {
 /** Replace a layer's step arguments. The effect kind never changes. */
 export function updateEffect(id: string, step: Effect) {
 	replaceLayer(id, (layer) => (layer.step.effect === step.effect ? { ...layer, step } : layer));
+}
+
+/** Replace a layer's mask. An empty mask is full strength, so the step leaves it out. */
+export function setEffectMask(id: string, mask: MaskCurve[]) {
+	replaceLayer(id, (layer) => ({
+		...layer,
+		step: { ...layer.step, mask: mask.length ? mask : undefined }
+	}));
 }
 
 export function setEffectEnabled(id: string, enabled: boolean) {

@@ -9,7 +9,7 @@
 		evaluatePeriodicCurve,
 		type CurvePoint
 	} from '$lib/effects/spline';
-	import { tonePath } from '$lib/effects/tone';
+	import { tonePath, type Neutral } from '$lib/effects/tone';
 	import ToneGrid from './ToneGrid.svelte';
 
 	type Props = {
@@ -23,7 +23,7 @@
 		/** Names for the point fields: what x reads and what y sets. */
 		axes?: { x: string; y: string };
 		/** The dashed line where the curve changes nothing. */
-		neutral?: 'diagonal' | 'flat';
+		neutral?: Neutral;
 		/**
 		 * A hue x axis: the curve wraps, its end points stay at 0 and 1 with one shared y, and other
 		 * points dragged past one edge continue at the other.
