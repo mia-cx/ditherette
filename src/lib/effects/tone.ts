@@ -8,6 +8,9 @@ import type {
 /** Maps one encoded sRGB channel value from 0 through 1, as an effect's spec defines it. */
 export type ToneMap = (value: number) => number;
 
+/** Where a curve changes nothing: a remap's diagonal, an adjustment's midline, or a mask's top. */
+export type Neutral = 'diagonal' | 'flat' | 'full';
+
 const decode = (value: number) =>
 	value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 const encode = (value: number) =>

@@ -5,11 +5,13 @@
 		removeEffect,
 		renameEffect,
 		setEffectEnabled,
+		setEffectMask,
 		updateEffect
 	} from '$lib/stores/effects';
 	import { Button } from '$lib/components/ui/button';
 	import VisibilityCheckbox from '../VisibilityCheckbox.svelte';
 	import EffectEditor from './EffectEditor.svelte';
+	import MaskEditor from './MaskEditor.svelte';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwise';
 	import TrashIcon from 'phosphor-svelte/lib/Trash';
 
@@ -64,11 +66,16 @@
 				</Button>
 			</div>
 		{/if}
-		<div class={layer.step.enabled ? '' : 'opacity-60'}>
+		<div class="grid grid-cols-1 gap-4 {layer.step.enabled ? '' : 'opacity-60'}">
 			<EffectEditor
 				id="effect-{layerId}"
 				step={layer.step}
 				onchange={(step) => updateEffect(layerId, step)}
+			/>
+			<MaskEditor
+				id="effect-{layerId}"
+				mask={layer.step.mask ?? []}
+				onchange={(mask) => setEffectMask(layerId, mask)}
 			/>
 		</div>
 	</section>

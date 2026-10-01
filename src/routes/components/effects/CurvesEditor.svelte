@@ -21,6 +21,7 @@
 		sameChannel
 	} from '$lib/effects/catalog';
 	import { neutralGrid, setGridValue } from '$lib/effects/grid';
+	import { gridBackdrop } from '$lib/effects/grid-backdrop';
 	import { channelValue, pickCell, pickPoint, setPointOutput } from '$lib/effects/pick';
 	import { hueAxis } from '$lib/effects/tone';
 	import { curvePicker, type CurvePicker } from '$lib/stores/curve-pick';
@@ -264,6 +265,9 @@
 				<CurveGridGraph
 					{id}
 					{curve}
+					valueLabel="Adjustment"
+					neutral={0.5}
+					backdrop={gridBackdrop}
 					bind:selected={cell}
 					onchange={(next: TwoInputCurve) => replace(next)}
 				/>
