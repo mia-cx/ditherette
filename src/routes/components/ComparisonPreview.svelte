@@ -13,7 +13,7 @@
 		EmptyMedia,
 		EmptyTitle
 	} from '$lib/components/ui/empty';
-	import { buildOutputPyramid } from '$lib/processing/output-preview';
+	import { buildOutputPyramid, type PreviewLevel } from '$lib/processing/output-preview';
 	import { browser } from '$app/environment';
 	import { lutDrawn, lutView, shownEffectsTable, supportsWebGL2 } from '$lib/processing/lut-view';
 	import type { CropRect } from '$lib/processing/types';
@@ -22,6 +22,7 @@
 		outputSettings,
 		previewSettings,
 		processedImage,
+		setOutputPreview,
 		processingError,
 		processingProgress,
 		sourceImageData,
@@ -45,8 +46,6 @@
 	type ViewAnchor = { sourceX: number; sourceY: number };
 	type CropEdge = 'n' | 'e' | 's' | 'w';
 	type CropHandle = CropEdge | 'nw' | 'ne' | 'se' | 'sw';
-	/** One zoom level of the output, from `buildOutputPyramid`. */
-	type PreviewLevel = ImageBitmap;
 
 	type Props = {
 		defaultMode?: PreviewMode;
@@ -154,11 +153,15 @@
 			outputPreviewLevels = [];
 			return;
 		}
-		// The worker builds the levels with each result; a restored output builds them here.
-		outputPreviewLevels =
-			$outputPreview?.image === $processedImage
-				? $outputPreview.levels
-				: buildOutputPyramid($processedImage);
+		// The worker builds the levels with each result. An output without them (restored, or from
+		// a worker that can't draw) builds them once here and shares them through the store, which
+		// also releases them; storing them reruns this effect.
+		if ($outputPreview?.image !== $processedImage) {
+			const image = $processedImage;
+			setOutputPreview({ image, levels: buildOutputPyramid(image) });
+			return;
+		}
+		outputPreviewLevels = $outputPreview.levels;
 	});
 
 	$effect(() => {
