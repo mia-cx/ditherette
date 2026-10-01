@@ -159,7 +159,7 @@ describe('website package request', () => {
 		});
 		expect(resizeWith('area')).toEqual({ algorithm: 'area' });
 	});
-	it('maps blue noise, Atkinson, and Yliluoma, which ignores strength', () => {
+	it('maps blue noise, kernels, ordered tiles, and Yliluoma, which ignores strength', () => {
 		const ditherWith = (algorithm: DitherId, strength = 50) =>
 			packageProcessRequest(
 				source,
@@ -172,6 +172,11 @@ describe('website package request', () => {
 			perturb: { field: { algorithm: 'blue-noise' } }
 		});
 		expect(ditherWith('atkinson')).toMatchObject({ family: 'diffusion', kernel: 'atkinson' });
+		expect(ditherWith('shiau-fan-2')).toMatchObject({ family: 'diffusion', kernel: 'shiau-fan-2' });
+		expect(ditherWith('ordered-5x3')).toMatchObject({
+			family: 'separable',
+			perturb: { field: { algorithm: 'ordered', tile: '5x3' } }
+		});
 		expect(ditherWith('yliluoma-8', 0)).toEqual({
 			family: 'yliluoma',
 			size: '8',

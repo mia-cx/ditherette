@@ -1,5 +1,6 @@
 import type {
 	EffectContext,
+	Field,
 	IndexedImage,
 	Matching,
 	PaletteEntry,
@@ -15,6 +16,7 @@ import { bayerSizeForAlgorithm } from './bayer';
 import type {
 	ColorSpaceId,
 	CropRect,
+	DitherId,
 	EnabledPaletteColor,
 	ProcessingSettings,
 	QuantizeResult,
@@ -88,6 +90,14 @@ const YLILUOMA_SIZE = {
 	'yliluoma-8': '8',
 	'yliluoma-16': '16'
 } as const;
+
+/** Rectangular ordered tiles, named width by height. */
+const ORDERED_TILE: Partial<Record<DitherId, Extract<Field, { algorithm: 'ordered' }>['tile']>> = {
+	'ordered-3x1': '3x1',
+	'ordered-4x1': '4x1',
+	'ordered-4x2': '4x2',
+	'ordered-5x3': '5x3'
+};
 
 // Match the current website byte scale to the public normalized field's 255 / 4.
 const RGB_DITHER_NOISE_SCALE = 96;
@@ -174,6 +184,14 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 		case 'sierra':
 		case 'sierra-lite':
 		case 'atkinson':
+		case 'jarvis-judice-ninke':
+		case 'stucki':
+		case 'burkes':
+		case 'two-row-sierra':
+		case 'fan':
+		case 'shiau-fan':
+		case 'shiau-fan-2':
+		case 'simple-2d':
 			return {
 				family: 'diffusion',
 				kernel: dither.algorithm,
@@ -186,17 +204,24 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 		case 'bayer-4':
 		case 'bayer-8':
 		case 'bayer-16':
+		case 'ordered-3x1':
+		case 'ordered-4x1':
+		case 'ordered-4x2':
+		case 'ordered-5x3':
 		case 'random':
 		case 'blue-noise': {
 			const size = bayerSizeForAlgorithm(dither.algorithm);
+			const tile = ORDERED_TILE[dither.algorithm];
 			return {
 				family: 'separable',
 				perturb: {
 					field: size
 						? { algorithm: 'bayer', size: `${size}` }
-						: dither.algorithm === 'blue-noise'
-							? { algorithm: 'blue-noise' }
-							: { algorithm: 'random', seed: dither.seed >>> 0 },
+						: tile
+							? { algorithm: 'ordered', tile }
+							: dither.algorithm === 'blue-noise'
+								? { algorithm: 'blue-noise' }
+								: { algorithm: 'random', seed: dither.seed >>> 0 },
 					space: vector ? WORKING_SPACE[settings.colorSpace] : 'srgb',
 					strength: strength * (vector ? 1 : BYTE_FIELD_STRENGTH_RATIO),
 					placement
