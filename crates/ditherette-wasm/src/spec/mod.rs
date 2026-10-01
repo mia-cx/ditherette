@@ -9,6 +9,7 @@ pub mod color;
 pub mod contract;
 pub mod coverage;
 pub mod dither;
+pub mod dither_modes;
 pub mod effects;
 pub mod palette;
 pub mod pipeline;
