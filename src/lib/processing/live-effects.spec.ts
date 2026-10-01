@@ -13,6 +13,7 @@ import {
 class ControlledWorker {
 	static instances: ControlledWorker[] = [];
 	onmessage?: (event: MessageEvent<LiveEffectsResponse>) => void;
+	onerror?: (event: Event) => void;
 	messages: LiveEffectsRequest[] = [];
 	terminate = vi.fn();
 	constructor() {
@@ -102,5 +103,22 @@ describe('live effects', () => {
 		expect(worker.messages.filter((message) => message.type === 'source')).toHaveLength(2);
 		expect(worker.compiles).toHaveLength(2);
 		expect(compiledEffects.get()).toBeUndefined();
+	});
+
+	it('replaces a worker that fails, once asked again', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		addEffect('exposure');
+		const failed = ControlledWorker.instances[0]!;
+		const source = sourceImageData.get()!;
+		const waiting = compiledEffectsFor(source, currentEffectsKey());
+		failed.onerror?.(new Event('error'));
+		await expect(waiting).rejects.toThrow('The effects worker failed.');
+		expect(failed.terminate).toHaveBeenCalled();
+
+		const retried = compiledEffectsFor(source, currentEffectsKey());
+		const fresh = ControlledWorker.instances[1]!;
+		expect(fresh.messages.map((message) => message.type)).toEqual(['source', 'compile']);
+		fresh.reply(new Uint32Array([3]));
+		await expect(retried).resolves.toEqual(new Uint32Array([3]));
 	});
 });

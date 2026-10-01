@@ -63,6 +63,8 @@ type Waiter = {
 	reject: (error: Error) => void;
 };
 const waiters = new Set<Waiter>();
+/** Compiles the current settings if nothing is compiling them; set while live effects run. */
+let requestCompile: (() => void) | undefined;
 
 /**
  * The compiled results for `source` under `key`, once the effects worker has them. Processing waits
@@ -71,9 +73,12 @@ const waiters = new Set<Waiter>();
 export function compiledEffectsFor(source: ImageData, key: string) {
 	const current = compiledEffects.get();
 	if (current?.source === source && current.key === key) return Promise.resolve(current.results);
-	return new Promise<Uint32Array>((resolve, reject) =>
+	const results = new Promise<Uint32Array>((resolve, reject) =>
 		waiters.add({ source, key, resolve, reject })
 	);
+	// After the worker fails, nothing compiles until asked.
+	requestCompile?.();
+	return results;
 }
 
 function settle(source: ImageData, key: string, outcome: Uint32Array | Error) {
@@ -98,16 +103,26 @@ export function startLiveEffects() {
 	let busy = false;
 	let requestId = 0;
 
-	function stop() {
+	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
+	function reset(reason: string) {
 		worker?.terminate();
 		worker = undefined;
 		loaded = undefined;
 		busy = false;
-		sources = new WeakMap();
 		effectsIndex.set(undefined);
 		compiledEffects.set(undefined);
-		for (const waiter of waiters) waiter.reject(new Error('The image changed.'));
+		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
+	}
+
+	function stop() {
+		reset('The image changed.');
+		sources = new WeakMap();
+	}
+
+	function crashed(event: Event) {
+		console.error('The effects worker failed.', event);
+		reset('The effects worker failed.');
 	}
 
 	function sourceId(source: ImageData) {
@@ -126,6 +141,7 @@ export function startLiveEffects() {
 				type: 'module'
 			});
 			worker.onmessage = receive;
+			worker.onerror = worker.onmessageerror = crashed;
 		}
 		if (source !== loaded) {
 			effectsIndex.set(undefined);
@@ -188,8 +204,10 @@ export function startLiveEffects() {
 		colorSpace.listen(update),
 		outputSettings.listen(update)
 	];
+	requestCompile = update;
 	update();
 	return () => {
+		requestCompile = undefined;
 		for (const unsubscribe of unsubscribers) unsubscribe();
 		stop();
 	};
