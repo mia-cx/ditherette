@@ -78,6 +78,40 @@ const CHAINS = {
 	'palette fit': [
 		{ effect: 'exposure', enabled: true, stops: -0.3 },
 		{ effect: 'recolour', enabled: true, strength: 0.8, recipe: null }
+	],
+	// Masks read only the colour entering their step, so the chain stays exact per colour.
+	masked: [
+		{
+			effect: 'exposure',
+			enabled: true,
+			stops: 0.8,
+			mask: [
+				{
+					x: { model: 'oklch', channel: 'lightness' },
+					points: [
+						[0, 1],
+						[0.6, 0.2],
+						[1, 0]
+					]
+				}
+			]
+		},
+		{
+			effect: 'recolour',
+			enabled: true,
+			strength: 1,
+			recipe: null,
+			mask: [
+				{
+					x: { model: 'oklch', channel: 'hue' },
+					points: [
+						[0, 0.3],
+						[0.4, 1],
+						[1, 0.3]
+					]
+				}
+			]
+		}
 	]
 };
 
