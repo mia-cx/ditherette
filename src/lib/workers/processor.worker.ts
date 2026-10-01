@@ -1,4 +1,4 @@
-import { buildOutputPyramid } from '$lib/processing/output-preview';
+import { outputPyramidBitmaps } from '$lib/processing/output-preview';
 import { validateWorkerRequest } from '$lib/processing/schemas';
 import type { WorkerResponse } from '$lib/processing/types';
 import {
@@ -28,10 +28,17 @@ function postResponse(response: WorkerResponse | undefined) {
 	workerSelf.postMessage(response, transferablesForWorkerResponse(response));
 }
 
-/** Build the output's zoom levels here, so the main thread only draws them. */
+/**
+ * Build the output's zoom levels here, so the main thread only draws them. Where a worker can't
+ * draw, or drawing fails, the page builds them instead; the output itself always goes through.
+ */
 function withPreview(response: Extract<WorkerResponse, { type: 'complete' }>) {
 	const start = performance.now();
-	response.preview = buildOutputPyramid(response.image);
+	try {
+		response.preview = outputPyramidBitmaps(response.image);
+	} catch (error) {
+		console.error('Could not build the output preview in the worker.', error);
+	}
 	response.metrics?.timings.push({ name: 'output preview', ms: performance.now() - start });
 }
 

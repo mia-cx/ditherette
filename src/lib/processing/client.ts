@@ -5,7 +5,7 @@ import {
 	colorSpace,
 	customPalettes,
 	ditherSettings,
-	outputPreview,
+	setOutputPreview,
 	outputSettings,
 	paletteEnabled,
 	processedImage,
@@ -20,6 +20,7 @@ import { activeEffectSteps } from '$lib/stores/effects';
 import { saveProcessedImage } from './db';
 import { processingIdentityHash } from './hash';
 import { compiledEffectsFor, currentEffectsKey } from './live-effects';
+import { releaseLevels } from './output-preview';
 import { validateWorkerResponse } from './schemas';
 import type { ProcessingMetricsSample, ProcessingStageTiming } from './metrics';
 import type {
@@ -120,6 +121,13 @@ function supersedeActiveRequest() {
 	}
 	activeReject?.(new ProcessingCanceled('Processing was superseded by newer settings.'));
 	activeReject = undefined;
+}
+
+/** A dropped completion's transferred bitmaps hold their pixels until closed. */
+function releaseDropped(data: unknown) {
+	if (!data || typeof data !== 'object' || !('preview' in data) || !Array.isArray(data.preview))
+		return;
+	for (const level of data.preview) if (level instanceof ImageBitmap) level.close();
 }
 
 function currentSourceId(image: ImageData) {
@@ -236,7 +244,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 		};
 
 		activeWorker.onmessage = (event: MessageEvent<unknown>) => {
-			if (!isCurrent()) return;
+			if (!isCurrent()) return releaseDropped(event.data);
 			// A reused worker may still deliver an older response. Reject its identity before validation.
 			if (
 				event.data &&
@@ -245,7 +253,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				Number.isInteger(event.data.id) &&
 				event.data.id !== id
 			)
-				return;
+				return releaseDropped(event.data);
 			let message;
 			const validationStart = performance.now();
 			try {
@@ -257,7 +265,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				settle(reject, error instanceof Error ? error : new Error('Worker response was invalid.'));
 				return;
 			}
-			if (message.id !== id || activeRequestId !== id) return;
+			if (message.id !== id || activeRequestId !== id) return releaseDropped(message);
 			clearTimeout(watchdog);
 			workerMayBeBusy = false;
 			if (message.type === 'progress') {
@@ -347,12 +355,11 @@ export async function processCurrentImage(schedule?: ProcessingSchedule) {
 	try {
 		const result = await Effect.runPromise(program);
 		if (result.image.settingsHash !== hash || result.image.settingsHash !== currentSettingsHash()) {
-			result.preview?.forEach((level) => level.close());
+			if (result.preview) releaseLevels(result.preview);
 			return;
 		}
-		// Bitmaps hold their pixels until closed, so free the levels this output replaces.
-		outputPreview.get()?.levels.forEach((level) => level.close());
-		outputPreview.set(result.preview && { image: result.image, levels: result.preview });
+		// Levels first, so the preview finds them when the output changes.
+		setOutputPreview(result.preview && { image: result.image, levels: result.preview });
 		processedImage.set(result.image);
 		processingProgress.set(undefined);
 		persistWhenSettled();

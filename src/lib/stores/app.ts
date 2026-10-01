@@ -2,6 +2,7 @@ import { computed, atom } from 'nanostores';
 import { persistentJSON } from '@nanostores/persistent';
 import type { ScopeModel } from '$lib/scopes/colour';
 import type { ScopeKind } from '$lib/scopes/scopes';
+import { releaseLevels, type PreviewLevel } from '$lib/processing/output-preview';
 import {
 	TRANSPARENT_KEY,
 	WPLACE,
@@ -125,8 +126,21 @@ export const sourceMeta = atom<SourceMeta | undefined>();
 export const sourceObjectUrl = atom<string | undefined>();
 export const sourceImageData = atom<ImageData | undefined>();
 export const processedImage = atom<ProcessedImage | undefined>();
-/** The worker-built zoom levels of `image`, the processed output they belong to. */
-export const outputPreview = atom<{ image: ProcessedImage; levels: ImageBitmap[] } | undefined>();
+/** The zoom levels of `image`, the processed output they belong to. Set with `setOutputPreview`. */
+export const outputPreview = atom<{ image: ProcessedImage; levels: PreviewLevel[] } | undefined>();
+
+/** Replace the output preview, releasing the levels it replaces. */
+export function setOutputPreview(
+	next: { image: ProcessedImage; levels: PreviewLevel[] } | undefined
+) {
+	const previous = outputPreview.get();
+	if (previous && previous.levels !== next?.levels) releaseLevels(previous.levels);
+	outputPreview.set(next);
+}
+// Levels belong to one output: when the output changes or clears without them, they go too.
+processedImage.listen((image) => {
+	if (outputPreview.get() && outputPreview.get()?.image !== image) setOutputPreview(undefined);
+});
 export const processingProgress = atom<
 	| {
 			stage: string;
@@ -560,8 +574,6 @@ export function clearInMemoryImageState() {
 	sourceObjectUrl.set(undefined);
 	sourceImageData.set(undefined);
 	processedImage.set(undefined);
-	outputPreview.get()?.levels.forEach((level) => level.close());
-	outputPreview.set(undefined);
 	processingProgress.set(undefined);
 	processingError.set(undefined);
 	clearProcessingMetrics();
