@@ -30,5 +30,9 @@ wgpu = { version = "29", optional = true, default-features = false, features = [
 pollster = "0.4"
 wasm-bindgen-test = "0.3"
 
+[[example]]
+name = "gpu_parity"
+required-features = ["gpu"]
+
 [profile.release]
 opt-level = "s"
