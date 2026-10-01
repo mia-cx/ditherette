@@ -125,6 +125,8 @@ export type SourceMeta = Omit<SourceImageRecord, 'blob'>;
 export const sourceMeta = atom<SourceMeta | undefined>();
 export const sourceObjectUrl = atom<string | undefined>();
 export const sourceImageData = atom<ImageData | undefined>();
+/** Set when the source needed canvas readback and this browser adds noise to it. */
+export const sourceWarning = atom<string | undefined>();
 export const processedImage = atom<ProcessedImage | undefined>();
 /** The zoom levels of `image`, the processed output they belong to. Set with `setOutputPreview`. */
 export const outputPreview = atom<{ image: ProcessedImage; levels: PreviewLevel[] } | undefined>();
@@ -573,6 +575,7 @@ export function clearInMemoryImageState() {
 	sourceMeta.set(undefined);
 	sourceObjectUrl.set(undefined);
 	sourceImageData.set(undefined);
+	sourceWarning.set(undefined);
 	processedImage.set(undefined);
 	processingProgress.set(undefined);
 	processingError.set(undefined);

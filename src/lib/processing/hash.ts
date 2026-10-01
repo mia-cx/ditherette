@@ -90,6 +90,8 @@ function outputIdentity(output: OutputSettings): JsonValue {
 
 export function processingIdentity(input: ProcessingIdentityInput): JsonValue {
 	return {
+		// Bump when processing semantics change so saved outputs are regenerated.
+		version: 1,
 		output: outputIdentity(input.output),
 		dither: input.dither,
 		colorSpace: input.colorSpace,

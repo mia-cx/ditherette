@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { processingIdentityHash, settingsHash } from './hash';
+import { processingIdentityHash, settingsHash, type JsonValue } from './hash';
 import type { DitherSettings, EnabledPaletteColor, OutputSettings } from './types';
 
 const output: OutputSettings = {
@@ -41,6 +41,24 @@ describe('settingsHash', () => {
 });
 
 describe('processingIdentityHash', () => {
+	it('versions processing semantics to invalidate old unversioned outputs', () => {
+		const hash = processingIdentityHash({
+			output,
+			dither,
+			colorSpace: 'oklab',
+			effects: [],
+			paletteName: 'Custom',
+			paletteSource: 'custom',
+			palette,
+			source: undefined
+		});
+		const identity = JSON.parse(hash) as Record<string, JsonValue>;
+		expect(identity.version).toBe(1);
+		delete identity.version;
+
+		expect(hash).not.toBe(settingsHash(identity));
+	});
+
 	it('hashes effective palette colors without unrelated persisted enabled state', () => {
 		const base = processingIdentityHash({
 			output,
