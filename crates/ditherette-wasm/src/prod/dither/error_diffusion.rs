@@ -35,6 +35,33 @@ pub enum ErrorDiffusionKernel {
     Sierra,
     SierraLite,
     Atkinson,
+    JarvisJudiceNinke,
+    Stucki,
+    Burkes,
+    TwoRowSierra,
+    Fan,
+    ShiauFan,
+    ShiauFan2,
+    Simple2d,
+}
+
+impl From<Diffusion> for ErrorDiffusionKernel {
+    fn from(kernel: Diffusion) -> Self {
+        match kernel {
+            Diffusion::FloydSteinberg => Self::FloydSteinberg,
+            Diffusion::Sierra => Self::Sierra,
+            Diffusion::SierraLite => Self::SierraLite,
+            Diffusion::Atkinson => Self::Atkinson,
+            Diffusion::JarvisJudiceNinke => Self::JarvisJudiceNinke,
+            Diffusion::Stucki => Self::Stucki,
+            Diffusion::Burkes => Self::Burkes,
+            Diffusion::TwoRowSierra => Self::TwoRowSierra,
+            Diffusion::Fan => Self::Fan,
+            Diffusion::ShiauFan => Self::ShiauFan,
+            Diffusion::ShiauFan2 => Self::ShiauFan2,
+            Diffusion::Simple2d => Self::Simple2d,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -171,13 +198,75 @@ pub const ATKINSON_TAPS: &[DiffusionTap] = &[
     },
 ];
 
+/// Builds a tap table from `(dx, dy, numerator)` triples over one denominator, as the reference does.
+macro_rules! taps {
+    ($denominator:literal; $(($dx:literal, $dy:literal, $numerator:literal)),+ $(,)?) => {
+        &[$(DiffusionTap {
+            dx: $dx,
+            dy: $dy,
+            weight: $numerator as f32 / $denominator as f32,
+        }),+]
+    };
+}
+
+pub const JARVIS_JUDICE_NINKE_TAPS: &[DiffusionTap] = taps![48;
+    (1, 0, 7), (2, 0, 5),
+    (-2, 1, 3), (-1, 1, 5), (0, 1, 7), (1, 1, 5), (2, 1, 3),
+    (-2, 2, 1), (-1, 2, 3), (0, 2, 5), (1, 2, 3), (2, 2, 1),
+];
+
+pub const STUCKI_TAPS: &[DiffusionTap] = taps![42;
+    (1, 0, 8), (2, 0, 4),
+    (-2, 1, 2), (-1, 1, 4), (0, 1, 8), (1, 1, 4), (2, 1, 2),
+    (-2, 2, 1), (-1, 2, 2), (0, 2, 4), (1, 2, 2), (2, 2, 1),
+];
+
+pub const BURKES_TAPS: &[DiffusionTap] = taps![32;
+    (1, 0, 8), (2, 0, 4),
+    (-2, 1, 2), (-1, 1, 4), (0, 1, 8), (1, 1, 4), (2, 1, 2),
+];
+
+pub const TWO_ROW_SIERRA_TAPS: &[DiffusionTap] = taps![16;
+    (1, 0, 4), (2, 0, 3),
+    (-2, 1, 1), (-1, 1, 2), (0, 1, 3), (1, 1, 2), (2, 1, 1),
+];
+
+pub const FAN_TAPS: &[DiffusionTap] = taps![16;
+    (1, 0, 7),
+    (-2, 1, 1), (-1, 1, 3), (0, 1, 5),
+];
+
+pub const SHIAU_FAN_TAPS: &[DiffusionTap] = taps![8;
+    (1, 0, 4),
+    (-2, 1, 1), (-1, 1, 1), (0, 1, 2),
+];
+
+pub const SHIAU_FAN_2_TAPS: &[DiffusionTap] = taps![16;
+    (1, 0, 8),
+    (-3, 1, 1), (-2, 1, 1), (-1, 1, 2), (0, 1, 4),
+];
+
+pub const SIMPLE_2D_TAPS: &[DiffusionTap] = taps![2;
+    (1, 0, 1),
+    (0, 1, 1),
+];
+
 impl ErrorDiffusionKernel {
+    /// Ordered taps; every `dy` stays below the prepared ring's three rows.
     pub const fn taps(self) -> &'static [DiffusionTap] {
         match self {
             Self::FloydSteinberg => FLOYD_STEINBERG_TAPS,
             Self::Sierra => SIERRA_TAPS,
             Self::SierraLite => SIERRA_LITE_TAPS,
             Self::Atkinson => ATKINSON_TAPS,
+            Self::JarvisJudiceNinke => JARVIS_JUDICE_NINKE_TAPS,
+            Self::Stucki => STUCKI_TAPS,
+            Self::Burkes => BURKES_TAPS,
+            Self::TwoRowSierra => TWO_ROW_SIERRA_TAPS,
+            Self::Fan => FAN_TAPS,
+            Self::ShiauFan => SHIAU_FAN_TAPS,
+            Self::ShiauFan2 => SHIAU_FAN_2_TAPS,
+            Self::Simple2d => SIMPLE_2D_TAPS,
         }
     }
 }
@@ -201,12 +290,7 @@ pub fn diffuse(request: DitherQuantizeRequest<'_>) -> Result<IndexedImage, Dithe
             "This reference requires an error-diffusion recipe.",
         ));
     };
-    let kernel = match kernel {
-        Diffusion::FloydSteinberg => ErrorDiffusionKernel::FloydSteinberg,
-        Diffusion::Sierra => ErrorDiffusionKernel::Sierra,
-        Diffusion::SierraLite => ErrorDiffusionKernel::SierraLite,
-        Diffusion::Atkinson => ErrorDiffusionKernel::Atkinson,
-    };
+    let kernel = ErrorDiffusionKernel::from(kernel);
     let palette = prepare_palette(request.quantize.palette, request.quantize.alpha);
     let matcher = prepare_matcher(&palette, request.quantize.matching);
     let space = request.quantize.matching.space();

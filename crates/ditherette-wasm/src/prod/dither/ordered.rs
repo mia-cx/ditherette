@@ -1,4 +1,7 @@
-//! Palette-free Bayer thresholds with compile-time tables from the frozen rank formula.
+//! Palette-free Bayer thresholds with compile-time tables from the frozen rank formula,
+//! plus the rectangular tiles from the `dither_modes` reference.
+
+use crate::prod::contract::request::OrderedTile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BayerSize {
@@ -64,4 +67,23 @@ pub fn bayer_noise_at(x: u32, y: u32, size: BayerSize) -> f32 {
     };
     let mask = width - 1;
     values[(y as usize & mask) * width + (x as usize & mask)] * scale
+}
+
+/// Width, height, and row-major ranks of a rectangular tile, as in the `dither_modes` reference.
+const fn tile_ranks(tile: OrderedTile) -> (usize, usize, &'static [u8]) {
+    match tile {
+        OrderedTile::ThreeByOne => (3, 1, &[0, 2, 1]),
+        OrderedTile::FourByOne => (4, 1, &[0, 2, 1, 3]),
+        OrderedTile::FourByTwo => (4, 2, &[0, 4, 2, 6, 3, 7, 1, 5]),
+        OrderedTile::FiveByThree => (5, 3, &[0, 12, 7, 3, 9, 14, 8, 1, 5, 11, 6, 4, 10, 13, 2]),
+    }
+}
+
+/// Palette-free centred threshold of a rectangular tile at global image coordinates.
+/// Uses the reference's f32 operations, `(rank+0.5)/cells-0.5`, so results match bit for bit.
+#[inline]
+pub fn tile_noise_at(x: u32, y: u32, tile: OrderedTile) -> f32 {
+    let (width, height, ranks) = tile_ranks(tile);
+    let rank = ranks[(y as usize % height) * width + x as usize % width];
+    (f32::from(rank) + 0.5) / (width * height) as f32 - 0.5
 }
