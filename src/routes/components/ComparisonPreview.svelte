@@ -15,7 +15,12 @@
 	} from '$lib/components/ui/empty';
 	import { buildOutputPyramid, type PreviewLevel } from '$lib/processing/output-preview';
 	import { browser } from '$app/environment';
-	import { lutDrawn, lutView, shownEffectsTable, supportsWebGL2 } from '$lib/processing/lut-view';
+	import {
+		effectsDrawn,
+		effectsView,
+		shownEffects,
+		supportsWebGL2
+	} from '$lib/processing/effects-view.svelte';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputPreview,
@@ -136,7 +141,7 @@
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
 	const sourceLabel = $derived(
-		$previewSettings.sourceEffects && $shownEffectsTable && $lutDrawn
+		$previewSettings.sourceEffects && $shownEffects && $effectsDrawn
 			? 'Source with effects'
 			: 'Source'
 	);
@@ -398,28 +403,30 @@
 		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering};--preview-layout:${layoutVersion}`;
 	}
 
+	/** Where an image of this size sits in `pane`, in CSS pixels, after crop, zoom, and pan. */
+	function mediaFrame(pane: HTMLElement | undefined, width: number, height: number) {
+		const crop = appliedCrop();
+		if (crop && $sourceMeta && width === $sourceMeta.width && height === $sourceMeta.height) {
+			const cropFrameRect = fitFrame(pane, crop.width, crop.height);
+			const scaleX = cropFrameRect.width / crop.width;
+			const scaleY = cropFrameRect.height / crop.height;
+			return {
+				left: cropFrameRect.left - crop.x * scaleX,
+				top: cropFrameRect.top - crop.y * scaleY,
+				width: width * scaleX,
+				height: height * scaleY
+			};
+		}
+		return fitFrame(pane, width, height);
+	}
+
 	function mediaStyle(
 		pane: HTMLElement | undefined,
 		width: number | undefined,
 		height: number | undefined
 	) {
 		if (!width || !height) return '';
-		const crop = appliedCrop();
-		if (crop && $sourceMeta && width === $sourceMeta.width && height === $sourceMeta.height) {
-			const cropFrameRect = fitFrame(pane, crop.width, crop.height);
-			const scaleX = cropFrameRect.width / crop.width;
-			const scaleY = cropFrameRect.height / crop.height;
-			return frameStyle(
-				{
-					left: cropFrameRect.left - crop.x * scaleX,
-					top: cropFrameRect.top - crop.y * scaleY,
-					width: width * scaleX,
-					height: height * scaleY
-				},
-				width
-			);
-		}
-		return frameStyle(fitFrame(pane, width, height), width);
+		return frameStyle(mediaFrame(pane, width, height), width);
 	}
 
 	function appliedCrop() {
@@ -1322,13 +1329,15 @@
 			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 			draggable="false"
 		/>
-		{#if $shownEffectsTable}
-			<!-- Hidden rather than removed while off, so turning it on keeps the GPU's copies. -->
+		{#if $shownEffects}
+			<!-- Covers the pane and draws only the visible part of the source, at screen resolution.
+			Hidden rather than removed while off, so turning it on keeps the GPU's copies. -->
 			<canvas
-				{@attach lutView}
-				class="pointer-events-none absolute max-w-none select-none"
+				{@attach effectsView(
+					() => $sourceMeta && mediaFrame(pane, $sourceMeta.width, $sourceMeta.height)
+				)}
+				class="pointer-events-none absolute inset-0 size-full select-none"
 				hidden={!$previewSettings.sourceEffects}
-				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 				aria-hidden="true"
 			></canvas>
 		{/if}

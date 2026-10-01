@@ -5,7 +5,6 @@ import {
 	colorSpace,
 	customPalettes,
 	ditherSettings,
-	effectsTable,
 	setOutputPreview,
 	outputSettings,
 	paletteEnabled,
@@ -20,10 +19,17 @@ import {
 import { activeEffectSteps } from '$lib/stores/effects';
 import { saveProcessedImage } from './db';
 import { processingIdentityHash } from './hash';
+import { compiledEffectsFor, currentEffectsKey } from './live-effects';
 import { releaseLevels } from './output-preview';
 import { validateWorkerResponse } from './schemas';
 import type { ProcessingMetricsSample, ProcessingStageTiming } from './metrics';
-import type { DitherSettings, OutputSettings, ProcessedImage, WorkerRequest } from './types';
+import type {
+	DitherSettings,
+	OutputSettings,
+	ProcessedImage,
+	WorkerProcessRequest,
+	WorkerRequest
+} from './types';
 
 let worker: Worker | undefined;
 let loadedSourceId: string | undefined;
@@ -199,20 +205,41 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 		let sourceLoadPostedAt = 0;
 		let processPostedAt = 0;
 		let responseValidationMs = 0;
-		const postProcessRequest = () => {
+		/**
+		 * Post the current settings. With effects, first wait for the effects worker's result for
+		 * exactly these settings, so the output reuses it instead of computing effects again.
+		 */
+		const postProcessRequest = async () => {
+			const settings = {
+				output: outputSettings.get(),
+				dither: ditherSettings.get(),
+				colorSpace: colorSpace.get(),
+				effects: activeEffectSteps.get()
+			};
+			const palette = selectedPalette.get();
+			let compiledEffects: WorkerProcessRequest['compiledEffects'];
+			if (settings.effects.length) {
+				const key = currentEffectsKey();
+				const waitStart = performance.now();
+				try {
+					compiledEffects = { key, results: await compiledEffectsFor(source, key) };
+				} catch (error) {
+					processingProgress.set(undefined);
+					settle(reject, error instanceof Error ? error : new Error('Effects failed.'));
+					return;
+				}
+				mainTimings.push({ name: 'main effects wait', ms: performance.now() - waitStart });
+				if (!isCurrent()) return;
+			}
 			processPostedAt = performance.now();
 			activeWorker.postMessage({
 				id,
 				type: 'process',
 				sourceId,
-				settings: {
-					output: outputSettings.get(),
-					dither: ditherSettings.get(),
-					colorSpace: colorSpace.get(),
-					effects: activeEffectSteps.get()
-				},
-				palette: selectedPalette.get(),
-				settingsHash: hash
+				settings,
+				palette,
+				settingsHash: hash,
+				compiledEffects
 			} satisfies WorkerRequest);
 		};
 
@@ -250,10 +277,6 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				});
 				return;
 			}
-			if (message.type === 'effects-table') {
-				effectsTable.set(message.table);
-				return;
-			}
 			if (message.type === 'source-loaded') {
 				if (sourceLoadPostedAt) {
 					mainTimings.push({
@@ -267,7 +290,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 					return;
 				}
 				loadedSourceId = sourceId;
-				postProcessRequest();
+				void postProcessRequest();
 				return;
 			}
 			if (message.type === 'error') {
@@ -308,12 +331,10 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 		};
 
 		if (loadedSourceId === sourceId) {
-			postProcessRequest();
+			void postProcessRequest();
 			return;
 		}
 
-		// The worker builds a new table for a new source; the old one maps other colours.
-		effectsTable.set(undefined);
 		processingProgress.set({ stage: 'Loading source', progress: 0.02 });
 		sourceLoadPostedAt = performance.now();
 		activeWorker.postMessage({ id, type: 'load-source', sourceId, source } satisfies WorkerRequest);

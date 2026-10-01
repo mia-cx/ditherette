@@ -30,7 +30,7 @@
 	} from '$lib/stores/app';
 	import { addEffect, effectStepsLeft } from '$lib/stores/effects';
 	import { browser } from '$app/environment';
-	import { supportsWebGL2 } from '$lib/processing/lut-view';
+	import { supportsWebGL2 } from '$lib/processing/effects-view.svelte';
 	import { setThemeChoice, startTheme, themeChoice, type ThemeChoice } from '$lib/theme';
 	import { COLOR_SPACES } from './color-space-options';
 	import { DITHER_ALGORITHMS } from './dither-options';
@@ -161,9 +161,8 @@
 					<MenubarSubTrigger>Adjustments</MenubarSubTrigger>
 					<MenubarSubContent class="min-w-52">
 						{#each EFFECT_KINDS as kind (kind)}
-							<MenubarItem
-								disabled={$effectStepsLeft < 1}
-								onSelect={() => adjust(kind)}>{EFFECTS[kind].label}</MenubarItem
+							<MenubarItem disabled={$effectStepsLeft < 1} onSelect={() => adjust(kind)}
+								>{EFFECTS[kind].label}</MenubarItem
 							>
 						{/each}
 					</MenubarSubContent>

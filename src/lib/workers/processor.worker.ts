@@ -69,19 +69,15 @@ async function handleRequest(
 ) {
 	try {
 		postResponse(
-			await pipeline.handleAsync(
-				request,
-				(stage, progress, counts) => {
-					workerSelf.postMessage({
-						id: request.id,
-						type: 'progress',
-						stage,
-						progress,
-						...counts
-					} satisfies WorkerResponse);
-				},
-				(table) => postResponse({ id: request.id, type: 'effects-table', table })
-			)
+			await pipeline.handleAsync(request, (stage, progress, counts) => {
+				workerSelf.postMessage({
+					id: request.id,
+					type: 'progress',
+					stage,
+					progress,
+					...counts
+				} satisfies WorkerResponse);
+			})
 		);
 	} catch (error) {
 		workerSelf.postMessage({
