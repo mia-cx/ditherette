@@ -17,4 +17,12 @@ Scalar compilation uses the root Rust pin. Threaded compilation uses `rust-toolc
 
 Root `wasm:build` commands stage generated artifacts into the website's existing `static/wasm` URLs. The public package's build stages both variants and worker files into its own distribution. Generated files remain private and ignored.
 
+## GPU backend
+
+The `gpu` feature adds `prod::gpu`, a `wgpu` backend with WGSL kernels and the CPU path as fallback. Default and threaded builds leave it out, so their Wasm bytes do not change. It needs the root Rust pin, so it does not combine with `threads` yet.
+
+- `cargo test --features gpu` runs the fallback tests. GPU tests accept software adapters and skip when there is none.
+- `pnpm gpu:parity [WIDTH HEIGHT [RAW_RGBA_FILE]]` runs the channel-lookup stage natively on both backends and prints the largest byte difference and how many pixels differ.
+- `pnpm gpu:parity:browser` does the same in headless Chromium with WebGPU, uploading through `copyExternalImageToTexture`. `--no-webgpu` shows the fallback.
+
 `packages/ditherette/package.json` owns the release version. Its build and check commands verify that this crate's version agrees.

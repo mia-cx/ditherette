@@ -13,3 +13,7 @@ pub mod pipeline;
 pub mod quantize;
 pub mod resize;
 pub mod tiling;
+
+// Declared last so default builds keep every span above, byte for byte.
+#[cfg(feature = "gpu")]
+pub mod gpu;
