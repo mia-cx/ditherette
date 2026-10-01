@@ -2,6 +2,7 @@ import { computed, atom } from 'nanostores';
 import { persistentJSON } from '@nanostores/persistent';
 import type { ScopeModel } from '$lib/scopes/colour';
 import type { ScopeKind } from '$lib/scopes/scopes';
+import { releaseLevels, type PreviewLevel } from '$lib/processing/output-preview';
 import {
 	TRANSPARENT_KEY,
 	WPLACE,
@@ -125,6 +126,21 @@ export const sourceMeta = atom<SourceMeta | undefined>();
 export const sourceObjectUrl = atom<string | undefined>();
 export const sourceImageData = atom<ImageData | undefined>();
 export const processedImage = atom<ProcessedImage | undefined>();
+/** The zoom levels of `image`, the processed output they belong to. Set with `setOutputPreview`. */
+export const outputPreview = atom<{ image: ProcessedImage; levels: PreviewLevel[] } | undefined>();
+
+/** Replace the output preview, releasing the levels it replaces. */
+export function setOutputPreview(
+	next: { image: ProcessedImage; levels: PreviewLevel[] } | undefined
+) {
+	const previous = outputPreview.get();
+	if (previous && previous.levels !== next?.levels) releaseLevels(previous.levels);
+	outputPreview.set(next);
+}
+// Levels belong to one output: when the output changes or clears without them, they go too.
+processedImage.listen((image) => {
+	if (outputPreview.get() && outputPreview.get()?.image !== image) setOutputPreview(undefined);
+});
 /**
  * The exact effects table the pipeline last built for this source (see `effects-table.ts`). It
  * outlives turning every effect off, since the worker resends a table only when it rebuilds one.
