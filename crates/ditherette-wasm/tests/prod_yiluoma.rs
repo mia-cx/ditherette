@@ -297,7 +297,7 @@ fn processor_tight_budget_keeps_index_and_skips_rgb_cache() {
     let mut transitions = Vec::new();
     let mut cursor = yiluoma_minimum;
     let mut peak = yiluoma_baseline;
-    while transitions.len() < 3 {
+    while transitions.len() < 4 {
         let limit = first_optional(cursor, roomy_yiluoma_peak, peak);
         let next_peak = run(limit).unwrap().1;
         assert!(next_peak > peak);
@@ -305,20 +305,98 @@ fn processor_tight_budget_keeps_index_and_skips_rgb_cache() {
         cursor = limit;
         peak = next_peak;
     }
-    // Palette retention is the first transition. The index is second and the RGB cache third.
+    // Palette retention is the first transition and the index the second. The index stays
+    // pinned for publication, so final-result retention beside it is third. The RGB cache is last.
     let index_capacity = transitions[1].1 - transitions[0].1;
-    let cache_capacity = transitions[2].1 - transitions[1].1;
+    let cache_capacity = transitions[3].1 - transitions[2].1;
     assert!(index_capacity < cache_capacity);
 
     let tight_limit = yiluoma_minimum + index_capacity + cache_capacity - 1;
     let (actual, tight_peak) = run(tight_limit).unwrap();
-    assert_eq!(tight_peak, transitions[1].1);
+    assert_eq!(tight_peak, transitions[2].1);
 
     let mut reference = request(&source, 32, 32, &palette);
     reference.quantize.alpha = AlphaPolicy::Premultiplied {};
     reference.quantize.matching = MatchPolicy::SrgbEuclidean;
     reference.dither = dither;
     assert_eq!(actual, oracle(reference).indices.data());
+}
+
+#[test]
+fn processor_reused_indices_match_frozen_output_across_frames_and_settings() {
+    use ditherette_wasm::image::contracts::PaletteEntry;
+    use prod::{
+        contract::request::{AlphaPolicy, BayerSize, DitherPolicy, Placement},
+        pipeline::{processor::Processor, quantize::QuantizeRequest},
+    };
+
+    let palette = [
+        PaletteEntry::Color { rgb: [0, 0, 0] },
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color {
+            rgb: [255, 255, 255],
+        },
+        PaletteEntry::Color { rgb: [220, 40, 80] },
+        PaletteEntry::Color {
+            rgb: [20, 190, 230],
+        },
+    ];
+    let reordered = [palette[3], palette[1], palette[2], palette[0], palette[4]];
+    let adaptive = Placement::Adaptive {
+        radius: 2,
+        threshold: 5.0,
+        softness: 10.0,
+    };
+    let everywhere = Placement::Everywhere {};
+    let (oklab, ciede) = (MatchPolicy::OklabEuclidean, MatchPolicy::CielabCiede2000);
+    let (four, eight) = (BayerSize::Four, BayerSize::Eight);
+    let premultiplied = AlphaPolicy::Premultiplied {};
+    let matte = AlphaPolicy::Matte { rgb: [9, 80, 200] };
+    let mut processor = Processor::new(1 << 26, 0).unwrap();
+    // Each frame has new bytes. Settings move between index hits and misses.
+    for (frame, (palette, matching, size, placement, alpha)) in [
+        (&palette, oklab, four, everywhere, premultiplied),
+        (&palette, oklab, four, everywhere, premultiplied),
+        (&palette, oklab, four, adaptive, premultiplied),
+        (&palette, oklab, four, adaptive, matte),
+        (&palette, oklab, eight, everywhere, premultiplied),
+        (&reordered, oklab, four, everywhere, premultiplied),
+        (&palette, ciede, four, everywhere, premultiplied),
+        (&palette, oklab, four, everywhere, premultiplied),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let source = (0..40 * 32_u32)
+            .flat_map(|i| {
+                [
+                    (i * 71 + frame as u32 * 29) as u8,
+                    (i * 37 + 8) as u8,
+                    (i * 113 + 12) as u8,
+                    [255, 255, 128, 0][(i % 4) as usize],
+                ]
+            })
+            .collect::<Vec<_>>();
+        let dither = DitherPolicy::Yliluoma { size, placement };
+        let actual = processor
+            .dither_and_quantize(
+                QuantizeRequest {
+                    source_width: 40,
+                    source_height: 32,
+                    palette: palette.as_slice(),
+                    alpha,
+                    matching,
+                },
+                dither,
+                &mut PipelineBoundary(&source),
+            )
+            .unwrap();
+        let mut reference = request(&source, 40, 32, palette.as_slice());
+        reference.quantize.alpha = alpha;
+        reference.quantize.matching = matching;
+        reference.dither = dither;
+        assert_eq!(actual, oracle(reference).indices.data(), "frame {frame}");
+    }
 }
 
 #[test]

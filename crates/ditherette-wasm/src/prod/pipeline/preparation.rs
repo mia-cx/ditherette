@@ -19,6 +19,7 @@ use crate::{
             lifecycle::{MAX_CACHE_BYTES, MAX_CACHE_ENTRIES},
             request::Output,
         },
+        dither::yiluoma::index::MixIndex,
         quantize::PreparedQuantizer,
         resize::common::allocation::CapacityBudget,
     },
@@ -28,6 +29,7 @@ enum Value {
     Palette(Vec<PreparedQuantizer>),
     Resize(Vec<PreparedResize>),
     Image(Vec<ImageStage>),
+    Mix(Vec<MixIndex>),
 }
 
 struct Entry {
@@ -49,6 +51,9 @@ impl Entry {
             }
             Value::Image(value) => {
                 value[0].capacity_bytes() + value.capacity() as u64 * size_of::<ImageStage>() as u64
+            }
+            Value::Mix(value) => {
+                value[0].capacity_bytes() + value.capacity() as u64 * size_of::<MixIndex>() as u64
             }
         }
     }
@@ -194,6 +199,15 @@ impl Store {
     }
 
     #[cfg(test)]
+    pub(super) fn mix_entries(&self) -> usize {
+        self.entries
+            .iter()
+            .flatten()
+            .filter(|entry| matches!(entry.value, Value::Mix(_)))
+            .count()
+    }
+
+    #[cfg(test)]
     pub(super) fn evict_preparation(&mut self) {
         for entry in &mut self.entries {
             if entry
@@ -326,6 +340,8 @@ pub(super) struct Call<'a> {
     resize: Option<Entry>,
     palette_hit: bool,
     resize_hit: bool,
+    mix: Option<Entry>,
+    mix_hit: bool,
     images: [Option<Entry>; 3],
     image_hits: [bool; 3],
     pub scratch: Scratch,
@@ -445,6 +461,8 @@ impl<'a> Call<'a> {
             resize_hit: false,
             palette: None,
             resize: None,
+            mix: None,
+            mix_hit: false,
             images: std::array::from_fn(|_| None),
             image_hits: [false; 3],
             scratch: std::mem::take(&mut store.scratch),
@@ -814,11 +832,12 @@ impl<'a> Call<'a> {
         (palette, resize, &mut self.scratch)
     }
 
+    /// Borrows everything the perturb and indexed stages read, plus mutable scratch.
     pub(super) fn image_parts(
         &mut self,
     ) -> (
         Option<&PreparedQuantizer>,
-        Option<&mut PreparedResize>,
+        Option<&MixIndex>,
         [Option<&ImageStage>; 3],
         &mut Scratch,
     ) {
@@ -826,9 +845,9 @@ impl<'a> Call<'a> {
             Value::Palette(value) => &value[0],
             _ => unreachable!(),
         });
-        let resize = self.resize.as_mut().map(|entry| match &mut entry.value {
-            Value::Resize(value) => &mut value[0],
-            _ => unreachable!(),
+        let mix = self.mix.as_ref().map(|entry| match &entry.value {
+            Value::Mix(value) => &value[0],
+            _ => unreachable!("typed mixture-index identity"),
         });
         let images = self.images.each_ref().map(|entry| {
             entry.as_ref().map(|entry| match &entry.value {
@@ -836,7 +855,41 @@ impl<'a> Call<'a> {
                 _ => unreachable!(),
             })
         });
-        (palette, resize, images, &mut self.scratch)
+        (palette, mix, images, &mut self.scratch)
+    }
+
+    /// Pins the retained Yliluoma index for this palette preparation and level count, or
+    /// builds one from spare capacity. Without one, the caller keeps the literal search.
+    /// Like other preparations, a new index is published only after a successful call.
+    pub(super) fn prepare_mix_index(&mut self, levels: u32, peak: &mut u64) -> Result<(), Failure> {
+        assert!(self.mix.is_none());
+        let palette = self.palette.as_ref().expect("requested palette");
+        let key = identity::mix_index(palette.key, levels)?;
+        self.mix = self.store.take(key);
+        self.mix_hit = self.mix.is_some();
+        if self.mix_hit {
+            return Ok(());
+        }
+        let budget = self.available_working_capacity();
+        let Ok(mut record) = CapacityBudget::new(budget).vector::<MixIndex>(1) else {
+            return Ok(());
+        };
+        let Value::Palette(prepared) = &self.palette.as_ref().unwrap().value else {
+            unreachable!()
+        };
+        let record_bytes = (record.capacity() * size_of::<MixIndex>()) as u64;
+        let Some(index) = MixIndex::try_new(prepared[0].matcher(), levels, budget - record_bytes)
+        else {
+            return Ok(());
+        };
+        record.push(index);
+        self.mix = Some(Entry {
+            key,
+            used: 0,
+            value: Value::Mix(record),
+        });
+        *peak = (*peak).max(self.active_capacity() + self.store.capacity());
+        Ok(())
     }
 
     pub(super) fn retain_rgba(
@@ -938,6 +991,7 @@ impl<'a> Call<'a> {
             + self.scratch.capacity()
             + self.palette.as_ref().map_or(0, Entry::capacity)
             + self.resize.as_ref().map_or(0, Entry::capacity)
+            + self.mix.as_ref().map_or(0, Entry::capacity)
             + self
                 .images
                 .iter()
@@ -1034,6 +1088,7 @@ impl Drop for Call<'_> {
         for (entry, hit) in [
             (&mut self.palette, self.palette_hit),
             (&mut self.resize, self.resize_hit),
+            (&mut self.mix, self.mix_hit),
         ] {
             if let Some(mut entry) = entry.take() {
                 if self.success {

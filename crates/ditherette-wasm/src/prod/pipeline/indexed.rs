@@ -401,31 +401,20 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         }
     }
     let can_match_rgb = call.parts().0.expect("requested palette").can_match_rgb();
-    let mix_index = if let DitherPolicy::Yliluoma { size, .. } = dither {
-        if !can_match_rgb
-            || output_dimensions.pixel_count().expect("validated output")
-                < crate::prod::dither::yiluoma::index::MIN_INDEX_PIXELS
+    if let DitherPolicy::Yliluoma { size, .. } = dither {
+        if can_match_rgb
+            && output_dimensions.pixel_count().expect("validated output")
+                >= crate::prod::dither::yiluoma::index::MIN_INDEX_PIXELS
         {
-            None
-        } else {
-            let available = call.available_working_capacity();
             let levels = match size {
                 BayerSize::Two => 4,
                 BayerSize::Four => 16,
                 BayerSize::Eight => 64,
                 BayerSize::Sixteen => 256,
             };
-            crate::prod::dither::yiluoma::index::MixIndex::try_new(
-                call.parts().0.expect("requested palette").matcher(),
-                levels,
-                available,
-            )
+            call.prepare_mix_index(levels, peak)?;
         }
-    } else {
-        None
-    };
-    let mix_index_capacity = mix_index.as_ref().map_or(0, |index| index.capacity_bytes());
-    call.charge_optional_capacity(mix_index_capacity, peak)?;
+    }
     // Scalar Yliluoma also memoizes the position-independent endpoints of adaptive placement.
     let mixes_by_rgb = mixing.is_none() && matches!(dither, DitherPolicy::Yliluoma { .. });
     let mut rgb_cache = if can_match_rgb
@@ -449,7 +438,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     };
     let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
     call.charge_optional_capacity(rgb_cache_capacity, peak)?;
-    let (prepared, _, images, scratch) = call.image_parts();
+    let (prepared, mix_index, images, scratch) = call.image_parts();
     let prepared = prepared.expect("requested palette");
     let [source, resized, perturbed, indices] = &mut scratch.buffers;
     let rgba = if policy.is_some() {
@@ -538,7 +527,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     indices,
                     matrix,
                     mix_placement,
-                    mix_index.as_ref(),
+                    mix_index,
                     &mut report_row,
                 )?;
             } else if enabled {
@@ -550,7 +539,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     mix_placement,
                     placement_rows,
                     mixes,
-                    mix_index.as_ref(),
+                    mix_index,
                     &mut report_row,
                 )?;
             } else {
@@ -562,7 +551,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     mix_placement,
                     placement_rows,
                     mixes,
-                    mix_index.as_ref(),
+                    mix_index,
                     |_| Ok(()),
                 )?;
             }
@@ -584,8 +573,6 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     }
     drop(rgb_cache);
     call.release_working_capacity(rgb_cache_capacity);
-    drop(mix_index);
-    call.release_working_capacity(mix_index_capacity);
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);
