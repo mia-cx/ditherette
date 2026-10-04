@@ -1,12 +1,11 @@
 import {
+	compileEffectMask,
 	compileEffects,
 	indexColours,
 	type Ditherette,
-	type MaskCurve,
 	type RecolourRecipe,
 	type Rgba8Image
 } from 'ditherette';
-import { maskStrength } from '$lib/effects/mask';
 import type { LiveEffectsRequest, LiveEffectsResponse } from '$lib/processing/live-effects';
 import { resolveRecipes } from '$lib/processing/recipes';
 import { initializePackageProcessor } from '$lib/processing/worker-pipeline';
@@ -38,18 +37,6 @@ function index(sourceId: number, source: ImageData) {
 	post({ type: 'indexed', sourceId, pixels, count: colours.length }, [pixels.buffer]);
 }
 
-/** Each colour's mask strength as an opaque grey, read from the colour entering the masked step. */
-function maskGreys(entering: Uint32Array, mask: readonly MaskCurve[]) {
-	const greys = new Uint32Array(entering.length);
-	for (let index = 0; index < entering.length; index++) {
-		const colour = entering[index]!;
-		const rgb = [colour & 0xff, (colour >>> 8) & 0xff, (colour >>> 16) & 0xff] as const;
-		const grey = Math.round(maskStrength(mask, rgb) * 255);
-		greys[index] = grey | (grey << 8) | (grey << 16);
-	}
-	return greys;
-}
-
 self.onmessage = async ({ data }: MessageEvent<LiveEffectsRequest>) => {
 	if (data.type === 'source') return index(data.sourceId, data.source);
 	const { id, sourceId, key, effects, context, crop } = data;
@@ -60,19 +47,22 @@ self.onmessage = async ({ data }: MessageEvent<LiveEffectsRequest>) => {
 		});
 		const ditherette = await processor;
 		if (loaded?.sourceId !== sourceId) throw new Error('The effects worker has another image.');
-		const compiled = effects.length
-			? compileEffects(ditherette, {
-					version: 1,
-					colours: loaded.colours,
-					effects: resolveRecipes(ditherette, loaded.image, effects, context, crop, recipes),
-					context
-				})
-			: loaded.colours;
+		const resolved = resolveRecipes(ditherette, loaded.image, effects, context, crop, recipes);
+		const { colours } = loaded;
 		if (data.type === 'mask') {
-			const results = maskGreys(compiled, data.mask);
+			const results = compileEffectMask(ditherette, {
+				version: 1,
+				colours,
+				effects: resolved,
+				mask: data.mask,
+				context
+			});
 			post({ type: 'masked', id, sourceId, key, results }, [results.buffer]);
 			return;
 		}
+		const compiled = effects.length
+			? compileEffects(ditherette, { version: 1, colours, effects: resolved, context })
+			: colours;
 		post({ type: 'compiled', id, sourceId, key, results: compiled }, [compiled.buffer]);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Effects failed.';
