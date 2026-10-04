@@ -2,7 +2,7 @@
 
 use crate::verification::{input_digest, settings_digest};
 use ditherette_bench_api::{verification::*, SubjectId};
-use ditherette_wasm::bench_subjects::reference::ReferenceRequest;
+use ditherette_wasm::bench_subjects::reference::{self, ReferenceRequest};
 pub use ditherette_wasm::bench_subjects::scores::MetricFamily;
 pub use ditherette_wasm::spec::contract::request::WorkingSpace;
 use std::io;
@@ -20,6 +20,10 @@ pub enum NativeOperation {
     Diffusion {
         settings: super::diffusion::DiffusionSettings,
     },
+    /// A `dither_modes` kernel through the same production diffusion call.
+    ModeDiffusion {
+        settings: super::diffusion::ModeDiffusionSettings,
+    },
     Yliluoma {
         settings: super::yliluoma::YliluomaSettings,
     },
@@ -31,6 +35,10 @@ pub enum NativeOperation {
     },
     PerturbComponent {
         settings: super::fields::PerturbPolicy,
+    },
+    /// A `dither_modes` rectangular tile through the same perturb loop.
+    TilePerturbComponent {
+        settings: super::fields::TilePerturbPolicy,
     },
     Separable {
         settings: super::fields::SeparableSettings,
@@ -56,6 +64,10 @@ impl NativeOperation {
             Self::Processor { settings, .. } => settings.reference_request(source, rgba),
             Self::Process { settings } => settings.reference_request(source, rgba),
             Self::Diffusion { settings } => settings.reference_request(source, rgba),
+            Self::ModeDiffusion { settings } => settings.reference_request(source, rgba),
+            Self::TilePerturbComponent { settings } => {
+                super::fields::tile_perturb_request(*settings, source, rgba)
+            }
             Self::Yliluoma { settings } => settings.reference_request(source, rgba),
             Self::Perturb { settings } | Self::PerturbComponent { settings } => {
                 super::fields::perturb_request(*settings, source, rgba)
@@ -116,6 +128,8 @@ impl NativeOperation {
             Self::Processor { settings, .. } => settings.reference_subject(),
             Self::Process { .. } => "spec:process:request:v1",
             Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
+            Self::ModeDiffusion { .. } => reference::MODES_DIFFUSION_SUBJECT,
+            Self::TilePerturbComponent { .. } => reference::MODES_PERTURB_SUBJECT,
             Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
             Self::Perturb { .. } | Self::PerturbComponent { .. } => "spec:perturb:request:v1",
             Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
@@ -138,7 +152,10 @@ impl NativeOperation {
         match self {
             Self::Processor { .. } => super::CallScope::NativeCompleteCall,
             Self::Process { .. } => super::CallScope::NativeCompleteCall,
-            Self::Diffusion { .. } => super::CallScope::NativeCompleteCall,
+            Self::Diffusion { .. } | Self::ModeDiffusion { .. } => {
+                super::CallScope::NativeCompleteCall
+            }
+            Self::TilePerturbComponent { .. } => super::CallScope::NativePerturbKernel,
             Self::Yliluoma { .. } => super::CallScope::NativeCompleteCall,
             Self::Perturb { .. } | Self::Separable { .. } => super::CallScope::NativeCompleteCall,
             Self::PerturbComponent { .. } => super::CallScope::NativePerturbKernel,

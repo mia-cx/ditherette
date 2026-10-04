@@ -112,11 +112,30 @@ export type WorkingSpace =
 	| 'cielch'
 	| 'ycbcr';
 
-/** Palette-free fields supported by this checkpoint. Seeds are unsigned 32-bit integers. */
+/**
+ * Palette-free fields supported by this checkpoint. Seeds are unsigned 32-bit integers.
+ * Ordered tiles are rectangular threshold tiles named `<width>x<height>`.
+ */
 export type Field =
 	| { readonly algorithm: 'bayer'; readonly size: '2' | '4' | '8' | '16' }
 	| { readonly algorithm: 'random'; readonly seed: number }
-	| { readonly algorithm: 'blue-noise' };
+	| { readonly algorithm: 'blue-noise' }
+	| { readonly algorithm: 'ordered'; readonly tile: '3x1' | '4x1' | '4x2' | '5x3' };
+
+/** Scan-order error-diffusion kernels. Sierra3 is `sierra`; Sierra-2-4A is `sierra-lite`. */
+export type DiffusionKernel =
+	| 'floyd-steinberg'
+	| 'sierra'
+	| 'sierra-lite'
+	| 'atkinson'
+	| 'jarvis-judice-ninke'
+	| 'stucki'
+	| 'burkes'
+	| 'two-row-sierra'
+	| 'fan'
+	| 'shiau-fan'
+	| 'shiau-fan-2'
+	| 'simple-2d';
 
 export type Placement =
 	| { readonly mode: 'everywhere' }
@@ -150,7 +169,7 @@ export interface DitherAndQuantizeRequest extends QuantizeRequest {
 		| { readonly family: 'separable'; readonly perturb: PerturbPolicy }
 		| {
 				readonly family: 'diffusion';
-				readonly kernel: 'floyd-steinberg' | 'sierra' | 'sierra-lite' | 'atkinson';
+				readonly kernel: DiffusionKernel;
 				readonly feedback: 'srgb-bytes' | 'matching';
 				readonly strength: number;
 				readonly serpentine: boolean;

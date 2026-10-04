@@ -13,7 +13,7 @@ use crate::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             request::{
-                AlphaPolicy, Diffusion, DiffusionFeedback, DitherPolicy, MatchPolicy, Placement,
+                AlphaPolicy, DiffusionFeedback, DitherPolicy, MatchPolicy, Placement,
                 MAX_SOURCE_SIDE,
             },
         },
@@ -137,12 +137,7 @@ impl DiffusionPolicy {
             nonnegative(softness, ErrorPath::DitherSoftness)?;
         }
         Ok(Self {
-            kernel: match kernel {
-                Diffusion::FloydSteinberg => ErrorDiffusionKernel::FloydSteinberg,
-                Diffusion::Sierra => ErrorDiffusionKernel::Sierra,
-                Diffusion::SierraLite => ErrorDiffusionKernel::SierraLite,
-                Diffusion::Atkinson => ErrorDiffusionKernel::Atkinson,
-            },
+            kernel: kernel.into(),
             feedback,
             strength,
             serpentine,

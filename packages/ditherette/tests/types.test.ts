@@ -171,10 +171,20 @@ const blueNoise: PerturbRequest['perturb']['field'] = { algorithm: 'blue-noise' 
 const seededBlueNoise: PerturbRequest['perturb']['field'] = { algorithm: 'blue-noise', seed: 0 };
 // @ts-expect-error Matching metrics are not reversible working spaces.
 const badSpace: PerturbRequest['perturb']['space'] = 'srgb-rec709';
+const ordered: PerturbRequest['perturb']['field'] = { algorithm: 'ordered', tile: '5x3' };
+// @ts-expect-error Ordered tiles are the four named rectangles.
+const squareTile: PerturbRequest['perturb']['field'] = { algorithm: 'ordered', tile: '2x2' };
+const stucki: import('../src/index.js').DiffusionKernel = 'stucki';
+// @ts-expect-error Sierra3 is the existing `sierra` tag.
+const sierra3: import('../src/index.js').DiffusionKernel = 'sierra3';
 void badSize;
 void blueNoise;
 void seededBlueNoise;
 void badSpace;
+void ordered;
+void squareTile;
+void stucki;
+void sierra3;
 const yliluoma: DitherAndQuantizeRequest['dither'] = {
 	family: 'yliluoma',
 	size: '16',

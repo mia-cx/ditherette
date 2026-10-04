@@ -29,6 +29,32 @@ function yliluoma(size: 2 | 4 | 8 | 16, short: string) {
 	} as const satisfies DitherOption;
 }
 
+/** A rectangular ordered tile, named width by height. */
+function orderedTile(tile: '3x1' | '4x1' | '4x2' | '5x3', short: string) {
+	return {
+		id: `ordered-${tile}`,
+		label: `Ordered ${tile.replace('x', '×')}`,
+		family: 'ordered',
+		method: 'threshold',
+		field: 'ordered',
+		sku: `threshold.ordered.tile-${tile}`,
+		short
+	} as const satisfies DitherOption;
+}
+
+/** An error-diffusion kernel; the ID is the package kernel tag. */
+function kernel<const Id extends DitherId>(id: Id, label: string, short: string) {
+	return {
+		id,
+		label,
+		family: 'error-diffusion',
+		method: 'error-diffusion',
+		field: 'kernel',
+		sku: `error-diffusion.kernel.${id}`,
+		short
+	} as const satisfies DitherOption;
+}
+
 export const DITHER_ALGORITHMS = [
 	{
 		id: 'none',
@@ -80,6 +106,22 @@ export const DITHER_ALGORITHMS = [
 		short:
 			'Fine ordered matrix with the least chunky Bayer texture. Best when you want deterministic dithering that reads smoother at normal viewing distance.'
 	},
+	orderedTile(
+		'3x1',
+		'A three-pixel tile, one row tall, so every row repeats the same thresholds. Texture forms vertical lines with only three levels: coarse and deliberately stripy.'
+	),
+	orderedTile(
+		'4x1',
+		'A four-pixel tile, one row tall. The same vertical-line texture as 3×1, with one more step between tones.'
+	),
+	orderedTile(
+		'4x2',
+		'Eight threshold levels in a tile twice as wide as it is tall. The texture sits between the 4×1 lines and a square Bayer 4×4.'
+	),
+	orderedTile(
+		'5x3',
+		'Fifteen threshold levels in a hand-designed tile by Joel Yliluoma. Its odd size avoids the power-of-two grid look of Bayer matrices.'
+	),
 	{
 		id: 'floyd-steinberg',
 		label: 'Floyd–Steinberg',
@@ -120,6 +162,46 @@ export const DITHER_ALGORITHMS = [
 		short:
 			'The classic Macintosh kernel. It passes on only three quarters of the error, so highlights and shadows settle into flat colour while midtones keep a crisp, high-contrast texture.'
 	},
+	kernel(
+		'jarvis-judice-ninke',
+		'Jarvis–Judice–Ninke',
+		'Spreads error over twelve pixels across three rows. Gradients come out very smooth with few worms, but fine detail softens.'
+	),
+	kernel(
+		'stucki',
+		'Stucki',
+		'The same twelve-pixel reach as Jarvis–Judice–Ninke, with more weight on the nearest pixels. Just as smooth, with crisper edges.'
+	),
+	kernel(
+		'burkes',
+		'Burkes',
+		'A two-row cut of Stucki that sends error to seven pixels. Close to the Stucki look while touching one row fewer.'
+	),
+	kernel(
+		'two-row-sierra',
+		'Two-row Sierra',
+		'The two-row variant of Sierra, also called Sierra2. Seven pixels share the error, a middle ground between Sierra and Sierra Lite.'
+	),
+	kernel(
+		'fan',
+		'Fan',
+		'A four-pixel kernel by Zhigang Fan that reaches two pixels back on the next row. It breaks up the worms Floyd–Steinberg leaves in smooth areas.'
+	),
+	kernel(
+		'shiau-fan',
+		'Shiau–Fan',
+		'A four-pixel kernel weighted in eighths, designed to reduce worm artefacts in highlights and shadows.'
+	),
+	kernel(
+		'shiau-fan-2',
+		'Shiau–Fan 2',
+		'The five-pixel Shiau–Fan kernel, reaching three pixels back on the next row. Worms break up further for a more even texture.'
+	),
+	kernel(
+		'simple-2d',
+		'Simple 2D',
+		'Sends half the error right and half straight down. The simplest kernel: fast, with a cruder texture than Floyd–Steinberg.'
+	),
 	{
 		id: 'random',
 		label: 'Random',

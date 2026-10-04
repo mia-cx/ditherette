@@ -1,7 +1,9 @@
 //! Native diffusion call registration. Contract mapping stays outside measured calls.
 
 use super::{
-    quantize::quantize_request, reference::ReferenceRequest, verification::indexed_output,
+    quantize::quantize_request,
+    reference::{DitherModesRequest, ReferenceRequest, MODES_DIFFUSION_SUBJECT},
+    verification::indexed_output,
     BenchSubject,
 };
 use crate::{
@@ -16,6 +18,8 @@ use ditherette_bench_api::{
 
 pub const SUBJECT: &str = "prod:dither-and-quantize:diffusion:full-image-v1";
 pub const CANDIDATE_SUBJECT: &str = "candidate:dither-and-quantize:diffusion:three-row-v1";
+/// The same three-row production call, checked against the `dither_modes` reference.
+pub const MODES_SUBJECT: &str = "prod:dither-modes:diffusion:three-row-v1";
 pub type DiffusionFn =
     for<'a> fn(prod::DitherQuantizeRequest<'a>) -> Result<IndexedImage, BenchSubjectError>;
 
@@ -26,7 +30,7 @@ pub fn function(id: &str) -> Option<DiffusionFn> {
             error_diffusion::diffuse(request)
                 .map_err(|error| BenchSubjectError::new(error.to_string()))
         }),
-        CANDIDATE_SUBJECT => Some(|request| {
+        CANDIDATE_SUBJECT | MODES_SUBJECT => Some(|request| {
             error_diffusion::prepared::diffuse(request, u64::MAX)
                 .map_err(|error| BenchSubjectError::new(format!("{error:?}")))
         }),
@@ -37,6 +41,22 @@ pub fn function(id: &str) -> Option<DiffusionFn> {
 pub fn request<'a>(
     input: &ReferenceRequest<'a>,
 ) -> Result<prod::DitherQuantizeRequest<'a>, BenchSubjectError> {
+    if let ReferenceRequest::DitherModes(DitherModesRequest::Diffusion { quantize, policy }) =
+        *input
+    {
+        return Ok(prod::DitherQuantizeRequest {
+            quantize: quantize_request(&ReferenceRequest::Processing(spec::Request::Quantize(
+                quantize,
+            )))?,
+            dither: prod::DitherPolicy::Diffusion {
+                kernel: retag(policy.kernel)?,
+                feedback: retag(policy.feedback)?,
+                strength: policy.strength,
+                serpentine: policy.serpentine,
+                placement: retag(policy.placement)?,
+            },
+        });
+    }
     let ReferenceRequest::Processing(spec::Request::DitherAndQuantize(input)) = *input else {
         return Err(BenchSubjectError::new(
             "diffusion subject requires a dither-and-quantize request",
@@ -51,16 +71,22 @@ pub fn request<'a>(
         quantize: quantize_request(&ReferenceRequest::Processing(spec::Request::Quantize(
             input.quantize,
         )))?,
-        dither: serde_json::from_value(
-            serde_json::to_value(input.dither)
-                .map_err(|error| BenchSubjectError::new(error.to_string()))?,
-        )
-        .map_err(|error| BenchSubjectError::new(error.to_string()))?,
+        dither: retag(input.dither)?,
     })
 }
 
+/// Maps a reference value to the production type with the same serde tags.
+fn retag<T: serde::Serialize, U: serde::de::DeserializeOwned>(
+    value: T,
+) -> Result<U, BenchSubjectError> {
+    serde_json::from_value(
+        serde_json::to_value(value).map_err(|error| BenchSubjectError::new(error.to_string()))?,
+    )
+    .map_err(|error| BenchSubjectError::new(error.to_string()))
+}
+
 pub(super) fn subjects() -> Vec<BenchSubject> {
-    let entries: [(&str, super::reference::ReferenceFn); 2] = [
+    let entries: [(&str, super::reference::ReferenceFn); 3] = [
         (SUBJECT, |input| {
             Ok(indexed_output(&function(SUBJECT)
                 .expect("registered callable")(
@@ -73,10 +99,21 @@ pub(super) fn subjects() -> Vec<BenchSubject> {
                 request(input)?
             )?))
         }),
+        (MODES_SUBJECT, |input| {
+            Ok(indexed_output(&function(MODES_SUBJECT)
+                .expect("registered callable")(
+                request(input)?
+            )?))
+        }),
     ];
     entries
         .into_iter()
         .map(|(id, run)| {
+            let oracle = if id == MODES_SUBJECT {
+                MODES_DIFFUSION_SUBJECT
+            } else {
+                "spec:dither-and-quantize:request:v1"
+            };
             BenchSubject::Conformance(ConformanceBenchSubject {
                 descriptor: SubjectDescriptor {
                     id: SubjectId::parse(id).expect("literal ID"),
@@ -88,10 +125,7 @@ pub(super) fn subjects() -> Vec<BenchSubject> {
                     }
                     .into(),
                     source_line: 1,
-                    default_oracle: Some(
-                        SubjectId::parse("spec:dither-and-quantize:request:v1")
-                            .expect("literal ID"),
-                    ),
+                    default_oracle: Some(SubjectId::parse(oracle).expect("literal ID")),
                     capabilities: SubjectCapabilities {
                         pixel_formats: vec![PixelFormat::Indexed8],
                         supports_strided_io: false,

@@ -16,10 +16,12 @@ privateDitherAndQuantize(input, width, height,
 
 Field 0 is Bayer, with parameter 2, 4, 8, or 16. Field 1 is random, with a u32 seed parameter.
 Field 2 is blue noise and requires parameter zero for the frozen 32×32 rank tile.
+Field 3 is a rectangular ordered tile, with parameter 0 `3x1`, 1 `4x1`, 2 `4x2`, or 3 `5x3`.
 Spaces 0 through 6 are sRGB, linear RGB, Oklab, OKLCH, CIELAB, CIELCH, and YCbCr, respectively.
 Placement 0 is everywhere and requires zero unused controls. Placement 1 is adaptive.
 Family 0 is direct quantization and requires all eight field controls to be zero. Family 1 is separable perturbation.
-Family 2 is scalar diffusion. It uses field for kernel 0 Floyd-Steinberg, 1 Sierra, 2 Sierra Lite, or 3 Atkinson.
+Family 2 is scalar diffusion. It uses field for kernel 0 Floyd-Steinberg, 1 Sierra, 2 Sierra Lite, 3 Atkinson,
+4 Jarvis-Judice-Ninke, 5 Stucki, 6 Burkes, 7 Two-row Sierra, 8 Fan, 9 Shiau-Fan, 10 Shiau-Fan 2, or 11 Simple 2D.
 For family 2, parameter selects feedback 0 sRGB bytes or 1 matching coordinates, and space selects serpentine 0 false or 1 true.
 Strength and placement retain their existing positions. Numeric tags require exact integer values before narrowing.
 Family 3 is Yliluoma. Its parameter is matrix width 2, 4, 8, or 16; field, space, and strength must be zero.

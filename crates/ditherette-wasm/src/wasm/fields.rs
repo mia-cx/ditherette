@@ -11,8 +11,8 @@ use crate::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             request::{
-                BayerSize, Diffusion, DiffusionFeedback, DitherPolicy, Field, PerturbPolicy,
-                Placement, WorkingSpace, MAX_SOURCE_SIDE,
+                BayerSize, Diffusion, DiffusionFeedback, DitherPolicy, Field, OrderedTile,
+                PerturbPolicy, Placement, WorkingSpace, MAX_SOURCE_SIDE,
             },
         },
         pipeline::{perturb::PerturbRequest, quantize::QuantizeRequest},
@@ -21,7 +21,8 @@ use crate::{
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
 
-/// Private field tags: Bayer 0, random 1, blue noise 2. The parameter is width, seed, or zero.
+/// Private field tags: Bayer 0, random 1, blue noise 2, ordered tile 3.
+/// The parameter is width, seed, zero, or tile 0 3x1, 1 4x1, 2 4x2, 3 5x3.
 /// All raw numbers enter as f64 so validation precedes any truncation or f32 narrowing.
 #[wasm_bindgen(js_name = privatePerturb)]
 pub fn private_perturb(
@@ -146,6 +147,14 @@ pub(super) fn parse_dither(
                 1.0 => Diffusion::Sierra,
                 2.0 => Diffusion::SierraLite,
                 3.0 => Diffusion::Atkinson,
+                4.0 => Diffusion::JarvisJudiceNinke,
+                5.0 => Diffusion::Stucki,
+                6.0 => Diffusion::Burkes,
+                7.0 => Diffusion::TwoRowSierra,
+                8.0 => Diffusion::Fan,
+                9.0 => Diffusion::ShiauFan,
+                10.0 => Diffusion::ShiauFan2,
+                11.0 => Diffusion::Simple2d,
                 _ => return Err(invalid(ErrorPath::DitherKernel)),
             },
             feedback: match parameter {
@@ -238,6 +247,15 @@ fn parse_policy(
         }
         1.0 => return Err(invalid(ErrorPath::PerturbField)),
         2.0 if parameter == 0.0 => Field::BlueNoise {},
+        3.0 => Field::Ordered {
+            tile: match parameter {
+                0.0 => OrderedTile::ThreeByOne,
+                1.0 => OrderedTile::FourByOne,
+                2.0 => OrderedTile::FourByTwo,
+                3.0 => OrderedTile::FiveByThree,
+                _ => return Err(invalid(ErrorPath::PerturbField)),
+            },
+        },
         _ => return Err(invalid(ErrorPath::PerturbField)),
     };
     let space = parse_space(space).ok_or_else(|| invalid(ErrorPath::PerturbSpace))?;

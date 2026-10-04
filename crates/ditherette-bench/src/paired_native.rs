@@ -22,7 +22,8 @@ use ditherette_bench_api::{verification::*, ResizeParams};
 use ditherette_wasm::{
     bench_subjects::{
         diffusion, field_calls, fields, preparation, process, quantize as adapters,
-        reference::ReferenceRequest, scalar, scores, yiluoma, BenchSubject,
+        reference::{DitherModesRequest, ReferenceRequest},
+        scalar, scores, yiluoma, BenchSubject,
     },
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
@@ -185,6 +186,10 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
             native::NativeOperation::Processor { settings, .. } => settings.subject() == subject_id,
             native::NativeOperation::Process { .. } => process::callable(subject_id),
             native::NativeOperation::Diffusion { .. } => diffusion::function(subject_id).is_some(),
+            native::NativeOperation::ModeDiffusion { .. } => diffusion::MODES_SUBJECT == subject_id,
+            native::NativeOperation::TilePerturbComponent { .. } => {
+                scalar::ORDERED_PERTURB_SUBJECT == subject_id
+            }
             native::NativeOperation::Yliluoma { .. } => {
                 yiluoma::yiluoma_function(subject_id).is_some()
             }
@@ -216,6 +221,8 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
                     | native::NativeOperation::MetricScores { .. }
                     | native::NativeOperation::FieldComponent { .. }
                     | native::NativeOperation::PerturbComponent { .. }
+                    | native::NativeOperation::ModeDiffusion { .. }
+                    | native::NativeOperation::TilePerturbComponent { .. }
             );
         let oracle = if frozen {
             Some(subject.descriptor.id.as_str())
@@ -272,6 +279,11 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
 
 enum TypedWorkload<'a> {
     FrozenIndexed(spec::Request<'a>),
+    /// The `dither_modes` reference diffusion call, borrowed like `FrozenIndexed`.
+    FrozenModeDiffusion {
+        quantize: spec::QuantizeRequest<'a>,
+        policy: ditherette_wasm::spec::dither_modes::diffusion::DiffusionPolicy,
+    },
     PerturbComponent {
         batch: scalar::PerturbBatch<'a>,
         production: bool,
@@ -385,6 +397,12 @@ impl Workload for TypedWorkload<'_> {
             Self::FrozenIndexed(request) => {
                 drop(std::hint::black_box(
                     scalar::indexed_call(*request)
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?,
+                ));
+            }
+            Self::FrozenModeDiffusion { quantize, policy } => {
+                drop(std::hint::black_box(
+                    ditherette_wasm::spec::dither_modes::diffusion::diffuse(*quantize, *policy)
                         .map_err(|e| BenchError::Runtime(e.to_string()))?,
                 ));
             }
@@ -515,7 +533,21 @@ fn run_typed(
     }
     let frozen = subject_id == &case.reference_subject;
     let mut workload = match operation {
-        native::NativeOperation::PerturbComponent { .. } => TypedWorkload::PerturbComponent {
+        native::NativeOperation::ModeDiffusion { .. } if frozen => {
+            let ReferenceRequest::DitherModes(DitherModesRequest::Diffusion { quantize, policy }) =
+                parameters
+            else {
+                unreachable!("validated dither-modes request")
+            };
+            TypedWorkload::FrozenModeDiffusion { quantize, policy }
+        }
+        native::NativeOperation::ModeDiffusion { .. } => TypedWorkload::Diffusion {
+            run: diffusion::function(subject_id).expect("validated diffusion callable"),
+            request: diffusion::request(&parameters)
+                .map_err(|e| BenchError::Runtime(e.to_string()))?,
+        },
+        native::NativeOperation::PerturbComponent { .. }
+        | native::NativeOperation::TilePerturbComponent { .. } => TypedWorkload::PerturbComponent {
             batch: scalar::PerturbBatch::new(&parameters)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
             production: !frozen,

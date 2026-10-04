@@ -168,6 +168,19 @@ pub enum BayerSize {
     Sixteen,
 }
 
+/// Named rectangular ordered tiles. Tags are `<width>x<height>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OrderedTile {
+    #[serde(rename = "3x1")]
+    ThreeByOne,
+    #[serde(rename = "4x1")]
+    FourByOne,
+    #[serde(rename = "4x2")]
+    FourByTwo,
+    #[serde(rename = "5x3")]
+    FiveByThree,
+}
+
 /// Only these algorithms can produce RGBA8 without palette feedback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "algorithm", rename_all = "kebab-case", deny_unknown_fields)]
@@ -175,6 +188,7 @@ pub enum Field {
     Bayer { size: BayerSize },
     Random { seed: u32 },
     BlueNoise {},
+    Ordered { tile: OrderedTile },
 }
 
 /// Scalar scan-order-sensitive diffusion kernels.
@@ -185,6 +199,16 @@ pub enum Diffusion {
     Sierra,
     SierraLite,
     Atkinson,
+    JarvisJudiceNinke,
+    Stucki,
+    Burkes,
+    TwoRowSierra,
+    Fan,
+    ShiauFan,
+    #[serde(rename = "shiau-fan-2")]
+    ShiauFan2,
+    #[serde(rename = "simple-2d")]
+    Simple2d,
 }
 
 /// Distinguishes byte-rounded sRGB feedback from unrounded matching coordinates.

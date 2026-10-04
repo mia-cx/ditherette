@@ -117,7 +117,9 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 | NativeOperation::FieldComponent { .. }
                 | NativeOperation::Perturb { .. }
                 | NativeOperation::PerturbComponent { .. }
-                | NativeOperation::Separable { .. } => {
+                | NativeOperation::Separable { .. }
+                | NativeOperation::ModeDiffusion { .. }
+                | NativeOperation::TilePerturbComponent { .. } => {
                     unreachable!("S24 has no metric or field controls")
                 }
                 NativeOperation::Quantize { .. } => (
