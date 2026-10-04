@@ -18,6 +18,7 @@ import {
 	type WorkerResponse
 } from './types';
 import type { ProcessingMetricsSample } from './metrics';
+import { TABLE_ENTRIES } from './effects-table';
 import { isEffect, type Effect, type ResizeAnchor } from 'ditherette';
 import { MAX_EFFECT_LAYERS } from '$lib/effects/catalog';
 
@@ -526,6 +527,11 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 			image: validateProcessedImage(value.image),
 			metrics: safeProcessingMetrics(value.metrics)
 		};
+	}
+	if (value.type === 'effects-table') {
+		if (!(value.table instanceof Uint32Array) || value.table.length !== TABLE_ENTRIES)
+			throw new Error('Worker effects table is invalid.');
+		return { id, type: 'effects-table', table: value.table };
 	}
 	throw new Error('Worker response type is invalid.');
 }

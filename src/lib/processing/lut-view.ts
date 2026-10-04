@@ -1,6 +1,12 @@
-import { atom } from 'nanostores';
-import { sourceImageData } from '$lib/stores/app';
-import { LUT_SIZE, sourceEffectsLut } from './source-effects';
+import { atom, computed } from 'nanostores';
+import { effectsTable, sourceImageData } from '$lib/stores/app';
+import { activeEffectSteps } from '$lib/stores/effects';
+import { TABLE_SIDE } from './effects-table';
+
+/** The effects table to draw: the pipeline's latest, while any effect is on. */
+export const shownEffectsTable = computed([effectsTable, activeEffectSteps], (table, steps) =>
+	steps.length ? table : undefined
+);
 
 const VERTEX = `#version 300 es
 in vec2 corner;
@@ -11,7 +17,7 @@ void main() {
 	gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-/** Sample the lattice at its texel centres, so each lattice colour maps to exactly its own entry. */
+/** Read each source colour's own texel, at its centre and unfiltered, so the drawing is exact. */
 const FRAGMENT = `#version 300 es
 precision highp float;
 precision highp sampler3D;
@@ -19,10 +25,10 @@ uniform sampler2D source;
 uniform sampler3D lut;
 in vec2 uv;
 out vec4 color;
-const float SIZE = ${LUT_SIZE}.0;
+const float SIZE = ${TABLE_SIDE}.0;
 void main() {
 	vec4 pixel = texture(source, uv);
-	vec3 coordinate = pixel.rgb * ((SIZE - 1.0) / SIZE) + 0.5 / SIZE;
+	vec3 coordinate = (round(pixel.rgb * 255.0) + 0.5) / SIZE;
 	color = vec4(texture(lut, coordinate).rgb, pixel.a);
 }`;
 
@@ -71,7 +77,7 @@ function setUp(gl: WebGL2RenderingContext) {
 	gl.activeTexture(gl.TEXTURE0);
 	const sourceTexture = texture(gl, gl.TEXTURE_2D, gl.NEAREST);
 	gl.activeTexture(gl.TEXTURE1);
-	const lutTexture = texture(gl, gl.TEXTURE_3D, gl.LINEAR);
+	const lutTexture = texture(gl, gl.TEXTURE_3D, gl.NEAREST);
 	return { sourceTexture, lutTexture };
 }
 
@@ -82,10 +88,11 @@ function drawableSide(gl: WebGL2RenderingContext) {
 }
 
 /**
- * Svelte attachment: draw the source through the effects lookup table at full source resolution.
- * The source uploads once per image and each edit uploads only the table, so redraws take
- * milliseconds at any image size. `lutDrawn` says whether the drawing is showing; after a GPU
- * reset, resources are rebuilt and the drawing returns. Nothing is read back from this canvas.
+ * Svelte attachment: draw the source through the pipeline's exact effects table at full source
+ * resolution. The source uploads once per image and the table once per new table, so redraws take
+ * milliseconds at any image size. A hidden canvas draws nothing until it shows again. `lutDrawn`
+ * says whether the drawing is showing; after a GPU reset, resources are rebuilt and the drawing
+ * returns. Nothing is read back from this canvas.
  */
 export function lutView(canvas: HTMLCanvasElement) {
 	const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, antialias: false });
@@ -95,6 +102,7 @@ export function lutView(canvas: HTMLCanvasElement) {
 	}
 	let resources = setUp(gl);
 	let uploaded: ImageData | undefined;
+	let uploadedTable: Uint32Array | undefined;
 	let lost = false;
 
 	function fail(message: string) {
@@ -104,8 +112,9 @@ export function lutView(canvas: HTMLCanvasElement) {
 
 	function draw() {
 		const source = sourceImageData.get();
-		const lut = sourceEffectsLut.get();
-		if (!gl || lost || !source || !lut) return;
+		const table = shownEffectsTable.get();
+		// A canvas with no boxes is hidden; the resize observer draws it once it shows.
+		if (!gl || lost || !source || !table || !canvas.getClientRects().length) return;
 		if (source !== uploaded) {
 			const limit = drawableSide(gl);
 			if (Math.max(source.width, source.height) > limit)
@@ -120,16 +129,31 @@ export function lutView(canvas: HTMLCanvasElement) {
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
 			uploaded = source;
 		}
-		gl.activeTexture(gl.TEXTURE1);
-		gl.bindTexture(gl.TEXTURE_3D, resources.lutTexture);
-		const size = LUT_SIZE;
-		gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, size, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut);
+		if (table !== uploadedTable) {
+			gl.activeTexture(gl.TEXTURE1);
+			gl.bindTexture(gl.TEXTURE_3D, resources.lutTexture);
+			const [side, bytes] = [TABLE_SIDE, new Uint8Array(table.buffer)];
+			gl.texImage3D(
+				gl.TEXTURE_3D,
+				0,
+				gl.RGBA8,
+				side,
+				side,
+				side,
+				0,
+				gl.RGBA,
+				gl.UNSIGNED_BYTE,
+				bytes
+			);
+			uploadedTable = table;
+		}
 		gl.viewport(0, 0, canvas.width, canvas.height);
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 		// WebGL skips a command it can't honour, such as an upload that runs out of memory, and only
 		// records the error.
 		if (gl.getError() !== gl.NO_ERROR) {
 			uploaded = undefined;
+			uploadedTable = undefined;
 			return fail('The GPU could not draw effects on this image.');
 		}
 		lutDrawn.set(true);
@@ -145,13 +169,17 @@ export function lutView(canvas: HTMLCanvasElement) {
 		lost = false;
 		resources = setUp(gl);
 		uploaded = undefined;
+		uploadedTable = undefined;
 		draw();
 	};
 	canvas.addEventListener('webglcontextlost', onLost);
 	canvas.addEventListener('webglcontextrestored', onRestored);
-	const unsubscribers = [sourceImageData.listen(draw), sourceEffectsLut.listen(draw)];
+	const shown = new ResizeObserver(draw);
+	shown.observe(canvas);
+	const unsubscribers = [sourceImageData.listen(draw), shownEffectsTable.listen(draw)];
 	draw();
 	return () => {
+		shown.disconnect();
 		for (const unsubscribe of unsubscribers) unsubscribe();
 		canvas.removeEventListener('webglcontextlost', onLost);
 		canvas.removeEventListener('webglcontextrestored', onRestored);

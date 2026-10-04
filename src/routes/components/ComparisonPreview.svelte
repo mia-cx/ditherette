@@ -15,8 +15,7 @@
 	} from '$lib/components/ui/empty';
 	import { processedToImageData } from '$lib/processing/render';
 	import { browser } from '$app/environment';
-	import { lutDrawn, lutView, supportsWebGL2 } from '$lib/processing/lut-view';
-	import { sourceEffectsLut } from '$lib/processing/source-effects';
+	import { lutDrawn, lutView, shownEffectsTable, supportsWebGL2 } from '$lib/processing/lut-view';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputSettings,
@@ -135,7 +134,11 @@
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
-	const sourceLabel = $derived($sourceEffectsLut && $lutDrawn ? 'Source with effects' : 'Source');
+	const sourceLabel = $derived(
+		$previewSettings.sourceEffects && $shownEffectsTable && $lutDrawn
+			? 'Source with effects'
+			: 'Source'
+	);
 	const canShowEffects = browser && supportsWebGL2();
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
@@ -1374,10 +1377,12 @@
 			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 			draggable="false"
 		/>
-		{#if $sourceEffectsLut}
+		{#if $shownEffectsTable}
+			<!-- Hidden rather than removed while off, so turning it on keeps the GPU's copies. -->
 			<canvas
 				{@attach lutView}
 				class="pointer-events-none absolute max-w-none select-none"
+				hidden={!$previewSettings.sourceEffects}
 				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 				aria-hidden="true"
 			></canvas>

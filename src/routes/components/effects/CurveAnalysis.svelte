@@ -3,8 +3,7 @@
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeft';
 	import { Button } from '$lib/components/ui/button';
 	import { Dialog, DialogContent, DialogTitle } from '$lib/components/ui/dialog';
-	import { lutView } from '$lib/processing/lut-view';
-	import { curveAnalysisOpen, sourceEffectsLut } from '$lib/processing/source-effects';
+	import { lutView, shownEffectsTable } from '$lib/processing/lut-view';
 	import { sourceImageData, sourceObjectUrl } from '$lib/stores/app';
 	import ColourScope3d from './ColourScope3d.svelte';
 	import CurveSurface from './CurveSurface.svelte';
@@ -26,11 +25,6 @@
 
 	const active = $derived(Math.min(selected, step.curves.length - 1));
 	const curve = $derived(step.curves[active]);
-
-	$effect(() => {
-		curveAnalysisOpen.set(open);
-		return () => curveAnalysisOpen.set(false);
-	});
 
 	function replace(next: Curve) {
 		onchange({
@@ -74,7 +68,7 @@
 				{#if $sourceObjectUrl}
 					<img src={$sourceObjectUrl} alt="" class="absolute inset-0 size-full object-contain" />
 				{/if}
-				{#if $sourceImageData && $sourceEffectsLut}
+				{#if $sourceImageData && $shownEffectsTable}
 					<canvas
 						{@attach lutView}
 						class="absolute inset-0 size-full object-contain"
@@ -96,7 +90,7 @@
 			<section
 				class="min-h-0 min-w-0 border-b border-border lg:col-start-2 lg:row-start-2 lg:border-r lg:border-b-0"
 			>
-				<ColourScope3d source={$sourceImageData} lut={$sourceEffectsLut} />
+				<ColourScope3d source={$sourceImageData} table={$shownEffectsTable} />
 			</section>
 			<section
 				class="min-h-0 min-w-0 p-3 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:overflow-y-auto"

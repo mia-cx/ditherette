@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createDitherette, DitheretteError } from 'ditherette';
+import { createDitherette, DitheretteError, type Ditherette, type Effect } from 'ditherette';
 import {
 	PackageInitializationError,
 	ProcessorWorkerPipeline,
@@ -87,7 +87,7 @@ function processRequest(overrides: Partial<Extract<WorkerRequest, { type: 'proce
 
 function processorMock() {
 	return {
-		process: vi.fn(() => ({
+		process: vi.fn<Ditherette['process']>(() => ({
 			width: 2,
 			height: 1,
 			indices: new Uint8Array([0, 1]),
@@ -196,6 +196,62 @@ describe('ProcessorWorkerPipeline', () => {
 		).toEqual([]);
 	});
 
+	it('applies effects once through a published table, until the chain changes', async () => {
+		const processor = processorMock();
+		// Inverts RGB, like a pointwise chain would.
+		processor.applyEffects.mockImplementation(({ source }) => ({
+			...source,
+			data: source.data.map((value: number, index: number) =>
+				index % 4 === 3 ? value : 255 - value
+			)
+		}));
+		vi.mocked(createDitherette).mockResolvedValue(processor);
+		const pipeline = loadedPipeline();
+		const published: Uint32Array[] = [];
+		const run = (id: number, effects: Effect[], algorithm = dither.algorithm) =>
+			pipeline.handleAsync(
+				processRequest({
+					id,
+					settings: { output, dither: { ...dither, algorithm }, colorSpace: 'srgb', effects }
+				}),
+				() => undefined,
+				(table) => published.push(table)
+			);
+		const brighter: Effect[] = [{ effect: 'exposure', enabled: true, stops: 1 }];
+		const processed = () =>
+			[...processor.process.mock.calls.at(-1)![0].source.data] as readonly number[];
+
+		await run(2, brighter);
+		expect(processed()).toEqual([255, 255, 255, 255, 0, 0, 0, 255]);
+		expect(published).toHaveLength(1);
+		expect(published[0]![0xffffff]).toBe(0xff000000);
+
+		// A terminal-only change reuses the mapped source.
+		await run(3, brighter, 'bayer-4');
+		expect(processor.applyEffects).toHaveBeenCalledTimes(1);
+		expect(published).toHaveLength(1);
+		expect(processed()).toEqual([255, 255, 255, 255, 0, 0, 0, 255]);
+
+		// Without a palette fit, the palette and colour space don't reach the effects either.
+		await pipeline.handleAsync(
+			processRequest({
+				id: 5,
+				palette: palette.slice(0, 1),
+				settings: { output, dither, colorSpace: 'oklab', effects: brighter }
+			}),
+			() => undefined,
+			(table) => published.push(table)
+		);
+		expect(processor.applyEffects).toHaveBeenCalledTimes(1);
+
+		await run(4, [{ effect: 'exposure', enabled: true, stops: 2 }]);
+		expect(processor.applyEffects).toHaveBeenCalledTimes(2);
+		expect(published).toHaveLength(2);
+		expect(
+			transferablesForWorkerResponse({ id: 4, type: 'effects-table', table: published[1]! })
+		).toEqual([published[1]!.buffer]);
+	});
+
 	it('does not initialize a canceled request', async () => {
 		const pipeline = loadedPipeline();
 		pipeline.handle({ id: 2, type: 'cancel' });
@@ -222,7 +278,7 @@ describe('ProcessorWorkerPipeline', () => {
 			process(request) {
 				request.onProgress?.({ stage: 'quantize', completed: 1, total: 2 });
 				request.onProgress?.({ stage: 'complete' });
-				return processor.process();
+				return processor.process(request);
 			}
 		});
 		const progress = vi.fn();

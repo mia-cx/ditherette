@@ -125,6 +125,11 @@ export const sourceMeta = atom<SourceMeta | undefined>();
 export const sourceObjectUrl = atom<string | undefined>();
 export const sourceImageData = atom<ImageData | undefined>();
 export const processedImage = atom<ProcessedImage | undefined>();
+/**
+ * The exact effects table the pipeline last built for this source (see `effects-table.ts`). It
+ * outlives turning every effect off, since the worker resends a table only when it rebuilds one.
+ */
+export const effectsTable = atom<Uint32Array | undefined>();
 export const processingProgress = atom<
 	| {
 			stage: string;
@@ -558,6 +563,7 @@ export function clearInMemoryImageState() {
 	sourceObjectUrl.set(undefined);
 	sourceImageData.set(undefined);
 	processedImage.set(undefined);
+	effectsTable.set(undefined);
 	processingProgress.set(undefined);
 	processingError.set(undefined);
 	clearProcessingMetrics();
