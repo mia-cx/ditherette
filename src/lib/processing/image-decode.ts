@@ -5,10 +5,15 @@ export function browserCanProcessImages() {
 	return typeof indexedDB !== 'undefined' && typeof createImageBitmap !== 'undefined';
 }
 
-function createDecodeCanvas(width: number, height: number) {
-	if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(width, height);
+// Typed, so the HTML canvas picks its '2d' overload rather than the catch-all string one.
+const decodeContextSettings: CanvasRenderingContext2DSettings = { willReadFrequently: true };
+
+function createDecodeContext(width: number, height: number) {
+	if (typeof OffscreenCanvas !== 'undefined')
+		return new OffscreenCanvas(width, height).getContext('2d', decodeContextSettings);
 	if (typeof document !== 'undefined') {
-		return Object.assign(document.createElement('canvas'), { width, height });
+		const canvas = Object.assign(document.createElement('canvas'), { width, height });
+		return canvas.getContext('2d', decodeContextSettings);
 	}
 	throw new Error('No canvas implementation is available for image decoding.');
 }
@@ -21,8 +26,7 @@ export async function decodeBlob(
 	const bitmap = await createImageBitmap(blob);
 	try {
 		validateSourceImageSize(bitmap.width, bitmap.height);
-		const canvas = createDecodeCanvas(bitmap.width, bitmap.height);
-		const context = canvas.getContext('2d', { willReadFrequently: true });
+		const context = createDecodeContext(bitmap.width, bitmap.height);
 		if (!context) throw new Error('Canvas 2D is not available');
 		context.drawImage(bitmap, 0, 0);
 		return {

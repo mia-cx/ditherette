@@ -187,6 +187,8 @@ export type WorkerComplete = {
 	id: number;
 	type: 'complete';
 	image: ProcessedImage;
+	/** The output's zoom levels from `buildOutputPyramid`, drawn by the preview as they are. */
+	preview?: ImageBitmap[];
 	metrics?: ProcessingMetricsSample;
 };
 

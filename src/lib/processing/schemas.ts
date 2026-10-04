@@ -521,10 +521,17 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 		};
 	}
 	if (value.type === 'complete') {
+		const { preview } = value;
+		if (
+			preview !== undefined &&
+			!(Array.isArray(preview) && preview.every((level) => level instanceof ImageBitmap))
+		)
+			throw new Error('Worker output preview is invalid.');
 		return {
 			id,
 			type: 'complete',
 			image: validateProcessedImage(value.image),
+			preview,
 			metrics: safeProcessingMetrics(value.metrics)
 		};
 	}
