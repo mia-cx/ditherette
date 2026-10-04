@@ -9,7 +9,8 @@ import {
 	validateWorkerResponse
 } from './schemas';
 import type { ColorSpaceId, DitherId, ProcessedImage, ProcessingSettings } from './types';
-import { ProcessorWorkerPipeline } from './worker-pipeline';
+import { compileEffects } from 'ditherette';
+import { initializePackageProcessor, ProcessorWorkerPipeline } from './worker-pipeline';
 
 const uploaded: ProcessedImage = {
 	width: 4,
@@ -117,7 +118,14 @@ describe('installed package website integration', () => {
 			source: new ImageData(new Uint8ClampedArray([40, 40, 40, 255]), 1, 1)
 		});
 		const indices = [];
+		const ditherette = await initializePackageProcessor();
 		for (const effects of [[], [{ effect: 'exposure', enabled: true, stops: 4 }] as const]) {
+			// The one colour, compiled as the effects worker would.
+			const results = compileEffects(ditherette, {
+				version: 1,
+				colours: new Uint32Array([0x282828]),
+				effects
+			});
 			const response = await pipeline.handleAsync(
 				{
 					id: 2,
@@ -129,7 +137,8 @@ describe('installed package website integration', () => {
 						effects
 					},
 					palette: uploaded.palette.slice(0, 2),
-					settingsHash: `effects-${effects.length}`
+					settingsHash: `effects-${effects.length}`,
+					compiledEffects: { key: `effects-${effects.length}`, results }
 				},
 				() => undefined
 			);

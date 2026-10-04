@@ -159,6 +159,11 @@ export type WorkerProcessRequest = {
 	settings: ProcessingSettings;
 	palette: EnabledPaletteColor[];
 	settingsHash: string;
+	/**
+	 * The effects worker's result for `settings.effects`: each distinct source colour's output, in
+	 * `indexColours` order. Required whenever there are effects, so they run once per edit.
+	 */
+	compiledEffects?: { key: string; results: Uint32Array };
 };
 
 export type WorkerCancelRequest = {
@@ -199,19 +204,7 @@ export type WorkerFailure = {
 	restartWorker?: boolean;
 };
 
-/** The exact effects table a request's pipeline built, posted before dithering finishes. */
-export type WorkerEffectsTable = {
-	id: number;
-	type: 'effects-table';
-	table: Uint32Array;
-};
-
-export type WorkerResponse =
-	| WorkerProgress
-	| WorkerSourceLoaded
-	| WorkerEffectsTable
-	| WorkerComplete
-	| WorkerFailure;
+export type WorkerResponse = WorkerProgress | WorkerSourceLoaded | WorkerComplete | WorkerFailure;
 
 export function clampOutputDimension(value: number): number {
 	if (!Number.isFinite(value)) return 1;

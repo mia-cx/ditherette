@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Effect } from 'ditherette';
-import {
-	applyEffectsTable,
-	compileEffectsTable,
-	distinctColours,
-	resolveRecolour
-} from './effects-table';
+import { compileEffects, indexColours, type Effect } from 'ditherette';
 import { packageEffectContext, packageProcessRequest } from './package-adapter';
+import { resolveRecipes } from './recipes';
 import type { EnabledPaletteColor, ProcessingSettings } from './types';
-import { initializePackageProcessor } from './worker-pipeline';
+import { initializePackageProcessor, ProcessorWorkerPipeline } from './worker-pipeline';
 
 const WIDTH = 48;
 const HEIGHT = 32;
@@ -115,37 +110,41 @@ const settings: ProcessingSettings = {
 	effects: []
 };
 
-describe('effects table', () => {
+describe('live effects', () => {
 	for (const [name, effects] of Object.entries(CHAINS)) {
-		it(`maps every source colour exactly like applyEffects: ${name}`, async () => {
-			const ditherette = await initializePackageProcessor();
-			const source = fixture();
-			const context = packageEffectContext(palette, settings.colorSpace);
-			const image = { width: WIDTH, height: HEIGHT, data: new Uint8Array(source.data.buffer) };
-			const resolved = resolveRecolour(ditherette, image, effects, context);
-			const table = compileEffectsTable(ditherette, distinctColours(source), resolved, context);
-			const expected = ditherette.applyEffects({ version: 1, source: image, effects, context });
-			expect(new Uint8Array(applyEffectsTable(source, table).data.buffer)).toEqual(
-				new Uint8Array(expected.data)
-			);
-		});
-
-		it(`processes a mapped source exactly like the effects: ${name}`, async () => {
+		it(`output from forwarded compiled effects matches process with the effects: ${name}`, async () => {
 			const ditherette = await initializePackageProcessor();
 			const source = fixture();
 			const size = { width: settings.output.width, height: settings.output.height };
-			const withEffects = packageProcessRequest(source, palette, { ...settings, effects }, size);
-			const expected = ditherette.process(withEffects.request);
-			// Palette fit analyses the cropped source that `process` receives.
-			const context = packageEffectContext(palette, settings.colorSpace);
-			const resolved = resolveRecolour(ditherette, withEffects.request.source, effects, context);
-			const table = compileEffectsTable(ditherette, distinctColours(source), resolved, context);
-			const mapped = applyEffectsTable(source, table);
-			const actual = ditherette.process(
-				packageProcessRequest(mapped, palette, settings, size).request
+			const expected = ditherette.process(
+				packageProcessRequest(source, palette, { ...settings, effects }, size).request
 			);
-			expect(actual.indices).toEqual(expected.indices);
-			expect(actual.palette).toEqual(expected.palette);
+			// What the effects worker does: index once, resolve palette fit on the crop, compile.
+			const image = { width: WIDTH, height: HEIGHT, data: new Uint8Array(source.data.buffer) };
+			const context = packageEffectContext(palette, settings.colorSpace);
+			const crop = settings.output.crop;
+			const results = compileEffects(ditherette, {
+				version: 1,
+				colours: indexColours(image).colours,
+				effects: resolveRecipes(ditherette, image, effects, context, crop),
+				context
+			});
+			const pipeline = new ProcessorWorkerPipeline();
+			pipeline.handle({ id: 1, type: 'load-source', sourceId: 'fixture', source });
+			const response = await pipeline.handleAsync(
+				{
+					id: 2,
+					type: 'process',
+					sourceId: 'fixture',
+					settings: { ...settings, effects },
+					palette,
+					settingsHash: name,
+					compiledEffects: { key: name, results }
+				},
+				() => undefined
+			);
+			if (response?.type !== 'complete') throw new Error('Expected output.');
+			expect(response.image.indices).toEqual(expected.indices);
 		});
 	}
 });

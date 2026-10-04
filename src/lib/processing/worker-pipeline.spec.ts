@@ -23,7 +23,8 @@ class TestImageData implements ImageData {
 
 Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configurable: true });
 
-vi.mock('ditherette', () => ({
+vi.mock('ditherette', async (importOriginal) => ({
+	...(await importOriginal<typeof import('ditherette')>()),
 	createDitherette: vi.fn(),
 	DitheretteError: class extends Error {
 		constructor(
@@ -196,60 +197,46 @@ describe('ProcessorWorkerPipeline', () => {
 		).toEqual([]);
 	});
 
-	it('applies effects once through a published table, until the chain changes', async () => {
+	it('maps the source through forwarded compiled effects, until their key changes', async () => {
 		const processor = processorMock();
-		// Inverts RGB, like a pointwise chain would.
-		processor.applyEffects.mockImplementation(({ source }) => ({
-			...source,
-			data: source.data.map((value: number, index: number) =>
-				index % 4 === 3 ? value : 255 - value
-			)
-		}));
 		vi.mocked(createDitherette).mockResolvedValue(processor);
 		const pipeline = loadedPipeline();
-		const published: Uint32Array[] = [];
-		const run = (id: number, effects: Effect[], algorithm = dither.algorithm) =>
+		const brighter: Effect[] = [{ effect: 'exposure', enabled: true, stops: 1 }];
+		const run = (id: number, key: string, results: number[], algorithm = dither.algorithm) =>
 			pipeline.handleAsync(
 				processRequest({
 					id,
-					settings: { output, dither: { ...dither, algorithm }, colorSpace: 'srgb', effects }
+					settings: {
+						output,
+						dither: { ...dither, algorithm },
+						colorSpace: 'srgb',
+						effects: brighter
+					},
+					compiledEffects: { key, results: new Uint32Array(results) }
 				}),
-				() => undefined,
-				(table) => published.push(table)
+				() => undefined
 			);
-		const brighter: Effect[] = [{ effect: 'exposure', enabled: true, stops: 1 }];
-		const processed = () =>
-			[...processor.process.mock.calls.at(-1)![0].source.data] as readonly number[];
+		const processed = () => [...processor.process.mock.calls.at(-1)![0].source.data];
 
-		await run(2, brighter);
+		// Results follow indexColours order: black, then white.
+		await run(2, 'invert', [0xffffff, 0x000000]);
 		expect(processed()).toEqual([255, 255, 255, 255, 0, 0, 0, 255]);
-		expect(published).toHaveLength(1);
-		expect(published[0]![0xffffff]).toBe(0xff000000);
-
-		// A terminal-only change reuses the mapped source.
-		await run(3, brighter, 'bayer-4');
-		expect(processor.applyEffects).toHaveBeenCalledTimes(1);
-		expect(published).toHaveLength(1);
+		// The same key reuses the mapped source.
+		await run(3, 'invert', [0x0000ff, 0x0000ff], 'bayer-4');
 		expect(processed()).toEqual([255, 255, 255, 255, 0, 0, 0, 255]);
-
-		// Without a palette fit, the palette and colour space don't reach the effects either.
-		await pipeline.handleAsync(
-			processRequest({
-				id: 5,
-				palette: palette.slice(0, 1),
-				settings: { output, dither, colorSpace: 'oklab', effects: brighter }
-			}),
-			() => undefined,
-			(table) => published.push(table)
-		);
-		expect(processor.applyEffects).toHaveBeenCalledTimes(1);
-
-		await run(4, [{ effect: 'exposure', enabled: true, stops: 2 }]);
-		expect(processor.applyEffects).toHaveBeenCalledTimes(2);
-		expect(published).toHaveLength(2);
-		expect(
-			transferablesForWorkerResponse({ id: 4, type: 'effects-table', table: published[1]! })
-		).toEqual([published[1]!.buffer]);
+		await run(4, 'red', [0x0000ff, 0x0000ff]);
+		expect(processed()).toEqual([255, 0, 0, 255, 255, 0, 0, 255]);
+		// Effects never run here.
+		expect(processor.applyEffects).not.toHaveBeenCalled();
+		await expect(
+			pipeline.handleAsync(
+				processRequest({
+					id: 5,
+					settings: { output, dither, colorSpace: 'srgb', effects: brighter }
+				}),
+				() => undefined
+			)
+		).rejects.toThrow('compiled results');
 	});
 
 	it('does not initialize a canceled request', async () => {
