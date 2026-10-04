@@ -8,7 +8,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [features]
-frozen-build = ["serde_json/alloc"]
+frozen-build = ["serde/alloc", "serde_json/alloc"]
 
 [dependencies]
 ditherette-bench-api = { path = "../ditherette-bench-api" }
