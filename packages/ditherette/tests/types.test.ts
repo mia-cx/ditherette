@@ -1,4 +1,4 @@
-import { createDitherette, DitheretteError } from '../src/index.js';
+import { compileEffectMask, createDitherette, DitheretteError } from '../src/index.js';
 import type {
 	Ditherette,
 	ResizeRequest,
@@ -372,6 +372,22 @@ processor.then((instance) => {
 		y: { model: 'srgb', channel: 'red' }
 	};
 	void [step, auto, masked, unmixed];
+	const maskRequest: import('../src/index.js').EffectMaskRequest = {
+		version: 1,
+		source: request.source,
+		effects: [auto],
+		mask: [unmixed],
+		context: { palette: quantize.palette, space: 'oklab' }
+	};
+	const greys: Rgba8Image = instance.effectMask(maskRequest);
+	const compiledMask: Uint32Array = compileEffectMask(instance, {
+		version: 1,
+		colours: new Uint32Array(1),
+		effects: [step]
+	});
+	void [greys, compiledMask];
+	// @ts-expect-error A mask is curves, not a step.
+	instance.effectMask({ version: 1, source: request.source, effects: [], mask: [masked] });
 	// @ts-expect-error Analysis needs a working space.
 	instance.analyzeRecolour({ version: 1, source: request.source, effects: [], context: { palette: quantize.palette } });
 });

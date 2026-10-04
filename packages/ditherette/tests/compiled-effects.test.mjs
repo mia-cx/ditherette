@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
 	applyCompiledEffects,
+	compileEffectMask,
 	compileEffects,
 	createDitherette,
 	DitheretteError,
@@ -191,3 +192,66 @@ test('applyCompiledEffects writes into a reused buffer of the right size', () =>
 	// Identity results reproduce the image exactly, alpha included.
 	assert.deepEqual(mapped.data, image.data);
 });
+
+test('compiled masks match effectMask byte for byte', () =>
+	withProcessor((processor) => {
+		const image = photo();
+		const { colours, indices } = indexColours(image);
+		const before = resolved(processor, image, CHAINS.masked.slice(0, 1));
+		const { mask } = CHAINS.masked[1];
+		const results = compileEffectMask(processor, {
+			version: 1,
+			colours,
+			effects: before,
+			mask,
+			context
+		});
+		const expected = processor.effectMask({
+			version: 1,
+			source: image,
+			effects: before,
+			mask,
+			context
+		});
+		assert.deepEqual(applyCompiledEffects(image, indices, results).data, expected.data);
+		assert.ok(results.every((grey) => grey === (grey & 0xff) * 0x010101));
+	}));
+
+test('masks read the colour entering their step, not its clipped bytes', () =>
+	withProcessor((processor) => {
+		// Brightness 1 lifts this colour past white, but it stays orange, so a mask that holds
+		// back every hue is 0 here, not the 1 a clipped white would read.
+		const results = compileEffectMask(processor, {
+			version: 1,
+			colours: new Uint32Array([128 | (64 << 8) | (32 << 16)]),
+			effects: [{ effect: 'brightness-contrast', enabled: true, brightness: 1, contrast: 0 }],
+			mask: [
+				{
+					x: { model: 'oklch', channel: 'hue' },
+					points: [
+						[0, 0],
+						[1, 0]
+					]
+				}
+			]
+		});
+		assert.deepEqual([...results], [0]);
+	}));
+
+test('effectMask names a bad mask by its path', () =>
+	withProcessor((processor) => {
+		const curve = CHAINS.masked[0].mask[0];
+		assert.throws(
+			() =>
+				processor.effectMask({
+					version: 1,
+					source: photo(),
+					effects: [],
+					mask: [curve, curve, curve, curve, curve]
+				}),
+			(error) =>
+				error instanceof DitheretteError &&
+				error.code === 'invalid-settings' &&
+				error.path === 'mask'
+		);
+	}));

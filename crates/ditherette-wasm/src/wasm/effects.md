@@ -13,6 +13,14 @@ The processor snapshots the source with the same identity rules as `perturb`. Th
 is retained under the source identity plus the enabled effects, so a repeated call returns
 the cached image. Progress reports `prepare`, `effects`, then `complete`.
 
+## Masks
+
+`privateEffectMask(input, sourceWidth, sourceHeight, effects, mask, palette, space, resultSink)`
+shows the mask of a step appended to `effects`. `mask` is the wrapper's normalized JSON curve list.
+The processor snapshots the source, builds the continuous carrier after `effects`, and writes each
+pixel's strength as grey `round(strength * 255)` with the source alpha. A rejected mask
+reports path 42 (`mask`). Nothing is retained, so a repeated call runs again.
+
 ## Recolour analysis
 
 `privateAnalyzeRecolour` takes the same arguments. `effects` is the chain before the recolour step; the palette and space are required.

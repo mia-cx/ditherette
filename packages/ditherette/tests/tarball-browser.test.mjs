@@ -182,6 +182,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 				assert.deepEqual(exports, [
 					'DitheretteError',
 					'applyCompiledEffects',
+					'compileEffectMask',
 					'compileEffects',
 					'createDitherette',
 					'indexColours',

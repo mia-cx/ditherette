@@ -4,8 +4,17 @@ import { validateOptions } from './validation.js';
 import type { Ditherette, InitOptions } from './types.js';
 
 export { DitheretteError } from './errors.js';
-export { applyCompiledEffects, compileEffects, indexColours } from './compiled-effects.js';
-export type { CompileEffectsRequest, IndexedColours } from './compiled-effects.js';
+export {
+	applyCompiledEffects,
+	compileEffectMask,
+	compileEffects,
+	indexColours
+} from './compiled-effects.js';
+export type {
+	CompileEffectMaskRequest,
+	CompileEffectsRequest,
+	IndexedColours
+} from './compiled-effects.js';
 export { isEffect } from './validation-effects.js';
 export type { ErrorCode } from './errors.js';
 export type {
@@ -22,6 +31,7 @@ export type {
 	Effect,
 	EffectChannel,
 	EffectContext,
+	EffectMaskRequest,
 	ExposureEffect,
 	HueSaturationEffect,
 	LevelsEffect,

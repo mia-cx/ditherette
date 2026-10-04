@@ -428,6 +428,18 @@ export interface ApplyEffectsRequest {
 	readonly onProgress?: (progress: Progress) => void;
 }
 
+/** Show a step's mask: its strength for each pixel entering the step, `source` after `effects`. */
+export interface EffectMaskRequest {
+	readonly version: 1;
+	readonly source: Rgba8Image;
+	/** Steps before the masked step; pass `[]` when there are none. */
+	readonly effects: readonly Effect[];
+	/** The masked step's curves. Missing or empty is full strength everywhere. */
+	readonly mask?: readonly MaskCurve[];
+	readonly context?: EffectContext;
+	readonly onProgress?: (progress: Progress) => void;
+}
+
 /**
  * Recipe v1 plus the effects that run first, on the source, before resize.
  * Effects read the request palette and the working space of `match` as their context.
@@ -456,6 +468,11 @@ export interface Ditherette {
 	process(request: ProcessRequest): IndexedImage;
 	/** Return the source itself when no step is enabled; otherwise return independent JS-owned RGBA8. */
 	applyEffects(request: ApplyEffectsRequest): Rgba8Image;
+	/**
+	 * Each pixel's mask strength as grey `round(strength * 255)` in RGB, keeping source alpha. The
+	 * mask reads the unrounded colour after `effects`, exactly as the step would.
+	 */
+	effectMask(request: EffectMaskRequest): Rgba8Image;
 	/** Derive a fresh, editable recolouring recipe. Repeated inputs reuse the processor's cached analysis. */
 	analyzeRecolour(request: AnalyzeRecolourRequest): RecolourRecipe;
 	/** Return the source itself at unchanged dimensions; otherwise return independent JS-owned RGBA8. */

@@ -151,6 +151,14 @@ const darkOnly = {
 const brighten = { effect: 'exposure', enabled: true, stops: 1, mask: [darkOnly] } as const;
 ```
 
+To show a mask, `effectMask` takes the steps before the masked one and its curves, and returns each pixel's strength as grey, with the source alpha:
+
+```ts
+const greys = processor.effectMask({ version: 1, source, effects: before, mask: [darkOnly] });
+```
+
+It reads the unrounded colour entering the step, so a colour pushed past white still shows its hue. `compileEffectMask` does the same per distinct colour, like `compileEffects`.
+
 Alpha is never changed. With no enabled step, `applyEffects` returns the source itself.
 
 Recipe version 2 adds `effects` to the version 1 settings. Effects run first, on the source, then resize, dither, and quantize.

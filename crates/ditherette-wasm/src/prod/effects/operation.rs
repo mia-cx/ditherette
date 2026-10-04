@@ -436,6 +436,25 @@ pub fn carrier_after<E: Effect, M: AsRef<[MaskCurve]>>(
     carrier(data, dimensions, &enabled, tabulated, &tables, context)
 }
 
+/// Writes each pixel's strength for a validated `mask`, read from the carrier after an already
+/// validated chain, as grey `round(strength * 255)` in `output`. Alpha comes from `data`.
+pub fn write_mask<E: Effect, M: AsRef<[MaskCurve]>>(
+    data: &[u8],
+    dimensions: ImageDimensions,
+    steps: &[Step<E, M>],
+    mask: &[MaskCurve],
+    context: &EffectContext<'_>,
+    output: &mut [u8],
+) -> Result<(), TryReserveError> {
+    let prepared = PreparedMask::new(mask);
+    let image = carrier_after(data, dimensions, steps, context)?;
+    for ((pixel, rgb), alpha) in output.chunks_exact_mut(4).zip(&image.rgb).zip(&image.alpha) {
+        let grey = byte(prepared.strength(mask, *rgb));
+        pixel.copy_from_slice(&[grey, grey, grey, *alpha]);
+    }
+    Ok(())
+}
+
 /// Enabled steps in order, and how many lead as a tabulated per-channel run.
 fn plan<E: Effect, M: AsRef<[MaskCurve]>>(
     steps: &[Step<E, M>],

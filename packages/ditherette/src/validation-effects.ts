@@ -647,12 +647,20 @@ export function validateAnalyzeRecolour(value: unknown) {
 	return input;
 }
 
-/** Normalize `applyEffects` once under the instance guard. */
-export function validateApplyEffects(value: unknown) {
+const effectsRequestKeys = ['version', 'source', 'effects', 'context', 'onProgress'];
+
+/** Normalize `effectMask`: an `applyEffects` request plus the curves of a step after `effects`. */
+export const validateEffectMask = (value: unknown) => validateApplyEffects(value, true);
+
+/**
+ * Normalize `applyEffects` once under the instance guard. `masked` also accepts a `mask`;
+ * `mask` is the normalized curves as JSON either way.
+ */
+export function validateApplyEffects(value: unknown, masked = false) {
 	try {
 		const request = object(
 			value,
-			['version', 'source', 'effects', 'context', 'onProgress'],
+			masked ? [...effectsRequestKeys, 'mask'] : effectsRequestKeys,
 			'invalid-request',
 			'request'
 		);
@@ -682,6 +690,8 @@ export function validateApplyEffects(value: unknown) {
 			palette: 'context.palette',
 			space: 'context.space'
 		});
+		const rawMask = field(request, 'mask');
+		const maskCurves = rawMask === undefined ? [] : mask(rawMask, 'mask');
 		const source = object(
 			field(request, 'source'),
 			['width', 'height', 'data'],
@@ -696,6 +706,7 @@ export function validateApplyEffects(value: unknown) {
 			sourceWidth: size.width,
 			sourceHeight: size.height,
 			effects,
+			mask: JSON.stringify(maskCurves),
 			palette,
 			space,
 			onProgress

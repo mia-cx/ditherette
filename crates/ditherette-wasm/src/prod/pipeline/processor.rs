@@ -486,6 +486,41 @@ impl Processor {
         result
     }
 
+    /// Snapshot current input and return each pixel's strength for `mask` on a step appended to
+    /// `request.effects`, as grey `round(strength * 255)` with source alpha.
+    pub fn effect_mask<B: Boundary>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        mask: &[crate::prod::effects::mask::MaskCurve],
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.require_ready()?;
+        self.begin();
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        self.peak_capacity = overhead;
+        let analyses = std::mem::take(&mut self.analyses);
+        let request = super::effects::EffectsRequest {
+            context: crate::prod::effects::EffectContext {
+                analyses: Some(&analyses),
+                ..request.context
+            },
+            ..request
+        };
+        let result = super::effects::mask(
+            request,
+            mask,
+            boundary,
+            &mut SystemAllocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+            &mut self.preparation,
+        );
+        let result = self.finish_call(result);
+        self.restore_analyses(analyses, result.is_ok());
+        result
+    }
+
     fn require_ready(&self) -> Result<(), Failure> {
         match self.state {
             State::Disposed => Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),

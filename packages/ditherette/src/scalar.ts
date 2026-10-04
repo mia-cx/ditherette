@@ -13,12 +13,17 @@ import type {
 	Progress,
 	ApplyEffectsRequest,
 	AnalyzeRecolourRequest,
+	EffectMaskRequest,
 	RecolourRecipe
 } from './types.js';
 import { normalizeInitInput, validateResize, validateQuantize } from './validation.js';
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
 import { processErrorPath, validateProcess } from './validation-process.js';
-import { validateAnalyzeRecolour, validateApplyEffects } from './validation-effects.js';
+import {
+	validateAnalyzeRecolour,
+	validateApplyEffects,
+	validateEffectMask
+} from './validation-effects.js';
 
 type ScalarBindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
@@ -26,7 +31,8 @@ type ScalarBindings = ReturnType<
 export type Bindings = Pick<ScalarBindings,
 	'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
 	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize' |
-	'privateApplyEffects' | 'privateProcessEffects' | 'privateAnalyzeRecolour'> &
+	'privateApplyEffects' | 'privateProcessEffects' | 'privateAnalyzeRecolour' |
+	'privateEffectMask'> &
 	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse'>>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
@@ -89,7 +95,8 @@ const errorPaths = [
 	'onProgress',
 	'effects',
 	'context.palette',
-	'context.space'
+	'context.space',
+	'mask'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',
@@ -245,6 +252,34 @@ class Processor implements Ditherette {
 					input.sourceWidth,
 					input.sourceHeight,
 					input.effects.json,
+					input.palette,
+					input.space,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status);
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
+	effectMask(request: EffectMaskRequest): Rgba8Image {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateEffectMask(request);
+			const result: ResultSink<Rgba8Image> = { value: undefined, onProgress: input.onProgress };
+			let status: number;
+			try {
+				status = bindings.privateEffectMask(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.effects.json,
+					input.mask,
 					input.palette,
 					input.space,
 					result

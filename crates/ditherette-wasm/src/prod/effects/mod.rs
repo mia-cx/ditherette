@@ -27,6 +27,6 @@ pub use chain::{apply_chain, Effect, EffectContext, Needs, Step};
 pub use image::EffectImage;
 pub use operation::{
     analyze_recolour, apply_effects, apply_in_place, carrier_after, carrier_after_bytes,
-    carrier_bytes, resolve_recolour, AnalyzeRequest, EffectsRequest,
+    carrier_bytes, resolve_recolour, write_mask, AnalyzeRequest, EffectsRequest,
 };
 pub use recipe::{decode_effects, BuiltinEffect, EffectStep};

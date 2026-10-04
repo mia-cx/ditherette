@@ -1,6 +1,7 @@
 //! Bounded ownership around the ordered effects kernel.
 //!
-//! `run` serves `applyEffects` with the shared source snapshot and image LRU.
+//! `run` serves `applyEffects` with the shared source snapshot and image LRU; `mask` serves
+//! `effectMask` with the same snapshot.
 //! `EffectedInput` applies the same chain while `process` snapshots its source,
 //! so unchanged effects keep the downstream resize and indexed caches warm.
 
@@ -23,8 +24,12 @@ use crate::{
         },
         effects::{
             apply_in_place, carrier_after, carrier_after_bytes, carrier_bytes,
-            chain::validate_chain, operation::BOOKKEEPING_BYTES, recolour::RecolourRecipe,
-            recolour_analysis, resolve_recolour, EffectContext, EffectImage, EffectStep,
+            chain::validate_chain,
+            mask::{validate as validate_mask, MaskCurve},
+            operation::BOOKKEEPING_BYTES,
+            recolour::RecolourRecipe,
+            recolour_analysis, resolve_recolour, write_mask, EffectContext, EffectImage,
+            EffectStep,
         },
     },
 };
@@ -170,6 +175,54 @@ pub(super) fn analyze<B: InputBoundary, A: Allocator>(
     call.release_working_capacity(carrier);
     progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
     call.finish(progress.finish(Ok(recipe), boundary.progress()))
+}
+
+/// Each pixel's strength for `mask` on a step appended to `request.effects`, as grey.
+/// The source snapshot follows `run`; the continuous carrier is charged while it lives.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn mask<B: Boundary, A: Allocator>(
+    request: EffectsRequest<'_>,
+    mask: &[MaskCurve],
+    boundary: &mut B,
+    allocator: &mut A,
+    limit: u64,
+    overhead: u64,
+    peak: &mut u64,
+    store: &mut Store,
+) -> Result<B::Output, Failure> {
+    validate(request.effects, &request.context)?;
+    // Only the code survives, so the step prefix of the reference path is irrelevant.
+    validate_mask(mask, "").map_err(|error| Failure::new(error.code, ErrorPath::Mask))?;
+    let dimensions = dimensions(request.source_width, request.source_height, true)?;
+    let len = dimensions
+        .storage_len::<Rgba8>()
+        .map_err(|_| Failure::new(ErrorCode::InvalidImage, ErrorPath::Source))?;
+    if boundary.input_len()? != len {
+        return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
+    }
+    let mut progress = Control::new(boundary.progress().is_some());
+    progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
+    let owned = overhead
+        .checked_add(size_of::<EffectsRequest<'_>>() as u64)
+        .ok_or_else(memory_limit)?;
+    let mut call = Call::snapshot(store, len, owned, limit, peak, allocator)?;
+    call.source(dimensions, |bytes, compare| {
+        boundary.snapshot_input(bytes, compare)
+    })?;
+    let carrier = carrier_after_bytes(request.effects, dimensions);
+    call.charge_working_capacity(carrier, peak)?;
+    call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
+    let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
+    progress.report(boundary.progress(), Stage::Effects, 0, pixels)?;
+    let [source, output, _, _] = &mut call.scratch.buffers;
+    let steps = resolve_recolour(source, dimensions, request.effects, &request.context)
+        .map_err(|_| unavailable())?;
+    write_mask(source, dimensions, &steps, mask, &request.context, output)
+        .map_err(|_| unavailable())?;
+    progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
+    call.release_working_capacity(carrier);
+    let result = boundary.complete(&call.scratch.buffers[1], dimensions);
+    call.finish(progress.finish(result, boundary.progress()))
 }
 
 /// The raw source and chain key of the last successful recipe-v2 call. While both repeat,
