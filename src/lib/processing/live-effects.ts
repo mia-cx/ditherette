@@ -1,4 +1,4 @@
-import { atom } from 'nanostores';
+import { atom, computed } from 'nanostores';
 import type { Effect, EffectContext, MaskCurve } from 'ditherette';
 import { colorSpace, outputSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
 import { activeEffectSteps, effectLayers, type EffectLayer } from '$lib/stores/effects';
@@ -90,6 +90,20 @@ export function currentEffectsKey() {
 	return effectsKey(activeEffectSteps.get(), context, outputSettings.get().crop);
 }
 
+/**
+ * What the shown mask depends on: the steps before its layer and its curves. Layers with the same
+ * key show the same mask. Nothing while no mask is shown.
+ */
+export const shownMaskKey = computed(
+	[effectLayers, shownMask, selectedPalette, colorSpace, outputSettings],
+	(layers, layerId, palette, space, settings) => {
+		const masked = maskInputs(layers, layerId);
+		if (!masked) return undefined;
+		const context = packageEffectContext(palette, space);
+		return JSON.stringify([effectsKey(masked.before, context, settings.crop), masked.mask]);
+	}
+);
+
 type Waiter = {
 	source: ImageData;
 	key: string;
@@ -136,6 +150,8 @@ export function startLiveEffects() {
 	let loaded: ImageData | undefined;
 	let busy = false;
 	let maskBusy = false;
+	/** The mask that last failed; it waits for new inputs, or for Show mask to turn off and on. */
+	let failedMask: { source: ImageData; key: string } | undefined;
 	let requestId = 0;
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
@@ -144,6 +160,7 @@ export function startLiveEffects() {
 		worker = undefined;
 		loaded = undefined;
 		busy = maskBusy = false;
+		failedMask = undefined;
 		effectsIndex.set(undefined);
 		compiledEffects.set(undefined);
 		compiledMask.set(undefined);
@@ -172,6 +189,7 @@ export function startLiveEffects() {
 		if (!source) return stop();
 		const effects = activeEffectSteps.get();
 		const masked = maskInputs(effectLayers.get(), shownMask.get());
+		if (!masked) failedMask = undefined;
 		if (!masked && shownMask.get()) return shownMask.set(undefined);
 		if (!effects.length && !masked) return;
 		if (!worker) {
@@ -209,9 +227,10 @@ export function startLiveEffects() {
 			} satisfies LiveEffectsRequest);
 		}
 		if (!masked) return;
-		const maskKey = JSON.stringify([effectsKey(masked.before, context, crop), masked.mask]);
+		const maskKey = shownMaskKey.get()!;
 		const shown = compiledMask.get();
-		if (maskBusy || (shown?.source === source && shown.key === maskKey)) return;
+		if (maskBusy || (failedMask?.source === source && failedMask.key === maskKey)) return;
+		if (shown?.source === source && shown.key === maskKey) return;
 		maskBusy = true;
 		worker.postMessage({
 			type: 'mask',
@@ -234,10 +253,14 @@ export function startLiveEffects() {
 		}
 		if (data.type === 'masked' || data.type === 'mask-failed') {
 			maskBusy = false;
-			if (current && data.type === 'masked')
-				compiledMask.set({ source: current, key: data.key, results: data.results });
-			else if (current && data.type === 'mask-failed')
+			// A mask whose layer or inputs changed while it ran is stale; `update` asks for the new one.
+			const wanted = current && data.key === shownMaskKey.get() ? current : undefined;
+			if (wanted && data.type === 'masked')
+				compiledMask.set({ source: wanted, key: data.key, results: data.results });
+			else if (wanted && data.type === 'mask-failed') {
+				failedMask = { source: wanted, key: data.key };
 				console.error('Could not show the mask.', data.message);
+			}
 			return update();
 		}
 		busy = false;

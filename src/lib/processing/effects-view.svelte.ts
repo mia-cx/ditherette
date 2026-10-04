@@ -1,6 +1,6 @@
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import { activeEffectSteps } from '$lib/stores/effects';
-import { compiledEffects, compiledMask, effectsIndex, shownMask } from './live-effects';
+import { compiledEffects, compiledMask, effectsIndex, shownMaskKey } from './live-effects';
 
 /** Where the source image sits in the canvas, in CSS pixels. */
 export type Placement = { left: number; top: number; width: number; height: number };
@@ -39,13 +39,15 @@ type Shown = NonNullable<ReturnType<typeof shownEffects.get>>;
 
 /**
  * What the Source preview draws: the shown mask's greys while a step's mask is shown, otherwise
- * the effects.
+ * the effects. Greys compiled for another mask never stand in for the shown one.
  */
 export const shownSource = computed(
-	[shownEffects, effectsIndex, compiledMask, shownMask],
-	(effects, index, mask, layer): Shown | undefined => {
-		if (!layer) return effects;
-		return index && mask?.source === index.source ? { index, results: mask.results } : undefined;
+	[shownEffects, effectsIndex, compiledMask, shownMaskKey],
+	(effects, index, mask, key): Shown | undefined => {
+		if (key === undefined) return effects;
+		return index && mask?.source === index.source && mask.key === key
+			? { index, results: mask.results }
+			: undefined;
 	}
 );
 
