@@ -10,10 +10,10 @@ It is also the serializable recipe form callers store and replay.
 `decode_effects` takes a JSON array and returns ordered `EffectStep`s. Each step is one object:
 
 ```json
-{ "effect": "<name>", "enabled": true, ...arguments }
+{ "effect": "<name>", "enabled": true, "mask": [...], ...arguments }
 ```
 
-`effect` selects the variant. `enabled` is required. The remaining fields are that effect's arguments, with no extras allowed.
+`effect` selects the variant. `enabled` is required. `mask` is optional and holds [mask curves](mask.md). The remaining fields are that effect's arguments, with no extras allowed.
 
 ## Algorithm / semantic rule
 

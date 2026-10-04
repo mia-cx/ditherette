@@ -349,6 +349,69 @@ function curves(value: unknown, path: string) {
 	return normalized;
 }
 
+/** Mirrors the Rust `mask::MAX_MASK_CURVES`. */
+const maxMaskCurves = 4;
+
+/**
+ * Zero to 4 mask curves, normalized in Rust validation order. A one-input curve has `x` and
+ * `points`; a two-input curve has `x`, `x2`, and `grid`. Values are strengths from 0 through 1.
+ */
+function mask(value: unknown, path: string) {
+	if (!Array.isArray(value) || value.length > maxMaskCurves)
+		throw new DitheretteError(
+			'invalid-settings',
+			path,
+			`Expected 0 to ${maxMaskCurves} mask curves.`
+		);
+	strictArrayKeys(value, path);
+	const normalized = [];
+	for (let index = 0; index < value.length; index++) {
+		const curvePath = `${path}.${index}`;
+		const rawCurve: unknown = Object.hasOwn(value, index) ? value[index] : undefined;
+		const twoInput =
+			typeof rawCurve === 'object' &&
+			rawCurve !== null &&
+			!Array.isArray(rawCurve) &&
+			Object.hasOwn(rawCurve, 'x2');
+		const curve = object(
+			rawCurve,
+			twoInput ? ['x', 'x2', 'grid'] : ['x', 'points'],
+			'invalid-settings',
+			curvePath
+		);
+		const x = colourChannel(field(curve, 'x'), `${curvePath}.x`);
+		if (!twoInput) {
+			normalized.push({
+				x,
+				points: pointsWithHueSeam(
+					field(curve, 'points'),
+					x.channel === 'hue',
+					`${curvePath}.points`
+				)
+			});
+			continue;
+		}
+		const x2 = colourChannel(field(curve, 'x2'), `${curvePath}.x2`);
+		if (x2.model === x.model && x2.channel === x.channel)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${curvePath}.x2`,
+				'A two-input curve must use two different input channels.'
+			);
+		normalized.push({
+			x,
+			x2,
+			grid: curveGrid(
+				field(curve, 'grid'),
+				x.channel === 'hue',
+				x2.channel === 'hue',
+				`${curvePath}.grid`
+			)
+		});
+	}
+	return normalized;
+}
+
 /** Named arguments that are each a bounded f32, in validation order. */
 function scalars(ranges: Record<string, readonly [number, number]>): Builtin['normalize'] {
 	return (effect, path) =>
@@ -504,7 +567,7 @@ export function validateEffects(value: unknown, path: string) {
 			throw new DitheretteError('invalid-settings', `${stepPath}.effect`, 'Unknown effect.');
 		const effect = object(
 			raw,
-			['effect', 'enabled', ...builtin.keys],
+			['effect', 'enabled', 'mask', ...builtin.keys],
 			'invalid-settings',
 			stepPath
 		);
@@ -512,7 +575,15 @@ export function validateEffects(value: unknown, path: string) {
 		if (typeof enabled !== 'boolean')
 			throw new DitheretteError('invalid-settings', `${stepPath}.enabled`, 'Expected a boolean.');
 		const normalized = builtin.normalize(effect, stepPath);
-		steps.push({ effect: name, enabled, ...normalized });
+		// Like Rust, a step's mask is checked after its own arguments.
+		const rawMask = field(effect, 'mask');
+		const masked = rawMask === undefined ? [] : mask(rawMask, `${stepPath}.mask`);
+		steps.push({
+			effect: name,
+			enabled,
+			...normalized,
+			...(masked.length ? { mask: masked } : {})
+		});
 		if (enabled) {
 			const recipe = normalized.recipe as { space: string } | null | undefined;
 			requirements.push({ index, needs: builtin.needs(normalized), recipeSpace: recipe?.space });
@@ -576,12 +647,20 @@ export function validateAnalyzeRecolour(value: unknown) {
 	return input;
 }
 
-/** Normalize `applyEffects` once under the instance guard. */
-export function validateApplyEffects(value: unknown) {
+const effectsRequestKeys = ['version', 'source', 'effects', 'context', 'onProgress'];
+
+/** Normalize `effectMask`: an `applyEffects` request plus the curves of a step after `effects`. */
+export const validateEffectMask = (value: unknown) => validateApplyEffects(value, true);
+
+/**
+ * Normalize `applyEffects` once under the instance guard. `masked` also accepts a `mask`;
+ * `mask` is the normalized curves as JSON either way.
+ */
+export function validateApplyEffects(value: unknown, masked = false) {
 	try {
 		const request = object(
 			value,
-			['version', 'source', 'effects', 'context', 'onProgress'],
+			masked ? [...effectsRequestKeys, 'mask'] : effectsRequestKeys,
 			'invalid-request',
 			'request'
 		);
@@ -611,6 +690,8 @@ export function validateApplyEffects(value: unknown) {
 			palette: 'context.palette',
 			space: 'context.space'
 		});
+		const rawMask = field(request, 'mask');
+		const maskCurves = rawMask === undefined ? [] : mask(rawMask, 'mask');
 		const source = object(
 			field(request, 'source'),
 			['width', 'height', 'data'],
@@ -625,6 +706,7 @@ export function validateApplyEffects(value: unknown) {
 			sourceWidth: size.width,
 			sourceHeight: size.height,
 			effects,
+			mask: JSON.stringify(maskCurves),
 			palette,
 			space,
 			onProgress

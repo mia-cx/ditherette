@@ -4,8 +4,17 @@ import { validateOptions } from './validation.js';
 import type { Ditherette, InitOptions } from './types.js';
 
 export { DitheretteError } from './errors.js';
-export { applyCompiledEffects, compileEffects, indexColours } from './compiled-effects.js';
-export type { CompileEffectsRequest, IndexedColours } from './compiled-effects.js';
+export {
+	applyCompiledEffects,
+	compileEffectMask,
+	compileEffects,
+	indexColours
+} from './compiled-effects.js';
+export type {
+	CompileEffectMaskRequest,
+	CompileEffectsRequest,
+	IndexedColours
+} from './compiled-effects.js';
 export { isEffect } from './validation-effects.js';
 export type { ErrorCode } from './errors.js';
 export type {
@@ -22,11 +31,14 @@ export type {
 	Effect,
 	EffectChannel,
 	EffectContext,
+	EffectMaskRequest,
 	ExposureEffect,
 	HueSaturationEffect,
 	LevelsEffect,
 	LevelsPoints,
+	MaskCurve,
 	OneInputCurve,
+	OneInputMaskCurve,
 	RecolourEffect,
 	RecolourGroup,
 	RecolourRecipe,
@@ -52,7 +64,9 @@ export type {
 	ResizeAnchor,
 	ResizeRequest,
 	Rgba8Image,
-	TwoInputCurve
+	StepEnvelope,
+	TwoInputCurve,
+	TwoInputMaskCurve
 } from './types.js';
 
 /** Initialize one isolated browser processor. Importing the package itself loads no Wasm or workers. */
@@ -62,9 +76,12 @@ export async function createDitherette(options?: InitOptions): Promise<Ditherett
 		throw new DitheretteError('capability', 'wasm', 'WebAssembly is unavailable.');
 	}
 	if (normalized.threads !== 'disabled') {
-		let capable = globalThis.crossOriginIsolated === true &&
-			typeof Worker === 'function' && typeof SharedArrayBuffer === 'function' &&
-			typeof Atomics === 'object' && typeof Atomics.wait === 'function';
+		let capable =
+			globalThis.crossOriginIsolated === true &&
+			typeof Worker === 'function' &&
+			typeof SharedArrayBuffer === 'function' &&
+			typeof Atomics === 'object' &&
+			typeof Atomics.wait === 'function';
 		if (capable) {
 			try {
 				// Rayon joins synchronously. Main JS cannot wait, even with shared memory.
@@ -96,7 +113,11 @@ export async function createDitherette(options?: InitOptions): Promise<Ditherett
 				}
 			}
 		} else if (normalized.threads === 'required') {
-			throw new DitheretteError('capability', 'threads', 'Required threaded initialization is unavailable.');
+			throw new DitheretteError(
+				'capability',
+				'threads',
+				'Required threaded initialization is unavailable.'
+			);
 		}
 	}
 	return createScalar(normalized);

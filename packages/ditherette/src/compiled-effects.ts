@@ -1,5 +1,5 @@
 import { DitheretteError } from './errors.js';
-import type { Ditherette, Effect, EffectContext, Rgba8Image } from './types.js';
+import type { Ditherette, Effect, EffectContext, MaskCurve, Rgba8Image } from './types.js';
 
 /**
  * An image's distinct RGB colours and, for each pixel, the index of its colour. Colours are packed
@@ -21,7 +21,7 @@ export interface CompileEffectsRequest {
 }
 
 const COLOUR_ENTRIES = 1 << 24;
-/** Width of the image the colours are laid out in for `applyEffects`. */
+/** Width of the image the colours are laid out in. */
 const COLOUR_ROW = 4096;
 
 /**
@@ -48,15 +48,50 @@ export function indexColours(image: Rgba8Image): IndexedColours {
 	return { colours: colours.slice(0, count), indices };
 }
 
+/** A mask compile request: the mask of a step after `effects`, for each listed colour. */
+export interface CompileEffectMaskRequest extends CompileEffectsRequest {
+	/** The masked step's curves. Missing or empty is full strength everywhere. */
+	readonly mask?: readonly MaskCurve[];
+}
+
 /**
  * Run a pointwise effect chain once per colour. Returns each colour's result, packed like the input.
  * Effects round to RGBA8 once, so mapping a pixel through its colour's result is exact.
  */
 export function compileEffects(
 	ditherette: Ditherette,
-	request: CompileEffectsRequest
+	{ colours, effects, context }: CompileEffectsRequest
 ): Uint32Array {
-	const { colours, effects, context } = request;
+	return perColour(colours, effects, (source) =>
+		ditherette.applyEffects({ version: 1, source, effects, ...(context ? { context } : {}) })
+	);
+}
+
+/**
+ * Each colour's strength for the mask of a step after `effects`, as a packed grey
+ * `round(strength * 255)`. Map pixels through it like `compileEffects` results.
+ */
+export function compileEffectMask(
+	ditherette: Ditherette,
+	{ colours, effects, mask, context }: CompileEffectMaskRequest
+): Uint32Array {
+	return perColour(colours, effects, (source) =>
+		ditherette.effectMask({
+			version: 1,
+			source,
+			effects,
+			...(mask ? { mask } : {}),
+			...(context ? { context } : {})
+		})
+	);
+}
+
+/** Lays the colours out as an image, runs `apply` on it, and packs each colour's result. */
+function perColour(
+	colours: Uint32Array,
+	effects: readonly Effect[],
+	apply: (source: Rgba8Image) => Rgba8Image
+): Uint32Array {
 	const unresolved = effects.findIndex(
 		(step) => step.effect === 'recolour' && step.recipe === null
 	);
@@ -79,12 +114,7 @@ export function compileEffects(
 		data[index * 4 + 2] = (colour >>> 16) & 0xff;
 		data[index * 4 + 3] = 0xff;
 	}
-	const output = ditherette.applyEffects({
-		version: 1,
-		source: { width, height, data },
-		effects,
-		...(context ? { context } : {})
-	}).data;
+	const output = apply({ width, height, data }).data;
 	for (let index = 0, offset = 0; index < colours.length; index++, offset += 4)
 		results[index] = output[offset]! | (output[offset + 1]! << 8) | (output[offset + 2]! << 16);
 	return results;

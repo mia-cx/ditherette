@@ -19,7 +19,7 @@ use crate::{
             failure::{ErrorPath, Failure},
             request::MAX_SOURCE_SIDE,
         },
-        effects::{decode_effects, EffectContext, EffectStep},
+        effects::{decode_effects, mask::MaskCurve, EffectContext, EffectStep},
         pipeline::effects::EffectsRequest,
     },
 };
@@ -64,6 +64,49 @@ pub fn private_apply_effects(
                 effects: &steps,
                 ..request
             },
+            &mut JsBoundary::new(input, result_sink)?,
+        )
+    })();
+    restore_ready(processor);
+    result.map_or_else(status, |_| 0)
+}
+
+/// Each pixel's strength for `mask`, a JSON curve list, on a step appended to `effects`.
+/// Otherwise takes the same arguments as `privateApplyEffects`. Success writes RGBA8 greys to the sink.
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen(js_name = privateEffectMask)]
+pub fn private_effect_mask(
+    input: &Uint8Array,
+    source_width: f64,
+    source_height: f64,
+    effects: &str,
+    mask: &str,
+    palette: &JsValue,
+    space: f64,
+    result_sink: &JsValue,
+) -> u32 {
+    let mut processor = match take_ready() {
+        Ok(processor) => processor,
+        Err(error) => return status(error),
+    };
+    let mut entries = [PaletteEntry::Transparent {}; PALETTE_SLOTS];
+    let result = (|| {
+        let (request, steps) = parse(
+            source_width,
+            source_height,
+            effects,
+            palette,
+            space,
+            &mut entries,
+        )?;
+        let mask: Vec<MaskCurve> = serde_json::from_str(mask)
+            .map_err(|_| Failure::new(ErrorCode::InvalidSettings, ErrorPath::Mask))?;
+        processor.effect_mask(
+            EffectsRequest {
+                effects: &steps,
+                ..request
+            },
+            &mask,
             &mut JsBoundary::new(input, result_sink)?,
         )
     })();

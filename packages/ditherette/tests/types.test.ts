@@ -1,4 +1,4 @@
-import { createDitherette, DitheretteError } from '../src/index.js';
+import { compileEffectMask, createDitherette, DitheretteError } from '../src/index.js';
 import type {
 	Ditherette,
 	ResizeRequest,
@@ -352,7 +352,42 @@ processor.then((instance) => {
 	});
 	const step: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 1, recipe };
 	const auto: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 0.5, recipe: null };
-	void [step, auto];
+	const masked: import('../src/index.js').Effect = {
+		effect: 'exposure',
+		enabled: true,
+		stops: 1,
+		mask: [
+			{ x: { model: 'oklch', channel: 'lightness' }, points: [[0, 1], [1, 0]] },
+			{
+				x: { model: 'oklch', channel: 'hue' },
+				x2: { model: 'oklch', channel: 'chroma' },
+				grid: { columns: [0, 0.5], rows: [0, 1], values: [[1, 0], [1, 1]] }
+			}
+		]
+	};
+	const unmixed: import('../src/index.js').MaskCurve = {
+		x: { model: 'srgb', channel: 'red' },
+		points: [[0, 1], [1, 0]],
+		// @ts-expect-error A mask curve has no output channel.
+		y: { model: 'srgb', channel: 'red' }
+	};
+	void [step, auto, masked, unmixed];
+	const maskRequest: import('../src/index.js').EffectMaskRequest = {
+		version: 1,
+		source: request.source,
+		effects: [auto],
+		mask: [unmixed],
+		context: { palette: quantize.palette, space: 'oklab' }
+	};
+	const greys: Rgba8Image = instance.effectMask(maskRequest);
+	const compiledMask: Uint32Array = compileEffectMask(instance, {
+		version: 1,
+		colours: new Uint32Array(1),
+		effects: [step]
+	});
+	void [greys, compiledMask];
+	// @ts-expect-error A mask is curves, not a step.
+	instance.effectMask({ version: 1, source: request.source, effects: [], mask: [masked] });
 	// @ts-expect-error Analysis needs a working space.
 	instance.analyzeRecolour({ version: 1, source: request.source, effects: [], context: { palette: quantize.palette } });
 });

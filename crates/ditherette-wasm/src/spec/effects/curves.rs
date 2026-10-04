@@ -336,13 +336,14 @@ fn eval_sequence(positions: &[f32], values: &[f32], x: f32, cyclic: bool) -> f32
     }
 }
 
-enum CurveSpline {
+/// A one-input curve's spline: open, or cyclic with a duplicate seam point for a hue input.
+pub enum CurveSpline {
     Linear(Spline),
     Periodic(PeriodicSpline),
 }
 
 impl CurveSpline {
-    fn new(points: &[[f32; 2]], periodic: bool) -> Self {
+    pub fn new(points: &[[f32; 2]], periodic: bool) -> Self {
         if periodic {
             Self::Periodic(PeriodicSpline::new(points))
         } else {
@@ -350,7 +351,7 @@ impl CurveSpline {
         }
     }
 
-    fn eval(&self, x: f32) -> f32 {
+    pub fn eval(&self, x: f32) -> f32 {
         match self {
             Self::Linear(spline) => spline.eval(x),
             Self::Periodic(spline) => spline.eval(x),
@@ -386,32 +387,7 @@ impl OneInputCurve {
         self.kind == CurveKind::Adjust && self.points.iter().all(|point| point[1] == 0.5)
     }
 
-    fn validate_periodic_points(&self, path: &str) -> Result<(), DitheretteError> {
-        let last = self.points.len() - 1;
-        if self.points[0][0] != 0.0 {
-            return Err(DitheretteError::new(
-                ErrorCode::InvalidSettings,
-                format!("{path}.0.0"),
-                "A hue-input curve must start at x = 0.",
-            ));
-        }
-        if self.points[last][0] != 1.0 {
-            return Err(DitheretteError::new(
-                ErrorCode::InvalidSettings,
-                format!("{path}.{last}.0"),
-                "A hue-input curve must end at x = 1.",
-            ));
-        }
-        if self.points[last][1] != self.points[0][1] {
-            return Err(DitheretteError::new(
-                ErrorCode::InvalidSettings,
-                format!("{path}.{last}.1"),
-                "A hue-input curve must repeat its first y value at x = 1.",
-            ));
-        }
-        Ok(())
-    }
-
+    /// `strength` is the step's mask value at this pixel, in `(0, 1]`.
     fn map(
         &self,
         x: ResolvedChannel,
@@ -419,6 +395,7 @@ impl OneInputCurve {
         spline: &CurveSpline,
         source: [f32; 3],
         current: [f32; 3],
+        strength: f32,
     ) -> [f32; 3] {
         if self.is_identity_remap()
             && source
@@ -432,7 +409,8 @@ impl OneInputCurve {
             return current;
         }
         let x_coordinates = x.model.to_normalized(source);
-        let curve = spline.eval(x_coordinates[x.index]);
+        let original = x_coordinates[x.index];
+        let curve = spline.eval(original);
         let mut weight: f32 = 1.0;
         if x.kind == ChannelKind::Hue {
             weight = x.model.hue_weight(source, x_coordinates);
@@ -444,14 +422,14 @@ impl OneInputCurve {
         match self.kind {
             CurveKind::Remap => {
                 if y.kind == ChannelKind::Hue {
-                    let original = x_coordinates[x.index];
-                    let delta = (curve - original + 0.5).rem_euclid(1.0) - 0.5;
+                    let delta = strength * ((curve - original + 0.5).rem_euclid(1.0) - 0.5);
                     y_coordinates[y.index] = (original + weight * delta).rem_euclid(1.0);
                 } else {
-                    y_coordinates[y.index] = curve;
+                    y_coordinates[y.index] = toward(original, curve, strength);
                 }
             }
             CurveKind::Adjust => {
+                let curve = toward(0.5, curve, strength);
                 if y.kind == ChannelKind::Hue {
                     weight = weight.min(y.model.hue_weight(current, y_coordinates));
                     if weight == 0.0 {
@@ -481,6 +459,7 @@ impl TwoInputCurve {
         self.grid.values.iter().flatten().all(|&value| value == 0.5)
     }
 
+    /// `strength` is the step's mask value at this pixel, in `(0, 1]`.
     fn map(
         &self,
         x: ResolvedChannel,
@@ -488,6 +467,7 @@ impl TwoInputCurve {
         y: ResolvedChannel,
         source: [f32; 3],
         current: [f32; 3],
+        strength: f32,
     ) -> [f32; 3] {
         if self.is_neutral_adjustment() {
             return current;
@@ -498,28 +478,13 @@ impl TwoInputCurve {
         } else {
             x2.model.to_normalized(source)
         };
-        let x_value = x_coordinates[x.index];
-        let x2_value = x2_coordinates[x2.index];
-        let row_results: Vec<_> = self
-            .grid
-            .values
-            .iter()
-            .map(|values| {
-                eval_sequence(
-                    &self.grid.columns,
-                    values,
-                    x_value,
-                    x.kind == ChannelKind::Hue,
-                )
-            })
-            .collect();
-        let curve = eval_sequence(
-            &self.grid.rows,
-            &row_results,
-            x2_value,
+        let curve = self.grid.eval(
+            x_coordinates[x.index],
+            x2_coordinates[x2.index],
+            x.kind == ChannelKind::Hue,
             x2.kind == ChannelKind::Hue,
-        )
-        .clamp(0.0, 1.0);
+        );
+        let curve = toward(0.5, curve, strength);
 
         let mut weight: f32 = 1.0;
         if x.kind == ChannelKind::Hue {
@@ -552,6 +517,28 @@ impl TwoInputCurve {
             }
         }
         y.model.from_normalized(y_coordinates)
+    }
+}
+
+/// Scales a curve value's distance from `neutral` by `strength`. Strength 1 keeps it exactly.
+fn toward(neutral: f32, value: f32, strength: f32) -> f32 {
+    if strength == 1.0 {
+        value
+    } else {
+        neutral + strength * (value - neutral)
+    }
+}
+
+impl CurveGrid {
+    /// Evaluates each row along `columns` at `x`, then the row results along `rows` at `x2`,
+    /// and clamps the result to `[0,1]`. A cyclic axis is a hue axis.
+    pub fn eval(&self, x: f32, x2: f32, x_cyclic: bool, x2_cyclic: bool) -> f32 {
+        let row_results: Vec<_> = self
+            .values
+            .iter()
+            .map(|values| eval_sequence(&self.columns, values, x, x_cyclic))
+            .collect();
+        eval_sequence(&self.rows, &row_results, x2, x2_cyclic).clamp(0.0, 1.0)
     }
 
     fn validate_axis(positions: &[f32], path: &str, cyclic: bool) -> Result<(), DitheretteError> {
@@ -605,45 +592,38 @@ impl TwoInputCurve {
         Ok(())
     }
 
-    fn validate_grid(
+    /// Checks counts, both axes, then every value, naming the failing entry under `path`.
+    pub fn validate(
         &self,
         path: &str,
-        x: ResolvedChannel,
-        x2: ResolvedChannel,
+        x_cyclic: bool,
+        x2_cyclic: bool,
     ) -> Result<(), DitheretteError> {
-        if !(MIN_COLUMNS..=MAX_COLUMNS).contains(&self.grid.columns.len()) {
+        if !(MIN_COLUMNS..=MAX_COLUMNS).contains(&self.columns.len()) {
             return Err(DitheretteError::new(
                 ErrorCode::InvalidSettings,
                 format!("{path}.columns"),
                 format!("Expected {MIN_COLUMNS} to {MAX_COLUMNS} columns."),
             ));
         }
-        if !(MIN_ROWS..=MAX_ROWS).contains(&self.grid.rows.len()) {
+        if !(MIN_ROWS..=MAX_ROWS).contains(&self.rows.len()) {
             return Err(DitheretteError::new(
                 ErrorCode::InvalidSettings,
                 format!("{path}.rows"),
                 format!("Expected {MIN_ROWS} to {MAX_ROWS} rows."),
             ));
         }
-        Self::validate_axis(
-            &self.grid.columns,
-            &format!("{path}.columns"),
-            x.kind == ChannelKind::Hue,
-        )?;
-        Self::validate_axis(
-            &self.grid.rows,
-            &format!("{path}.rows"),
-            x2.kind == ChannelKind::Hue,
-        )?;
-        if self.grid.values.len() != self.grid.rows.len() {
+        Self::validate_axis(&self.columns, &format!("{path}.columns"), x_cyclic)?;
+        Self::validate_axis(&self.rows, &format!("{path}.rows"), x2_cyclic)?;
+        if self.values.len() != self.rows.len() {
             return Err(DitheretteError::new(
                 ErrorCode::InvalidSettings,
                 format!("{path}.values"),
                 "Grid values must contain one entry per row.",
             ));
         }
-        for (row, values) in self.grid.values.iter().enumerate() {
-            if values.len() != self.grid.columns.len() {
+        for (row, values) in self.values.iter().enumerate() {
+            if values.len() != self.columns.len() {
                 return Err(DitheretteError::new(
                     ErrorCode::InvalidSettings,
                     format!("{path}.values.{row}"),
@@ -658,25 +638,53 @@ impl TwoInputCurve {
     }
 }
 
-impl Curve {
-    fn validate_channel(
-        channel: ColourChannel,
-        path: &str,
-    ) -> Result<ResolvedChannel, DitheretteError> {
-        channel.resolve().ok_or_else(|| {
-            DitheretteError::new(
-                ErrorCode::InvalidSettings,
-                format!("{path}.channel"),
-                "Channel does not belong to the selected colour model.",
-            )
-        })
-    }
+/// Resolves a channel, or fails at `{path}.channel` when it is not in its model.
+pub fn validate_channel(
+    channel: ColourChannel,
+    path: &str,
+) -> Result<ResolvedChannel, DitheretteError> {
+    channel.resolve().ok_or_else(|| {
+        DitheretteError::new(
+            ErrorCode::InvalidSettings,
+            format!("{path}.channel"),
+            "Channel does not belong to the selected colour model.",
+        )
+    })
+}
 
+/// A cyclic one-input spline's points start at x = 0, end at x = 1, and repeat the seam's y.
+pub fn validate_periodic_points(points: &[[f32; 2]], path: &str) -> Result<(), DitheretteError> {
+    let last = points.len() - 1;
+    if points[0][0] != 0.0 {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidSettings,
+            format!("{path}.0.0"),
+            "A hue-input curve must start at x = 0.",
+        ));
+    }
+    if points[last][0] != 1.0 {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidSettings,
+            format!("{path}.{last}.0"),
+            "A hue-input curve must end at x = 1.",
+        ));
+    }
+    if points[last][1] != points[0][1] {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidSettings,
+            format!("{path}.{last}.1"),
+            "A hue-input curve must repeat its first y value at x = 1.",
+        ));
+    }
+    Ok(())
+}
+
+impl Curve {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
         match self {
             Self::OneInput(curve) => {
-                let x = Self::validate_channel(curve.x, &format!("{path}.x"))?;
-                Self::validate_channel(curve.y, &format!("{path}.y"))?;
+                let x = validate_channel(curve.x, &format!("{path}.x"))?;
+                validate_channel(curve.y, &format!("{path}.y"))?;
                 if curve.kind == CurveKind::Remap && curve.x != curve.y {
                     return Err(DitheretteError::new(
                         ErrorCode::InvalidSettings,
@@ -687,7 +695,7 @@ impl Curve {
                 let points_path = format!("{path}.points");
                 Curves::validate_points(&curve.points, &points_path)?;
                 if curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue {
-                    curve.validate_periodic_points(&points_path)?;
+                    validate_periodic_points(&curve.points, &points_path)?;
                 }
                 Ok(())
             }
@@ -699,8 +707,8 @@ impl Curve {
                         "A two-input curve must be an adjustment.",
                     ));
                 }
-                let x = Self::validate_channel(curve.x, &format!("{path}.x"))?;
-                let x2 = Self::validate_channel(curve.x2, &format!("{path}.x2"))?;
+                let x = validate_channel(curve.x, &format!("{path}.x"))?;
+                let x2 = validate_channel(curve.x2, &format!("{path}.x2"))?;
                 if curve.x2 == curve.x {
                     return Err(DitheretteError::new(
                         ErrorCode::InvalidSettings,
@@ -708,8 +716,12 @@ impl Curve {
                         "A two-input curve must use two different input channels.",
                     ));
                 }
-                Self::validate_channel(curve.y, &format!("{path}.y"))?;
-                curve.validate_grid(&format!("{path}.grid"), x, x2)
+                validate_channel(curve.y, &format!("{path}.y"))?;
+                curve.grid.validate(
+                    &format!("{path}.grid"),
+                    x.kind == ChannelKind::Hue,
+                    x2.kind == ChannelKind::Hue,
+                )
             }
         }
     }
@@ -759,8 +771,29 @@ impl Effect for Curves {
         if self.curves.is_empty() {
             return;
         }
-        let prepared: Vec<_> = self
-            .curves
+        let prepared = self.prepare();
+        for rgb in &mut image.rgb {
+            *rgb = map_pixel(&prepared, *rgb, 1.0);
+        }
+    }
+
+    /// The mask scales every curve's bend from neutral; a zero mask leaves the pixel unchanged.
+    fn apply_masked(&self, image: &mut EffectImage, _context: &EffectContext<'_>, mask: &[f32]) {
+        if self.curves.is_empty() {
+            return;
+        }
+        let prepared = self.prepare();
+        for (rgb, &strength) in image.rgb.iter_mut().zip(mask) {
+            if strength != 0.0 {
+                *rgb = map_pixel(&prepared, *rgb, strength);
+            }
+        }
+    }
+}
+
+impl Curves {
+    fn prepare(&self) -> Vec<PreparedCurve<'_>> {
+        self.curves
             .iter()
             .map(|curve| match curve {
                 Curve::OneInput(curve) => {
@@ -783,27 +816,32 @@ impl Effect for Curves {
                     y: curve.y.resolve().expect("validated curves y channel"),
                 }),
             })
-            .collect();
-        for rgb in &mut image.rgb {
-            let source = *rgb;
-            let mut current = source;
-            for prepared in &prepared {
-                current = match prepared {
-                    PreparedCurve::OneInput(prepared) => prepared.curve.map(
-                        prepared.x,
-                        prepared.y,
-                        &prepared.spline,
-                        source,
-                        current,
-                    ),
-                    PreparedCurve::TwoInput(prepared) => {
-                        prepared
-                            .curve
-                            .map(prepared.x, prepared.x2, prepared.y, source, current)
-                    }
-                };
-            }
-            *rgb = current;
-        }
+            .collect()
     }
+}
+
+/// Every curve reads `source` and edits the accumulated result, in list order.
+fn map_pixel(prepared: &[PreparedCurve<'_>], source: [f32; 3], strength: f32) -> [f32; 3] {
+    let mut current = source;
+    for prepared in prepared {
+        current = match prepared {
+            PreparedCurve::OneInput(prepared) => prepared.curve.map(
+                prepared.x,
+                prepared.y,
+                &prepared.spline,
+                source,
+                current,
+                strength,
+            ),
+            PreparedCurve::TwoInput(prepared) => prepared.curve.map(
+                prepared.x,
+                prepared.x2,
+                prepared.y,
+                source,
+                current,
+                strength,
+            ),
+        };
+    }
+    current
 }

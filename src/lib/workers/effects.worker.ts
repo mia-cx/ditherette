@@ -1,4 +1,5 @@
 import {
+	compileEffectMask,
 	compileEffects,
 	indexColours,
 	type Ditherette,
@@ -46,15 +47,25 @@ self.onmessage = async ({ data }: MessageEvent<LiveEffectsRequest>) => {
 		});
 		const ditherette = await processor;
 		if (loaded?.sourceId !== sourceId) throw new Error('The effects worker has another image.');
-		const results = compileEffects(ditherette, {
-			version: 1,
-			colours: loaded.colours,
-			effects: resolveRecipes(ditherette, loaded.image, effects, context, crop, recipes),
-			context
-		});
-		post({ type: 'compiled', id, sourceId, key, results }, [results.buffer]);
+		const resolved = resolveRecipes(ditherette, loaded.image, effects, context, crop, recipes);
+		const { colours } = loaded;
+		if (data.type === 'mask') {
+			const results = compileEffectMask(ditherette, {
+				version: 1,
+				colours,
+				effects: resolved,
+				mask: data.mask,
+				context
+			});
+			post({ type: 'masked', id, sourceId, key, results }, [results.buffer]);
+			return;
+		}
+		const compiled = effects.length
+			? compileEffects(ditherette, { version: 1, colours, effects: resolved, context })
+			: colours;
+		post({ type: 'compiled', id, sourceId, key, results: compiled }, [compiled.buffer]);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Effects failed.';
-		post({ type: 'failed', id, sourceId, key, message });
+		post({ type: data.type === 'mask' ? 'mask-failed' : 'failed', id, sourceId, key, message });
 	}
 };

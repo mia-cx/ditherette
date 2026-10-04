@@ -4,7 +4,7 @@
 //! needs, then applies enabled steps in array order. It knows nothing about
 //! individual effects, so new effects never change sequencing.
 
-use std::fmt;
+use std::{fmt, mem::size_of};
 
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +20,7 @@ use super::{
     analysis_cache::AnalysisCache,
     curves::PreparedCurves,
     image::{EffectImage, CARRIER_LIMIT},
+    mask::{self, blend, MaskCurve, PreparedMask},
     table::ChannelTables,
 };
 
@@ -45,58 +46,93 @@ impl PreparedPointwise {
     }
 }
 
+/// An enabled step as the planner sees it: the effect and its mask curves.
+pub struct Planned<'a, E> {
+    pub effect: &'a E,
+    pub mask: &'a [MaskCurve],
+}
+
+impl<E> Clone for Planned<'_, E> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<E> Copy for Planned<'_, E> {}
+
+/// One step's prepared map and, when it is masked, its prepared mask.
+struct PreparedStep {
+    map: PreparedPointwise,
+    mask: Option<PreparedMask>,
+}
+
 /// Prepared maps for one pointwise run, plus an exact linear table when its first map can use it.
-pub struct PreparedPointwiseState<'effects, 'tables, E> {
-    effects: &'effects [&'effects E],
-    maps: Vec<PreparedPointwise>,
+pub struct PreparedPointwiseState<'steps, 'tables, E> {
+    steps: &'steps [Planned<'steps, E>],
+    prepared: Vec<PreparedStep>,
     tables: &'tables ChannelTables,
     linear: Option<[[f32; 256]; 3]>,
 }
 
-impl<'effects, 'tables, E: Effect> PreparedPointwiseState<'effects, 'tables, E> {
+/// Bytes `PreparedPointwiseState` reserves per step.
+pub const PREPARED_STEP_BYTES: usize = size_of::<PreparedStep>();
+
+impl<'steps, 'tables, E: Effect> PreparedPointwiseState<'steps, 'tables, E> {
     pub fn try_new(
-        effects: &'effects [&'effects E],
+        steps: &'steps [Planned<'steps, E>],
         tables: &'tables ChannelTables,
     ) -> Result<Self, std::collections::TryReserveError> {
-        debug_assert!(effects.len() <= MAX_EFFECTS);
-        debug_assert!(effects.iter().all(|effect| effect.pointwise()));
-        let mut maps = Vec::new();
-        maps.try_reserve_exact(effects.len())?;
-        for effect in effects {
-            maps.push(effect.prepare_pointwise());
+        debug_assert!(steps.len() <= MAX_EFFECTS);
+        debug_assert!(steps.iter().all(|step| step.effect.pointwise()));
+        let mut prepared = Vec::new();
+        prepared.try_reserve_exact(steps.len())?;
+        for step in steps {
+            let mask = PreparedMask::new(step.mask);
+            prepared.push(PreparedStep {
+                map: step.effect.prepare_pointwise(),
+                mask: (!mask.is_full()).then_some(mask),
+            });
         }
-        let linear = maps
+        let linear = prepared
             .first()
-            .filter(|prepared| prepared.reads_linear_input())
+            .filter(|first| first.mask.is_none() && first.map.reads_linear_input())
             .map(|_| tables.linear());
         Ok(Self {
-            effects,
-            maps,
+            steps,
+            prepared,
             tables,
             linear,
         })
     }
 
     /// Maps one original byte colour and preserves the chain's clamp after every effect.
+    /// A masked step reads its strength from the colour entering it.
     pub fn map(&self, bytes: [u8; 3], context: &EffectContext<'_>) -> [f32; 3] {
         let mut start = 0;
         let mut rgb = match self.linear.as_ref() {
             Some(linear) => {
                 start = 1;
                 let input = std::array::from_fn(|channel| linear[channel][bytes[channel] as usize]);
-                self.effects[0]
-                    .map_prepared_linear(&self.maps[0], input, context)
+                self.steps[0]
+                    .effect
+                    .map_prepared_linear(&self.prepared[0].map, input, context)
                     .map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT))
             }
             None => std::array::from_fn(|channel| self.tables.unit(channel, bytes[channel])),
         };
-        for (effect, prepared) in self.effects[start..]
+        for (step, prepared) in self.steps[start..]
             .iter()
-            .zip(&self.maps[start..self.effects.len()])
+            .zip(&self.prepared[start..self.steps.len()])
         {
-            rgb = effect
-                .map_prepared(prepared, rgb, context)
-                .map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
+            rgb = match &prepared.mask {
+                None => step.effect.map_prepared(&prepared.map, rgb, context),
+                Some(mask) => {
+                    let strength = mask.strength(step.mask, rgb);
+                    step.effect
+                        .map_prepared_masked(&prepared.map, rgb, strength, context)
+                }
+            }
+            .map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
         }
         rgb
     }
@@ -190,6 +226,36 @@ pub trait Effect {
     /// Transforms RGB in place. Arguments and context are already validated.
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>);
 
+    /// Applies with per-pixel `strengths` in `[0,1]`. `input` is the image's RGB on entry,
+    /// which the caller copied. By default the output moves back toward it in RGB.
+    fn apply_masked(
+        &self,
+        image: &mut EffectImage,
+        input: &[[f32; 3]],
+        strengths: &[f32],
+        context: &EffectContext<'_>,
+    ) {
+        self.apply(image, context);
+        for ((rgb, &input), &strength) in image.rgb.iter_mut().zip(input).zip(strengths) {
+            *rgb = blend(input, *rgb, strength);
+        }
+    }
+
+    /// One pixel's masked map with state from `prepare_pointwise`. It must equal
+    /// `apply_masked` on that pixel at that strength.
+    fn map_prepared_masked(
+        &self,
+        prepared: &PreparedPointwise,
+        rgb: [f32; 3],
+        strength: f32,
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        if strength == 0.0 {
+            return rgb;
+        }
+        blend(rgb, self.map_prepared(prepared, rgb, context), strength)
+    }
+
     /// True when each output channel depends only on the same input channel.
     /// Production tabulates runs of such effects for byte input.
     fn per_channel(&self) -> bool {
@@ -275,6 +341,26 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
         (**self).apply(image, context)
     }
 
+    fn apply_masked(
+        &self,
+        image: &mut EffectImage,
+        input: &[[f32; 3]],
+        strengths: &[f32],
+        context: &EffectContext<'_>,
+    ) {
+        (**self).apply_masked(image, input, strengths, context)
+    }
+
+    fn map_prepared_masked(
+        &self,
+        prepared: &PreparedPointwise,
+        rgb: [f32; 3],
+        strength: f32,
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        (**self).map_prepared_masked(prepared, rgb, strength, context)
+    }
+
     fn per_channel(&self) -> bool {
         (**self).per_channel()
     }
@@ -328,16 +414,38 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
 }
 
 /// One ordered chain entry. A disabled step keeps its arguments but does no work.
+/// An empty mask means full strength everywhere, and is left out of the JSON.
+/// Production chains that substitute effects borrow the caller's mask as `M = &[MaskCurve]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Step<E> {
+#[serde(bound(
+    serialize = "E: Serialize, M: Serialize + AsRef<[MaskCurve]>",
+    deserialize = "E: Deserialize<'de>, M: Deserialize<'de> + Default"
+))]
+pub struct Step<E, M = Vec<MaskCurve>> {
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "is_unmasked")]
+    pub mask: M,
     #[serde(flatten)]
     pub effect: E,
 }
 
+fn is_unmasked<M: AsRef<[MaskCurve]>>(mask: &M) -> bool {
+    mask.as_ref().is_empty()
+}
+
+impl<E, M: AsRef<[MaskCurve]>> Step<E, M> {
+    /// The effect and mask the planner runs.
+    pub fn planned(&self) -> Planned<'_, E> {
+        Planned {
+            effect: &self.effect,
+            mask: self.mask.as_ref(),
+        }
+    }
+}
+
 /// Validates every step and the context enabled steps need, without touching pixels.
-pub fn validate_chain<E: Effect>(
-    steps: &[Step<E>],
+pub fn validate_chain<E: Effect, M: AsRef<[MaskCurve]>>(
+    steps: &[Step<E, M>],
     context: &EffectContext<'_>,
 ) -> Result<(), DitheretteError> {
     if steps.len() > MAX_EFFECTS {
@@ -348,8 +456,9 @@ pub fn validate_chain<E: Effect>(
         ));
     }
     for (index, step) in steps.iter().enumerate() {
-        step.effect
-            .validate(StackPath::new(format_args!("effects.{index}")).as_str())?;
+        let path = StackPath::new(format_args!("effects.{index}"));
+        step.effect.validate(path.as_str())?;
+        mask::validate(step.mask.as_ref(), path.as_str())?;
     }
     for (index, step) in steps.iter().enumerate().filter(|(_, step)| step.enabled) {
         let needs = step.effect.needs();
@@ -372,14 +481,21 @@ pub fn validate_chain<E: Effect>(
 }
 
 /// Validates, then applies each enabled step in order. Nothing is applied on error.
-pub fn apply_chain<E: Effect>(
+pub fn apply_chain<E: Effect, M: AsRef<[MaskCurve]>>(
     image: &mut EffectImage,
-    steps: &[Step<E>],
+    steps: &[Step<E, M>],
     context: &EffectContext<'_>,
 ) -> Result<(), DitheretteError> {
     validate_chain(steps, context)?;
     for step in steps.iter().filter(|step| step.enabled) {
-        step.effect.apply(image, context);
+        let mask = step.mask.as_ref();
+        if mask.is_empty() {
+            step.effect.apply(image, context);
+        } else {
+            let input = image.rgb.clone();
+            let strengths = mask::strengths(mask, &input);
+            step.effect.apply_masked(image, &input, &strengths, context);
+        }
         image.bound();
     }
     Ok(())

@@ -16,9 +16,10 @@ use crate::prod::contract::{
 };
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext, Needs, StackPath},
+    chain::{check_bounded, Effect, EffectContext, Needs, PreparedPointwise, StackPath},
     curves::{Curves, Spline},
     image::EffectImage,
+    mask::blend,
     recolour_analysis::{analyze, ANALYSIS_BYTES},
     space::{from_opponent, to_opponent},
 };
@@ -144,14 +145,21 @@ impl RecolourRecipe {
         }
         let tone = Spline::new(&self.tone);
         for rgb in &mut image.rgb {
-            let adjusted = self.map(&tone, *rgb);
-            *rgb = if strength == 1.0 {
-                adjusted
-            } else {
-                std::array::from_fn(|channel| {
-                    rgb[channel] + strength * (adjusted[channel] - rgb[channel])
-                })
-            };
+            *rgb = blend(*rgb, self.map(&tone, *rgb), strength);
+        }
+    }
+
+    /// Like `apply`, with each pixel's strength multiplied by its mask value.
+    pub fn apply_masked(&self, image: &mut EffectImage, strength: f32, mask: &[f32]) {
+        if strength == 0.0 || self.is_identity() {
+            return;
+        }
+        let tone = Spline::new(&self.tone);
+        for (rgb, &masked) in image.rgb.iter_mut().zip(mask) {
+            let strength = strength * masked;
+            if strength != 0.0 {
+                *rgb = blend(*rgb, self.map(&tone, *rgb), strength);
+            }
         }
     }
 
@@ -250,17 +258,18 @@ impl Effect for Recolour {
     }
 
     fn map_pixel(&self, rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
-        let recipe = match &self.recipe {
-            Some(recipe) if self.strength != 0.0 && !recipe.is_identity() => recipe,
-            _ => return rgb,
-        };
-        let adjusted = recipe.map(&Spline::new(&recipe.tone), rgb);
-        if self.strength == 1.0 {
-            return adjusted;
-        }
-        std::array::from_fn(|channel| {
-            rgb[channel] + self.strength * (adjusted[channel] - rgb[channel])
-        })
+        self.map_with_strength(rgb, self.strength)
+    }
+
+    /// The mask multiplies `strength` for this pixel.
+    fn map_prepared_masked(
+        &self,
+        _prepared: &PreparedPointwise,
+        rgb: [f32; 3],
+        strength: f32,
+        _context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        self.map_with_strength(rgb, self.strength * strength)
     }
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
@@ -270,12 +279,45 @@ impl Effect for Recolour {
         match &self.recipe {
             Some(recipe) => recipe.apply(image, self.strength),
             // Built-in chains resolve recipes before this runs; only caller-defined chains reach it.
-            None => match context.analyses {
-                Some(cache) => cache.analyze(image, context),
-                None => analyze(image, context),
-            }
-            .expect("analysis samples fit the charged working memory")
-            .apply(image, self.strength),
+            None => self.analyze(image, context).apply(image, self.strength),
         }
+    }
+
+    /// Analysis still reads the whole unmasked input; the mask multiplies `strength` per pixel.
+    fn apply_masked(
+        &self,
+        image: &mut EffectImage,
+        _input: &[[f32; 3]],
+        strengths: &[f32],
+        context: &EffectContext<'_>,
+    ) {
+        if self.strength == 0.0 {
+            return;
+        }
+        match &self.recipe {
+            Some(recipe) => recipe.apply_masked(image, self.strength, strengths),
+            None => self
+                .analyze(image, context)
+                .apply_masked(image, self.strength, strengths),
+        }
+    }
+}
+
+impl Recolour {
+    /// One pixel through the recipe at `strength`, which already includes any mask value.
+    fn map_with_strength(&self, rgb: [f32; 3], strength: f32) -> [f32; 3] {
+        let recipe = match &self.recipe {
+            Some(recipe) if strength != 0.0 && !recipe.is_identity() => recipe,
+            _ => return rgb,
+        };
+        blend(rgb, recipe.map(&Spline::new(&recipe.tone), rgb), strength)
+    }
+
+    fn analyze(&self, image: &EffectImage, context: &EffectContext<'_>) -> RecolourRecipe {
+        match context.analyses {
+            Some(cache) => cache.analyze(image, context),
+            None => analyze(image, context),
+        }
+        .expect("analysis samples fit the charged working memory")
     }
 }

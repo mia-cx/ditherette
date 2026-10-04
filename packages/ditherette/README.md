@@ -136,6 +136,29 @@ const indexed = processor.process({
 Effects run in array order. Each step sees the unrounded result of the one before it; the chain rounds to RGBA8 once, at the end.
 Repeat an effect as often as you like, up to 64 steps; each instance keeps its own arguments.
 `enabled: false` keeps a step in the recipe without running it. Disabled steps are still validated.
+Any step can take a `mask`: up to 4 curves that read the colour entering the step and output its strength, from 0 through 1. A one-input curve has `x` and `points`; a two-input curve has `x`, `x2`, and `grid`, with the same rules as `curves`. Their values multiply, so a lightness curve and a hue curve together select dark reds. Hue-keyed curves fade toward 1 on near-grey colours.
+Curves scale how far each curve bends, `recolour` multiplies its `strength`, and every other effect moves its result back toward the step's input:
+
+```ts
+const darkOnly = {
+	x: { model: 'oklch', channel: 'lightness' },
+	points: [
+		[0, 1],
+		[0.5, 0],
+		[1, 0]
+	]
+};
+const brighten = { effect: 'exposure', enabled: true, stops: 1, mask: [darkOnly] } as const;
+```
+
+To show a mask, `effectMask` takes the steps before the masked one and its curves, and returns each pixel's strength as grey, with the source alpha:
+
+```ts
+const greys = processor.effectMask({ version: 1, source, effects: before, mask: [darkOnly] });
+```
+
+It reads the unrounded colour entering the step, so a colour pushed past white still shows its hue. `compileEffectMask` does the same per distinct colour, like `compileEffects`.
+
 Alpha is never changed. With no enabled step, `applyEffects` returns the source itself.
 
 Recipe version 2 adds `effects` to the version 1 settings. Effects run first, on the source, then resize, dither, and quantize.

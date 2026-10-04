@@ -582,7 +582,11 @@ fn recolour_calls_fit_exactly_their_preflighted_budget() {
         space: Some(WorkingSpace::Oklab),
         analyses: None,
     };
-    let calls: [&dyn Fn(&mut Processor) -> Result<(), Failure>; 2] = [
+    let mask: Vec<prod_effects::mask::MaskCurve> = serde_json::from_value(json!([
+        { "x": { "model": "oklch", "channel": "lightness" }, "points": [[0, 1], [1, 0]] }
+    ]))
+    .unwrap();
+    let calls: [&dyn Fn(&mut Processor) -> Result<(), Failure>; 3] = [
         &|processor| {
             let mut io = Io {
                 data: &data,
@@ -609,6 +613,19 @@ fn recolour_calls_fit_exactly_their_preflighted_budget() {
             };
             processor.analyze_recolour(request, &mut io).map(drop)
         },
+        &|processor| {
+            let mut io = Io {
+                data: &data,
+                events: None,
+            };
+            let request = EffectsRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                effects: &effects,
+                context,
+            };
+            processor.effect_mask(request, &mask, &mut io).map(drop)
+        },
     ];
     for call in calls {
         let mut generous = processor();
@@ -622,4 +639,126 @@ fn recolour_calls_fit_exactly_their_preflighted_budget() {
             Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
         );
     }
+}
+
+/// The reference mask: each pixel's strength on the carrier after `effects`, as grey bytes.
+fn spec_mask(
+    data: &[u8],
+    width: u32,
+    effects: &serde_json::Value,
+    mask: &serde_json::Value,
+) -> Vec<u8> {
+    let steps = spec::effects::decode_effects(&effects.to_string()).unwrap();
+    let mask: Vec<spec::effects::mask::MaskCurve> = serde_json::from_value(mask.clone()).unwrap();
+    let dimensions = ImageDimensions::new(width, (data.len() / 4) as u32 / width).unwrap();
+    let source = ditherette_wasm::image::ImageView::packed(data, dimensions).unwrap();
+    let mut image = spec::effects::EffectImage::from_rgba8(source);
+    let context = spec::effects::EffectContext {
+        palette: &PALETTE,
+        space: Some(spec::contract::request::WorkingSpace::Oklab),
+    };
+    spec::effects::apply_chain(&mut image, &steps, &context).unwrap();
+    spec::effects::mask::strengths(&mask, &image)
+        .iter()
+        .zip(&image.alpha)
+        .flat_map(|(strength, &alpha)| {
+            let grey = (strength * 255.0).round() as u8;
+            [grey, grey, grey, alpha]
+        })
+        .collect()
+}
+
+fn prod_mask(
+    processor: &mut Processor,
+    data: &[u8],
+    width: u32,
+    effects: &serde_json::Value,
+    mask: &serde_json::Value,
+) -> Vec<u8> {
+    let steps = prod_effects::decode_effects(&effects.to_string()).unwrap();
+    let mask: Vec<prod_effects::mask::MaskCurve> = serde_json::from_value(mask.clone()).unwrap();
+    let mut io = Io { data, events: None };
+    let request = EffectsRequest {
+        source_width: width,
+        source_height: (data.len() / 4) as u32 / width,
+        effects: &steps,
+        context: prod_effects::EffectContext {
+            palette: &PALETTE,
+            space: Some(WorkingSpace::Oklab),
+            analyses: None,
+        },
+    };
+    processor.effect_mask(request, &mask, &mut io).unwrap()
+}
+
+#[test]
+fn effect_masks_match_the_reference_on_the_unclipped_carrier() {
+    let data = ramp();
+    let hue = |x: f32| json!({ "x": { "model": "oklch", "channel": "hue" }, "points": [[0, x], [0.5, 1], [1, x]] });
+    let shadows = json!({ "x": { "model": "oklch", "channel": "lightness" }, "points": [[0, 1], [0.6, 0.2], [1, 0]] });
+    let grid = json!({
+        "x": { "model": "oklch", "channel": "hue" },
+        "x2": { "model": "oklch", "channel": "chroma" },
+        "grid": { "columns": [0, 0.5], "rows": [0, 1], "values": [[1, 0], [1, 0.5]] },
+    });
+    let boost = json!({ "effect": "exposure", "enabled": true, "stops": 1.5 });
+    let saturate = json!({ "effect": "hue-saturation", "enabled": true, "hue": 20, "saturation": 0.6, "lightness": 0 });
+    let chains = [
+        json!([]),
+        chain(),
+        json!([chain()[0], saturate, boost]),
+        recolour_chain(levels_gamma(1.2), boost),
+    ];
+    let masks = [json!([]), json!([hue(0.0)]), json!([shadows, grid])];
+    let mut processor = processor();
+    for effects in &chains {
+        for mask in &masks {
+            assert_eq!(
+                prod_mask(&mut processor, &data, WIDTH, effects, mask),
+                spec_mask(&data, WIDTH, effects, mask),
+                "{effects} {mask}"
+            );
+        }
+    }
+}
+
+#[test]
+fn effect_masks_read_colour_beyond_white() {
+    // Brightness 1 lifts this colour to about [1.5, 1.25, 1.13]: still chromatic, though it
+    // clips to white. A mask holding back every hue sees the colour, not white.
+    let data = [128, 64, 32, 200];
+    let effects = json!([{ "effect": "brightness-contrast", "enabled": true, "brightness": 1, "contrast": 0 }]);
+    let mask = json!([{ "x": { "model": "oklch", "channel": "hue" }, "points": [[0, 0], [1, 0]] }]);
+    let expected = spec_mask(&data, 1, &effects, &mask);
+    assert_eq!(expected, [0, 0, 0, 200]);
+    assert_eq!(
+        prod_mask(&mut processor(), &data, 1, &effects, &mask),
+        expected
+    );
+}
+
+#[test]
+fn invalid_masks_fail_at_the_mask_path() {
+    let data = ramp();
+    let effects = prod_effects::decode_effects(&chain().to_string()).unwrap();
+    let mask: Vec<prod_effects::mask::MaskCurve> = serde_json::from_value(json!([
+        { "x": { "model": "oklch", "channel": "hue" }, "points": [[0, 0], [1, 1]] }
+    ]))
+    .unwrap();
+    let mut io = Io {
+        data: &data,
+        events: None,
+    };
+    let request = EffectsRequest {
+        source_width: WIDTH,
+        source_height: HEIGHT,
+        effects: &effects,
+        context: prod_effects::EffectContext::default(),
+    };
+    assert_eq!(
+        processor()
+            .effect_mask(request, &mask, &mut io)
+            .unwrap_err(),
+        Failure::new(ErrorCode::InvalidSettings, ErrorPath::Mask)
+    );
 }

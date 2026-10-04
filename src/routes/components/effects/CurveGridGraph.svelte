@@ -1,26 +1,40 @@
-<script lang="ts">
-	import type { TwoInputCurve } from 'ditherette';
+<script lang="ts" generics="C extends GridCurve">
+	import type { ColourChannel } from 'ditherette';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { channelLabel } from '$lib/effects/catalog';
-	import { gridBackdrop } from '$lib/effects/grid-backdrop';
 	import {
 		canRemoveColumn,
 		insertColumn,
 		removeColumn,
 		setGridValue,
-		wraps
+		wraps,
+		type GridCurve
 	} from '$lib/effects/grid';
 	import { hueAxis } from '$lib/effects/tone';
 
 	type Props = {
 		id: string;
-		curve: TwoInputCurve;
-		onchange: (curve: TwoInputCurve) => void;
+		curve: C;
+		onchange: (curve: C) => void;
+		/** What the curve's values mean, shown with the value field and each point. */
+		valueLabel: string;
+		/** The value that changes nothing: points holding it are drawn hollow. */
+		neutral: number;
+		/** Draws what the curve does as a `width` × `height` image: `x` across, `x2` up. */
+		backdrop: (curve: C, width: number, height: number) => Promise<ImageData>;
 		/** The point to select, by row and column; the editor sets it after a pick. */
 		selected?: { row: number; column: number };
 	};
-	let { id, curve, onchange, selected = $bindable({ row: 0, column: 0 }) }: Props = $props();
+	let {
+		id,
+		curve,
+		onchange,
+		valueLabel,
+		neutral,
+		backdrop,
+		selected = $bindable({ row: 0, column: 0 })
+	}: Props = $props();
 
 	/** Values sit on the byte grid, like one-input curves. */
 	const BYTE = 255;
@@ -46,8 +60,8 @@
 	const at = (position: number, axis: 'x' | 'y') =>
 		axis === 'x' ? position * WIDTH : (1 - position) * HEIGHT;
 	/** "Hue" rather than "OKLCH · Hue": the chip already names the model. */
-	const channelName = (channel: TwoInputCurve['x']) => channelLabel(channel).split(' · ')[1];
-	const position = (channel: TwoInputCurve['x'], v: number) =>
+	const channelName = (channel: ColourChannel) => channelLabel(channel).split(' · ')[1];
+	const position = (channel: ColourChannel, v: number) =>
 		wraps(channel) ? `${Math.round(v * 360)}°` : `${toByte(v)}`;
 
 	// Redraw the backdrop whenever the curve changes; a slow run never overwrites a newer one.
@@ -55,7 +69,7 @@
 	$effect(() => {
 		const run = ++drawn;
 		const target = canvas;
-		void gridBackdrop(curve, BACKDROP.width, BACKDROP.height).then(
+		void backdrop(curve, BACKDROP.width, BACKDROP.height).then(
 			(image) => {
 				if (run !== drawn || !target) return;
 				target.getContext('2d')?.putImageData(image, 0, 0);
@@ -190,11 +204,11 @@
 					)}, {channelLabel(curve.x2)} {position(
 						curve.x2,
 						grid.rows[rowIndex]!
-					)}: adjustment {toByte(cell)}"
+					)}: {valueLabel.toLowerCase()} {toByte(cell)}"
 					aria-pressed={isSelected}
 					class="cursor-ns-resize stroke-foreground outline-none focus-visible:stroke-primary {isSelected
 						? 'fill-primary'
-						: cell === 0.5
+						: cell === neutral
 							? 'fill-background'
 							: 'fill-foreground'}"
 					stroke-width="1.5"
@@ -228,7 +242,7 @@
 		>
 	</div>
 	<div class="grid gap-1">
-		<Label for="{id}-grid-value" class="text-xs text-muted-foreground">Adjustment</Label>
+		<Label for="{id}-grid-value" class="text-xs text-muted-foreground">{valueLabel}</Label>
 		<input
 			id="{id}-grid-value"
 			class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
