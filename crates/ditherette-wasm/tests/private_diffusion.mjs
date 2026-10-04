@@ -34,7 +34,7 @@ test('private diffusion ABI validates f64 tags before narrowing and keeps failur
 	try {
 		for (const [index, value, path] of [
 			[0, 0.5, 31],
-			[0, 4, 31],
+			[0, 12, 31],
 			[1, 0.5, 32],
 			[1, 2, 32],
 			[2, 0.5, 33],
@@ -50,7 +50,7 @@ test('private diffusion ABI validates f64 tags before narrowing and keeps failur
 			assert.equal(bindings.privateErrorPath(), path);
 			assert.equal(invoke(controls).status, 0);
 		}
-		for (let kernel = 0; kernel < 4; kernel++) {
+		for (let kernel = 0; kernel < 12; kernel++) {
 			for (let feedback = 0; feedback < 2; feedback++) {
 				for (let serpentine = 0; serpentine < 2; serpentine++) {
 					assert.equal(invoke([kernel, feedback, serpentine, 1, 1, 1, 5, 10]).status, 0);
