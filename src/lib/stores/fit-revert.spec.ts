@@ -213,7 +213,17 @@ it('re-analyses every edited fit on one input change and offers Revert on each',
 	revertFit(second.id);
 	const restored = effectLayers.get().find((item) => item.id === second.id)!.step;
 	expect(restored.effect === 'palette-fit' && restored.curves).toEqual(edited);
-	expect(fitReverts.get().has(first.id)).toBe(true);
+
+	// Reverting the second restored the first's snapshot too; the next input change
+	// re-analyses both rather than misreading a restored fit as a user edit.
+	const restoredFirst = effectLayers.get().find((item) => item.id === first.id)!.step;
+	expect(restoredFirst.effect === 'palette-fit' && restoredFirst.curves).toEqual(edited);
+	updateOutputSettings({ crop: { x: 2, y: 2, width: 6, height: 6 } });
+	for (const layer of [first, second]) {
+		const step = effectLayers.get().find((item) => item.id === layer.id)!.step;
+		expect(step.effect === 'palette-fit' && step.curves).toBe(null);
+		expect(fitReverts.get().has(layer.id)).toBe(true);
+	}
 });
 
 it('drops the offer when the fit itself is edited or re-looked; not for strength', () => {
