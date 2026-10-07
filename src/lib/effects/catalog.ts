@@ -156,13 +156,35 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 			lightness: 0
 		})
 	},
-	recolour: {
+	'palette-fit': {
 		label: 'Palette fit',
+		create: () => ({
+			effect: 'palette-fit',
+			enabled: true,
+			look: 'fitted',
+			space: 'oklab',
+			strength: 1,
+			curves: null
+		})
+	},
+	recolour: {
+		label: 'Palette fit (legacy)',
 		create: () => ({ effect: 'recolour', enabled: true, strength: 1, recipe: null })
 	}
 };
 
-/** The package accepts at most 64 steps. */
-export const MAX_EFFECT_LAYERS = 64;
+
 
 export const EFFECT_KINDS = Object.keys(EFFECTS) as EffectKind[];
+
+/** Kinds the add-effect menu offers; legacy kinds stay loadable but cannot be added. */
+export const ADDABLE_KINDS = EFFECT_KINDS.filter((kind) => kind !== 'recolour');
+
+/** The working spaces a palette-fit step can analyse in, with their select labels. */
+export const FIT_SPACES = [
+	{ id: 'oklab', label: 'OKLab' },
+	{ id: 'cielab', label: 'CIELab' }
+] as const;
+
+/** The package accepts at most 64 steps. */
+export const MAX_EFFECT_LAYERS = 64;

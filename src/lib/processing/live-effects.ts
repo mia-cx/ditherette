@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import type { Effect, EffectContext, MaskCurve } from 'ditherette';
+import type { Curve, Effect, EffectContext, MaskCurve } from 'ditherette';
 import { colorSpace, outputSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
 import { activeEffectSteps, effectLayers, type EffectLayer } from '$lib/stores/effects';
 import { packageEffectContext } from './package-adapter';
@@ -32,6 +32,8 @@ export type LiveEffectsResponse =
 			sourceId: number;
 			key: string;
 			results: Uint32Array;
+			/** Each palette-fit step's resolved curves, by index into `effects`. Only `compiled`. */
+			fits?: readonly { readonly index: number; readonly curves: readonly Curve[] }[];
 	  }
 	| {
 			type: 'failed' | 'mask-failed';
@@ -55,6 +57,11 @@ export const shownMask = atom<string | undefined>();
 export const compiledMask = atom<
 	{ source: ImageData; key: string; results: Uint32Array } | undefined
 >();
+/**
+ * The curves the effects worker last resolved for each palette-fit layer, keyed by layer id.
+ * Edited fits echo their own list; a cleared source clears this.
+ */
+export const analysedFits = atom<ReadonlyMap<string, readonly Curve[]>>(new Map());
 
 /**
  * What showing a layer's mask needs: the enabled steps before the layer, which make the colours
@@ -79,9 +86,17 @@ export function effectsKey(
 	context: Required<EffectContext>,
 	crop: CropRect | undefined
 ) {
-	const fits = effects.filter((step) => step.effect === 'recolour');
-	const analysed = fits.some((step) => step.recipe === null);
-	return JSON.stringify([effects, fits.length > 0 && context, analysed && (crop ?? null)]);
+	const analyses = effects.filter(
+		(step) => step.effect === 'recolour' || step.effect === 'palette-fit'
+	);
+	const analysing = (step: Effect) =>
+		(step.effect === 'recolour' && step.recipe === null) ||
+		(step.effect === 'palette-fit' && step.curves === null);
+	// A recolour always reads the context (its space); a palette fit reads the palette only
+	// while it analyses, and the cropped image only while it analyses.
+	const readsContext = analyses.some((step) => step.effect === 'recolour' || analysing(step));
+	const readsImage = analyses.some(analysing);
+	return JSON.stringify([effects, readsContext && context, readsImage && (crop ?? null)]);
 }
 
 /** The key the current settings compile under. */
@@ -153,17 +168,21 @@ export function startLiveEffects() {
 	/** The mask that last failed; it waits for new inputs, or for Show mask to turn off and on. */
 	let failedMask: { source: ImageData; key: string } | undefined;
 	let requestId = 0;
+	/** The effects each in-flight compile was sent, so its fit curves map back to layers. */
+	const pending = new Map<number, readonly Effect[]>();
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
 	function reset(reason: string) {
 		worker?.terminate();
 		worker = undefined;
 		loaded = undefined;
+		pending.clear();
 		busy = maskBusy = false;
 		failedMask = undefined;
 		effectsIndex.set(undefined);
 		compiledEffects.set(undefined);
 		compiledMask.set(undefined);
+		analysedFits.set(new Map());
 		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
 	}
@@ -203,6 +222,7 @@ export function startLiveEffects() {
 			effectsIndex.set(undefined);
 			compiledEffects.set(undefined);
 			compiledMask.set(undefined);
+			analysedFits.set(new Map());
 			worker.postMessage({
 				type: 'source',
 				sourceId: sourceId(source),
@@ -216,6 +236,7 @@ export function startLiveEffects() {
 		const current = compiledEffects.get();
 		if (effects.length && !busy && (current?.source !== source || current.key !== key)) {
 			busy = true;
+			pending.set(requestId + 1, effects);
 			worker.postMessage({
 				type: 'compile',
 				id: ++requestId,
@@ -271,8 +292,22 @@ export function startLiveEffects() {
 			settle(current, data.key, new Error(data.message));
 		} else if (current && data.type === 'compiled') {
 			compiledEffects.set({ source: current, key: data.key, results: data.results });
+			// Each fit index names its position in the sent steps; count enabled fit layers in
+			// the same order the worker resolved them.
+			const sent = pending.get(data.id);
+			const fitLayers = effectLayers
+				.get()
+				.filter((layer) => layer.step.enabled && layer.step.effect === 'palette-fit');
+			const fits = new Map<string, readonly Curve[]>();
+			data.fits?.forEach(({ index, curves }) => {
+				const at = sent?.slice(0, index + 1).filter((s) => s.effect === 'palette-fit').length;
+				const layer = at ? fitLayers[at - 1] : undefined;
+				if (layer) fits.set(layer.id, curves);
+			});
+			analysedFits.set(fits);
 			settle(current, data.key, data.results);
 		}
+		pending.delete(data.id);
 		// Settings that moved on will never compile; their processing is superseded anyway.
 		const key = currentEffectsKey();
 		for (const waiter of waiters) {
