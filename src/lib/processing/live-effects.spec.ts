@@ -10,6 +10,7 @@ import {
 } from '$lib/stores/effects';
 import { shownSource } from './effects-view.svelte';
 import {
+	analysedFits,
 	compiledEffects,
 	compiledEffectsFor,
 	currentEffectsKey,
@@ -51,7 +52,10 @@ class ControlledWorker {
 		} as MessageEvent<LiveEffectsResponse>);
 	}
 	/** Answer the latest compile. */
-	reply(results = new Uint32Array([1])) {
+	reply(
+		results = new Uint32Array([1]),
+		fits?: { index: number; curves: readonly object[] }[]
+	) {
 		const request = this.compiles.at(-1)!;
 		this.onmessage?.({
 			data: {
@@ -59,7 +63,8 @@ class ControlledWorker {
 				id: request.id,
 				sourceId: request.sourceId,
 				key: request.key,
-				results
+				results,
+				...(fits ? { fits } : {})
 			}
 		} as MessageEvent<LiveEffectsResponse>);
 	}
@@ -261,5 +266,31 @@ describe('effectsKey for palette fit', () => {
 		expect(effectsKey([edited], context, undefined)).toBe(locked);
 		// Space is the step's own, so the context's space never matters.
 		expect(effectsKey([analysing], { ...context, space: 'cielab' as const }, crop)).toBe(key);
+	});
+});
+
+describe('analysed fits', () => {
+	const curves = [
+		{
+			kind: 'remap',
+			x: { model: 'oklch', channel: 'lightness' },
+			y: { model: 'oklch', channel: 'lightness' },
+			points: [
+				[0, 0],
+				[1, 1]
+			]
+		}
+	];
+
+	it('publishes curves under the layers that produced them, not the order at reply', () => {
+		const first = addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
+		const second = addEffect('palette-fit');
+		// Remove the first fit while the two-step compile is in flight: the second fit's
+		// curves still land under its own id.
+		removeEffect(first.id);
+		worker.reply(new Uint32Array([1]), [{ index: 1, curves }]);
+		expect(analysedFits.get()).toEqual(new Map([[second.id, curves]]));
 	});
 });

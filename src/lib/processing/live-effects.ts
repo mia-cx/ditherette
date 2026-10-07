@@ -176,7 +176,7 @@ export function startLiveEffects() {
 	let failedMask: { source: ImageData; key: string } | undefined;
 	let requestId = 0;
 	/** The effects each in-flight compile was sent, so its fit curves map back to layers. */
-	const pending = new Map<number, readonly Effect[]>();
+	const pending = new Map<number, { effects: readonly Effect[]; layerIds: string[] }>();
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
 	function reset(reason: string) {
@@ -243,7 +243,13 @@ export function startLiveEffects() {
 		const current = compiledEffects.get();
 		if (effects.length && !busy && (current?.source !== source || current.key !== key)) {
 			busy = true;
-			pending.set(requestId + 1, effects);
+			// The layer ids of the steps being sent, so returned fit indices stay attached to
+			// the layers that produced them even if the list changes mid-flight.
+			const layerIds = effectLayers
+				.get()
+				.filter((layer) => layer.step.enabled)
+				.map((layer) => layer.id);
+			pending.set(requestId + 1, { effects, layerIds });
 			worker.postMessage({
 				type: 'compile',
 				id: ++requestId,
@@ -302,14 +308,10 @@ export function startLiveEffects() {
 			// Each fit index names its position in the sent steps; count enabled fit layers in
 			// the same order the worker resolved them.
 			const sent = pending.get(data.id);
-			const fitLayers = effectLayers
-				.get()
-				.filter((layer) => layer.step.enabled && layer.step.effect === 'palette-fit');
 			const fits = new Map<string, readonly Curve[]>();
 			data.fits?.forEach(({ index, curves }) => {
-				const at = sent?.slice(0, index + 1).filter((s) => s.effect === 'palette-fit').length;
-				const layer = at ? fitLayers[at - 1] : undefined;
-				if (layer) fits.set(layer.id, curves);
+				const layerId = sent?.layerIds[index];
+				if (layerId) fits.set(layerId, curves);
 			});
 			analysedFits.set(fits);
 			settle(current, data.key, data.results);
