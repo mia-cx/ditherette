@@ -1,0 +1,6 @@
+CREATE TABLE export_events (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	received_at TEXT NOT NULL,
+	version INTEGER NOT NULL,
+	payload TEXT NOT NULL
+);

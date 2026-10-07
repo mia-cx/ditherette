@@ -10,8 +10,24 @@
 	},
 	"workers_dev": true,
 	"preview_urls": true,
+	"d1_databases": [
+		{
+			"binding": "EVENTS",
+			"database_name": "ditherette-events-preview",
+			"database_id": "84f2508a-8f4c-47a2-b56b-254c27151b0a",
+			"migrations_dir": "migrations"
+		}
+	],
 	"env": {
 		"production": {
+			"d1_databases": [
+				{
+					"binding": "EVENTS",
+					"database_name": "ditherette-events",
+					"database_id": "5a12eb0f-2495-4857-82fb-702d9aeba6d4",
+					"migrations_dir": "migrations"
+				}
+			],
 			"routes": [
 				{
 					"zone_name": "mia.cx",
@@ -21,6 +37,14 @@
 			]
 		},
 		"staging": {
+			"d1_databases": [
+				{
+					"binding": "EVENTS",
+					"database_name": "ditherette-events-preview",
+					"database_id": "84f2508a-8f4c-47a2-b56b-254c27151b0a",
+					"migrations_dir": "migrations"
+				}
+			],
 			"routes": [
 				{
 					"zone_name": "mia.cx",
@@ -30,6 +54,14 @@
 			]
 		},
 		"development": {
+			"d1_databases": [
+				{
+					"binding": "EVENTS",
+					"database_name": "ditherette-events-preview",
+					"database_id": "84f2508a-8f4c-47a2-b56b-254c27151b0a",
+					"migrations_dir": "migrations"
+				}
+			],
 			"routes": [
 				{
 					"zone_name": "mia.cx",
