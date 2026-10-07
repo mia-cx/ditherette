@@ -241,6 +241,64 @@ pub(super) fn analyze_fit<B: InputBoundary, A: Allocator>(
     call.finish(progress.finish(Ok(curves), boundary.progress()))
 }
 
+/// The same resolution as `analyze_fit`, returning what the fit measured rather than curves.
+/// Diagnostic only; the measurements are not part of the effect contract.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn measure_fit<B: InputBoundary, A: Allocator>(
+    request: EffectsRequest<'_>,
+    space: FitSpace,
+    look: FitLook,
+    boundary: &mut B,
+    allocator: &mut A,
+    limit: u64,
+    overhead: u64,
+    peak: &mut u64,
+    store: &mut Store,
+) -> Result<Option<palette_fit_analysis::FitMeasurements>, Failure> {
+    validate(request.effects, &request.context)?;
+    if request.context.colors().next().is_none() {
+        return Err(Failure::new(
+            ErrorCode::InvalidRequest,
+            ErrorPath::ContextPalette,
+        ));
+    }
+    let dimensions = dimensions(request.source_width, request.source_height, true)?;
+    let len = dimensions
+        .storage_len::<Rgba8>()
+        .map_err(|_| Failure::new(ErrorCode::InvalidImage, ErrorPath::Source))?;
+    if boundary.input_len()? != len {
+        return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
+    }
+    let mut progress = Control::new(boundary.progress().is_some());
+    progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
+    let owned = overhead
+        .checked_add(size_of::<EffectsRequest<'_>>() as u64)
+        .ok_or_else(memory_limit)?;
+    let mut call = Call::snapshot(store, len, owned, limit, peak, allocator)?;
+    call.source(dimensions, |bytes, compare| {
+        boundary.snapshot_input(bytes, compare)
+    })?;
+    let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
+    // The same working set analysis charges: its samples and scratch.
+    let carrier = carrier_after_bytes(request.effects, dimensions)
+        .max(EffectImage::carrier_bytes(pixels) + BOOKKEEPING_BYTES)
+        + palette_fit_analysis::ANALYSIS_BYTES;
+    call.charge_working_capacity(carrier, peak)?;
+    call.prepare(None, None, [len, 0, 0, 0], 0, peak, allocator)?;
+    progress.report(boundary.progress(), Stage::Effects, 0, pixels)?;
+    let source = &call.scratch.buffers[0];
+    let steps = resolve_analyses(source, dimensions, request.effects, &request.context)
+        .map_err(|_| unavailable())?;
+    let image =
+        carrier_after(source, dimensions, &steps, &request.context).map_err(|_| unavailable())?;
+    let measurements = palette_fit_analysis::measure(&image, &request.context, space, look)
+        .map_err(|_| unavailable())?;
+    drop(image);
+    call.release_working_capacity(carrier);
+    progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
+    call.finish(progress.finish(Ok(measurements), boundary.progress()))
+}
+
 /// Each pixel's strength for `mask` on a step appended to `request.effects`, as grey.
 /// The source snapshot follows `run`; the continuous carrier is charged while it lives.
 #[allow(clippy::too_many_arguments)]

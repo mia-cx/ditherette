@@ -23,6 +23,7 @@
 		ditherSettings,
 		outputSettings,
 		previewSettings,
+		shareExportData,
 		updateDitherSettings,
 		updateOutputSettings,
 		updatePreviewSettings,
@@ -129,6 +130,15 @@
 				<MenubarItem disabled={!$exportable} onSelect={exportPng}>
 					Export PNG<MenubarShortcut>{command('E')}</MenubarShortcut>
 				</MenubarItem>
+				<MenubarSeparator />
+				<MenubarCheckboxItem
+					checked={$shareExportData}
+					onCheckedChange={(checked) => shareExportData.set(checked)}
+					>Share anonymous export data</MenubarCheckboxItem
+				>
+				<MenubarItem disabled class="text-xs text-muted-foreground"
+					>Sends settings and colour measurements, never the image.</MenubarItem
+				>
 				<MenubarSeparator />
 				<MenubarItem variant="destructive" disabled={!hasImage} onSelect={onClear}>
 					Clear image

@@ -39,6 +39,9 @@ export const outputSettings = persistentJSON<OutputSettings>('ditherette:output'
 	scaleFactor: 1
 });
 
+/** Whether exports post the anonymous settings-and-measurements event. */
+export const shareExportData = persistentJSON<boolean>('ditherette:share-export-data', true);
+
 export const ditherSettings = persistentJSON<DitherSettings>('ditherette:dither', {
 	algorithm: 'none',
 	strength: 100,

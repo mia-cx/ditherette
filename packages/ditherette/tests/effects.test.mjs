@@ -1199,3 +1199,31 @@ function after_fit(processor) {
 		context: fitContext
 	});
 }
+
+test('measurePaletteFit agrees with the curves it measures', () =>
+	withProcessor((processor) => {
+		const request = {
+			version: 1,
+			source: ramp(),
+			effects: [],
+			look: 'fitted',
+			space: 'oklab',
+			context: fitContext
+		};
+		const m = processor.measurePaletteFit(request);
+		assert.ok(m);
+		assert.equal(m.toneQuantiles.length, 5);
+		assert.equal(m.reach.length, 5);
+		assert.ok(m.reach.every((row) => row.length === 12));
+		const curves = processor.analyzePaletteFit(request);
+		// The tone remap's interior knots sit exactly at the measured quantiles.
+		const tone = curves.find((curve) => curve.kind === 'remap' && curve.x.channel === 'lightness');
+		if (tone)
+			assert.deepEqual(
+				tone.points.slice(1, -1).map(([x]) => x),
+				[...m.toneQuantiles]
+			);
+		// A fit with nothing to measure returns null, like an empty curve list.
+		const empty = { width: 2, height: 2, data: new Uint8Array(16) };
+		assert.equal(processor.measurePaletteFit({ ...request, source: empty }), null);
+	}));

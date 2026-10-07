@@ -3,6 +3,9 @@ import type {
 	Ditherette,
 	Effect,
 	EffectContext,
+	FitLook,
+	FitMeasurements,
+	PaletteFitSpace,
 	RecolourRecipe,
 	Rgba8Image
 } from 'ditherette';
@@ -64,4 +67,49 @@ export function resolveRecipes(
 		fits?.push({ index, curves });
 		return { ...step, curves: [...curves] };
 	});
+}
+
+/** One palette-fit step's state for the export event, by its position in `effects`. */
+export interface MeasuredFit {
+	readonly index: number;
+	readonly look: FitLook;
+	readonly space: PaletteFitSpace;
+	readonly edited: boolean;
+	readonly measurements: FitMeasurements | null;
+}
+
+/**
+ * Measure every palette-fit step in `effects` on the cropped source after the steps before it,
+ * resolved exactly like `resolveRecipes`. The measurements feed the export event; they are
+ * diagnostic only and never enter the output.
+ */
+export function measureFits(
+	ditherette: Ditherette,
+	image: Rgba8Image,
+	effects: readonly Effect[],
+	context: Required<EffectContext>,
+	crop: CropRect | undefined,
+	analyses = new Map<string, RecolourRecipe | readonly Curve[]>()
+): MeasuredFit[] {
+	const resolved = resolveRecipes(ditherette, image, effects, context, crop, analyses);
+	const source = croppedSource(image, crop);
+	const fits: MeasuredFit[] = [];
+	effects.forEach((step, index) => {
+		if (step.effect !== 'palette-fit') return;
+		fits.push({
+			index,
+			look: step.look,
+			space: step.space,
+			edited: step.curves !== null,
+			measurements: ditherette.measurePaletteFit({
+				version: 1,
+				source,
+				effects: resolved.slice(0, index),
+				look: step.look,
+				space: step.space,
+				context
+			})
+		});
+	});
+	return fits;
 }
