@@ -79,7 +79,12 @@
 	}
 
 	function chooseLook(look: string) {
-		if (!look || look === step.look) return;
+		// Re-clicking the selected look writes ''; keep the current look checked instead.
+		if (!look) {
+			lookChoice = step.look;
+			return;
+		}
+		if (look === step.look) return;
 		if (step.curves === null) {
 			onchange({ ...step, look: look as FitLook, curves: null });
 		} else {

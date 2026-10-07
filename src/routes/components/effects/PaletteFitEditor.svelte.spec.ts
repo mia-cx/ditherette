@@ -113,6 +113,15 @@ it('picks a look without asking while unedited', async () => {
 	await expect.element(page.getByText('Your curve edits will be lost.')).not.toBeInTheDocument();
 });
 
+it('keeps the selected look checked when it is clicked again', async () => {
+	await editor();
+	const fitted = page.getByRole('radio', { name: 'Fitted' });
+	await expect.element(fitted).toHaveAttribute('aria-checked', 'true');
+	await fitted.click();
+	expect(emitted).toHaveLength(0);
+	await expect.element(fitted).toHaveAttribute('aria-checked', 'true');
+});
+
 it('asks once before changing look on an edited fit, and cancels', async () => {
 	step = { ...step, curves: [...analysed] };
 	await editor();
