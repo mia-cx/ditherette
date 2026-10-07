@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Curve, CurvesEffect, PaletteFitEffect, PaletteFitSpace } from 'ditherette';
+	import type { CurvesEffect, PaletteFitEffect, PaletteFitSpace } from 'ditherette';
 	import {
 		AlertDialog,
 		AlertDialogAction,
@@ -12,7 +12,11 @@
 	} from '$lib/components/ui/alert-dialog';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
-	import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '$lib/components/ui/collapsible';
+	import {
+		Collapsible,
+		CollapsibleContent,
+		CollapsibleTrigger
+	} from '$lib/components/ui/collapsible';
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
@@ -34,6 +38,9 @@
 	let expanded = $state(false);
 	/** A pending space switch that would discard edited curves. */
 	let confirmSpace = $state<PaletteFitSpace | undefined>();
+	let confirmOpen = $state(false);
+	/** The space select's shown value; cancelled confirmations must snap it back. */
+	let spaceChoice = $derived<PaletteFitSpace>(step.space);
 
 	const spaceLabel = (space: PaletteFitSpace) =>
 		FIT_SPACES.find((option) => option.id === space)!.label;
@@ -57,13 +64,21 @@
 			onchange({ ...step, space: space as PaletteFitSpace });
 		} else {
 			confirmSpace = space as PaletteFitSpace;
+			confirmOpen = true;
 		}
+	}
+
+	function closeConfirm() {
+		confirmOpen = false;
+		confirmSpace = undefined;
+		spaceChoice = step.space;
 	}
 
 	function reanalyse() {
 		const space = confirmSpace;
 		confirmSpace = undefined;
 		if (space) onchange({ ...step, space, curves: null });
+		else closeConfirm();
 	}
 </script>
 
@@ -71,8 +86,8 @@
 	<NumberFieldsEditor {id} {step} fields={NUMBER_FIELDS['palette-fit']} {onchange} />
 	<div class="grid gap-1.5">
 		<Label for="{id}-space">Space</Label>
-		<Select type="single" value={step.space} onValueChange={chooseSpace}>
-			<SelectTrigger id="{id}-space" class="w-full">{spaceLabel(step.space)}</SelectTrigger>
+		<Select type="single" bind:value={spaceChoice} onValueChange={chooseSpace}>
+			<SelectTrigger id="{id}-space" class="w-full">{spaceLabel(spaceChoice)}</SelectTrigger>
 			<SelectContent>
 				{#each FIT_SPACES as space (space.id)}
 					<SelectItem value={space.id}>{space.label}</SelectItem>
@@ -102,11 +117,7 @@
 			</CollapsibleTrigger>
 			{#if step.curves !== null}
 				<Badge variant="secondary">Edited</Badge>
-				<Button
-					variant="outline"
-					size="sm"
-					onclick={() => onchange({ ...step, curves: null })}
-				>
+				<Button variant="outline" size="sm" onclick={() => onchange({ ...step, curves: null })}>
 					Reset
 				</Button>
 			{/if}
@@ -120,7 +131,12 @@
 		</CollapsibleContent>
 	</Collapsible>
 
-	<AlertDialog open={confirmSpace !== undefined}>
+	<AlertDialog
+		bind:open={confirmOpen}
+		onOpenChange={(open) => {
+			if (!open) closeConfirm();
+		}}
+	>
 		<AlertDialogContent>
 			<AlertDialogHeader>
 				<AlertDialogTitle
@@ -129,7 +145,7 @@
 				<AlertDialogDescription>Your curve edits will be lost.</AlertDialogDescription>
 			</AlertDialogHeader>
 			<AlertDialogFooter>
-				<AlertDialogCancel onclick={() => (confirmSpace = undefined)}>Cancel</AlertDialogCancel>
+				<AlertDialogCancel>Cancel</AlertDialogCancel>
 				<AlertDialogAction onclick={reanalyse}>Re-analyse</AlertDialogAction>
 			</AlertDialogFooter>
 		</AlertDialogContent>

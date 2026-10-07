@@ -78,8 +78,9 @@ export function maskInputs(layers: readonly EffectLayer[], layerId: string | und
 }
 
 /**
- * What a compile depends on. Only palette fit reads the palette and working space, and only one
- * without a recipe reads the (cropped) image, so other edits keep the key.
+ * What a compile depends on. Analysis steps (a recolour without a recipe, a palette fit without
+ * curves) read the palette and the cropped image, and a recolour always reads the working space —
+ * everything else in the key is just the steps, so other edits keep it.
  */
 export function effectsKey(
 	effects: readonly Effect[],
@@ -92,11 +93,17 @@ export function effectsKey(
 	const analysing = (step: Effect) =>
 		(step.effect === 'recolour' && step.recipe === null) ||
 		(step.effect === 'palette-fit' && step.curves === null);
-	// A recolour always reads the context (its space); a palette fit reads the palette only
-	// while it analyses, and the cropped image only while it analyses.
-	const readsContext = analyses.some((step) => step.effect === 'recolour' || analysing(step));
-	const readsImage = analyses.some(analysing);
-	return JSON.stringify([effects, readsContext && context, readsImage && (crop ?? null)]);
+	// Analysing steps read the palette and the cropped image; only recolour reads the context's
+	// working space, and a palette fit's own space is part of the step already.
+	const readsPalette = analyses.some(analysing);
+	const readsSpace = analyses.some((step) => step.effect === 'recolour');
+	const readsImage = readsPalette;
+	return JSON.stringify([
+		effects,
+		readsPalette && context.palette,
+		readsSpace && context.space,
+		readsImage && (crop ?? null)
+	]);
 }
 
 /** The key the current settings compile under. */

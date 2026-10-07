@@ -3,8 +3,9 @@ import type { CropRect } from '$lib/processing/types';
 
 /**
  * The inputs a palette fit analysed: the selected palette (name and enabled colours), the crop,
- * and the enabled steps before it. `before` elements need only carry their step — callers pass
- * layers, tests pass plain holders.
+ * and the steps before it. `before` keeps every layer so a restore re-adds disabled ones;
+ * the fingerprint reads only the enabled steps. Elements need only carry their step — callers
+ * pass layers, tests pass plain holders.
  */
 export interface FitInputs<B extends { readonly step: Effect } = { readonly step: Effect }> {
 	readonly paletteName: string;
@@ -20,7 +21,7 @@ export function fitFingerprint(inputs: FitInputs): string {
 		inputs.paletteName,
 		inputs.enabled,
 		inputs.crop ?? null,
-		inputs.before.map((layer) => layer.step)
+		inputs.before.filter((layer) => layer.step.enabled !== false).map((layer) => layer.step)
 	]);
 }
 

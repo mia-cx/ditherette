@@ -1,5 +1,4 @@
 import { atom } from 'nanostores';
-import type { Curve } from 'ditherette';
 import { paletteColorEnabled, paletteEnabledKey } from '$lib/palette/wplace';
 import {
 	activePalette,
@@ -40,7 +39,7 @@ function currentInputs(layers: readonly EffectLayer[], at: number): FitLayerInpu
 			])
 		),
 		crop: outputSettings.get().crop,
-		before: layers.slice(0, at).filter((layer) => layer.step.enabled)
+		before: layers.slice(0, at)
 	};
 }
 
@@ -71,7 +70,7 @@ function check() {
 		if (layer.step.curves === null) {
 			// Track whatever it analyses under now; a pending offer dies on the next change.
 			states.set(layer.id, { inputs });
-			if (!same && fitReverts.get().has(layer.id)) drops.push(layer.id);
+			if (state && !same && fitReverts.get().has(layer.id)) drops.push(layer.id);
 			return;
 		}
 		if (!state) {

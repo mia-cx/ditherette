@@ -13,6 +13,7 @@ import {
 	compiledEffects,
 	compiledEffectsFor,
 	currentEffectsKey,
+	effectsKey,
 	effectsIndex,
 	maskInputs,
 	shownMask,
@@ -216,5 +217,49 @@ describe('live effects', () => {
 		expect(fresh.messages.map((message) => message.type)).toEqual(['source', 'compile']);
 		fresh.reply(new Uint32Array([3]));
 		await expect(retried).resolves.toEqual(new Uint32Array([3]));
+	});
+});
+
+describe('effectsKey for palette fit', () => {
+	const context = { palette: [], space: 'oklab' as const };
+	const crop = { x: 0, y: 0, width: 2, height: 2 };
+	const analysing = {
+		effect: 'palette-fit' as const,
+		enabled: true,
+		look: 'fitted' as const,
+		space: 'oklab' as const,
+		strength: 1,
+		curves: null
+	};
+	const edited = {
+		...analysing,
+		curves: [
+			{
+				kind: 'remap' as const,
+				x: { model: 'oklch' as const, channel: 'lightness' as const },
+				y: { model: 'oklch' as const, channel: 'lightness' as const },
+				points: [
+					[0, 0],
+					[1, 1]
+				] as [number, number][]
+			}
+		]
+	};
+
+	it('reads the palette and crop while analysing, and neither once edited', () => {
+		const key = effectsKey([analysing], context, crop);
+		const otherPalette = {
+			palette: [{ kind: 'color' as const, rgb: [0, 0, 0] as const }],
+			space: 'oklab' as const
+		};
+		expect(effectsKey([analysing], otherPalette, crop)).not.toBe(key);
+		expect(effectsKey([analysing], context, undefined)).not.toBe(key);
+		expect(effectsKey([analysing], context, crop)).toBe(key);
+
+		const locked = effectsKey([edited], context, crop);
+		expect(effectsKey([edited], otherPalette, crop)).toBe(locked);
+		expect(effectsKey([edited], context, undefined)).toBe(locked);
+		// Space is the step's own, so the context's space never matters.
+		expect(effectsKey([analysing], { ...context, space: 'cielab' as const }, crop)).toBe(key);
 	});
 });
