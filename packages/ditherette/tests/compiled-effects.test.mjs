@@ -213,6 +213,18 @@ test('compileEffects asks for a palette fit recipe instead of analysing colours'
 				}),
 			(error) => error instanceof DitheretteError && error.path === 'effects.0.curves'
 		);
+		// Disabled steps need nothing resolved: an unresolved recipe or curve list still
+		// validates and compiles while disabled.
+		for (const name of ['palette fit', 'curve fit'])
+			assert.ok(
+				compileEffects(processor, {
+					version: 1,
+					colours,
+					effects: CHAINS[name].map((step) => ({ ...step, enabled: false })),
+					context
+				}),
+				`disabled ${name}`
+			);
 	}));
 
 test('applyCompiledEffects writes into a reused buffer of the right size', () => {

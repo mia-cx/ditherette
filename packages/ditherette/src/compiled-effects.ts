@@ -94,8 +94,9 @@ function perColour(
 ): Uint32Array {
 	const unresolved = effects.findIndex(
 		(step) =>
-			(step.effect === 'recolour' && step.recipe === null) ||
-			(step.effect === 'palette-fit' && step.curves === null)
+			step.enabled &&
+			((step.effect === 'recolour' && step.recipe === null) ||
+				(step.effect === 'palette-fit' && step.curves === null))
 	);
 	if (unresolved >= 0)
 		throw new DitheretteError(
