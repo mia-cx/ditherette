@@ -9,7 +9,7 @@ this writes ordinary curves a caller can inspect and edit.
 ## Inputs and outputs
 
 An `EffectImage` (the image reaching the step), a context supplying the palette, the step's
-`space`, and its `look`. Returns a `Vec<Curve>` — `[]` when there is nothing to fit.
+`space`, and its `look`. Returns a `Vec<Curve>`: `[]` when there is nothing to fit.
 
 ## Algorithm / semantic rule
 

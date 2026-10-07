@@ -1866,7 +1866,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit_analysis.md",
 						"mode": "100644",
-						"sha256": "2998dab2b2a85a9f1e50310ac75976a12f178ea749d20e0bc8b12addf6982ee3"
+						"sha256": "b4dfed22615b26785135a188eb4beb6ff0749522e5b96c18deb301311363430b"
 					}
 				},
 				{
@@ -1905,7 +1905,7 @@
 					}
 				}
 			],
-			"contentSha256": "c10ca0b294f252195b7290cc7ccf16b0eb8290895efd8ba1282fea0b9c0eb157"
+			"contentSha256": "f618ab2b9d178eca9268a9ea184ee94e6e6b01b6930b904d97edb4f111578b6e"
 		}
 	]
 }
