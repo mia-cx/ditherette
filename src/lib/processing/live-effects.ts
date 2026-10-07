@@ -257,7 +257,6 @@ export function startLiveEffects() {
 	function stop() {
 		reset('The image changed.');
 		sources = new WeakMap();
-		session = undefined;
 	}
 
 	function crashed(event: Event) {
@@ -427,6 +426,7 @@ export function startLiveEffects() {
 	update();
 	return () => {
 		requestCompile = undefined;
+		session = undefined;
 		for (const unsubscribe of unsubscribers) unsubscribe();
 		stop();
 	};
