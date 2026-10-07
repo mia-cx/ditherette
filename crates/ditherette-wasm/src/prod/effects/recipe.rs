@@ -16,6 +16,7 @@ use super::{
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    palette_fit::PaletteFit,
     recolour::Recolour,
     white_balance::WhiteBalance,
 };
@@ -31,6 +32,7 @@ pub enum BuiltinEffect {
     WhiteBalance(WhiteBalance),
     HueSaturation(HueSaturation),
     Recolour(Recolour),
+    PaletteFit(PaletteFit),
 }
 
 /// One serialized chain entry: the effect's tagged object plus `enabled`.
@@ -46,6 +48,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.validate(path),
             Self::HueSaturation(effect) => effect.validate(path),
             Self::Recolour(effect) => effect.validate(path),
+            Self::PaletteFit(effect) => effect.validate(path),
         }
     }
 
@@ -62,6 +65,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.check_context(context, path),
             Self::HueSaturation(effect) => effect.check_context(context, path),
             Self::Recolour(effect) => effect.check_context(context, path),
+            Self::PaletteFit(effect) => effect.check_context(context, path),
         }
     }
 
@@ -74,6 +78,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.needs(),
             Self::HueSaturation(effect) => effect.needs(),
             Self::Recolour(effect) => effect.needs(),
+            Self::PaletteFit(effect) => effect.needs(),
         }
     }
 
@@ -86,6 +91,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.apply(image, context),
             Self::HueSaturation(effect) => effect.apply(image, context),
             Self::Recolour(effect) => effect.apply(image, context),
+            Self::PaletteFit(effect) => effect.apply(image, context),
         }
     }
 
@@ -106,6 +112,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.apply_masked(image, input, strengths, context),
             Self::HueSaturation(effect) => effect.apply_masked(image, input, strengths, context),
             Self::Recolour(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::PaletteFit(effect) => effect.apply_masked(image, input, strengths, context),
         }
     }
 
@@ -130,6 +137,9 @@ impl Effect for BuiltinEffect {
                 effect.map_prepared_masked(prepared, rgb, strength, context)
             }
             Self::Recolour(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
+            Self::PaletteFit(effect) => {
+                effect.map_prepared_masked(prepared, rgb, strength, context)
+            }
         }
     }
 
@@ -142,6 +152,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.per_channel(),
             Self::HueSaturation(effect) => effect.per_channel(),
             Self::Recolour(effect) => effect.per_channel(),
+            Self::PaletteFit(effect) => effect.per_channel(),
         }
     }
 
@@ -154,6 +165,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.map_channel(channel, value),
             Self::HueSaturation(effect) => effect.map_channel(channel, value),
             Self::Recolour(effect) => effect.map_channel(channel, value),
+            Self::PaletteFit(effect) => effect.map_channel(channel, value),
         }
     }
 
@@ -173,6 +185,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.map_prepared_channel(prepared, channel, value),
             Self::HueSaturation(effect) => effect.map_prepared_channel(prepared, channel, value),
             Self::Recolour(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::PaletteFit(effect) => effect.map_prepared_channel(prepared, channel, value),
         }
     }
 
@@ -185,6 +198,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.working_bytes(),
             Self::HueSaturation(effect) => effect.working_bytes(),
             Self::Recolour(effect) => effect.working_bytes(),
+            Self::PaletteFit(effect) => effect.working_bytes(),
         }
     }
 
@@ -197,6 +211,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.pointwise(),
             Self::HueSaturation(effect) => effect.pointwise(),
             Self::Recolour(effect) => effect.pointwise(),
+            Self::PaletteFit(effect) => effect.pointwise(),
         }
     }
 
@@ -209,6 +224,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.map_pixel(rgb, context),
             Self::HueSaturation(effect) => effect.map_pixel(rgb, context),
             Self::Recolour(effect) => effect.map_pixel(rgb, context),
+            Self::PaletteFit(effect) => effect.map_pixel(rgb, context),
         }
     }
 
@@ -221,6 +237,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.prepare_pointwise(),
             Self::HueSaturation(effect) => effect.prepare_pointwise(),
             Self::Recolour(effect) => effect.prepare_pointwise(),
+            Self::PaletteFit(effect) => effect.prepare_pointwise(),
         }
     }
 
@@ -238,6 +255,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.map_prepared(prepared, rgb, context),
             Self::HueSaturation(effect) => effect.map_prepared(prepared, rgb, context),
             Self::Recolour(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::PaletteFit(effect) => effect.map_prepared(prepared, rgb, context),
         }
     }
 
@@ -257,6 +275,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.map_prepared_linear(prepared, linear, context),
             Self::HueSaturation(effect) => effect.map_prepared_linear(prepared, linear, context),
             Self::Recolour(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::PaletteFit(effect) => effect.map_prepared_linear(prepared, linear, context),
         }
     }
 }

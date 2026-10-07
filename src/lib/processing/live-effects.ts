@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import type { Effect, EffectContext, MaskCurve } from 'ditherette';
+import type { Curve, Effect, EffectContext, MaskCurve } from 'ditherette';
 import { colorSpace, outputSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
 import { activeEffectSteps, effectLayers, type EffectLayer } from '$lib/stores/effects';
 import { packageEffectContext } from './package-adapter';
@@ -32,6 +32,8 @@ export type LiveEffectsResponse =
 			sourceId: number;
 			key: string;
 			results: Uint32Array;
+			/** Each palette-fit step's resolved curves, by index into `effects`. Only `compiled`. */
+			fits?: readonly { readonly index: number; readonly curves: readonly Curve[] }[];
 	  }
 	| {
 			type: 'failed' | 'mask-failed';
@@ -55,6 +57,15 @@ export const shownMask = atom<string | undefined>();
 export const compiledMask = atom<
 	{ source: ImageData; key: string; results: Uint32Array } | undefined
 >();
+/**
+ * The curves the effects worker last resolved, by their index in the compile's effects.
+ * Entries count only while their key matches the current settings — the layers read them by
+ * position, so a re-ordered pipeline maps each fit to its own analysis.
+ */
+export const analysedFits = atom<{
+	readonly key: string;
+	readonly byIndex: ReadonlyMap<number, readonly Curve[]>;
+}>({ key: '', byIndex: new Map() });
 
 /**
  * What showing a layer's mask needs: the enabled steps before the layer, which make the colours
@@ -71,17 +82,32 @@ export function maskInputs(layers: readonly EffectLayer[], layerId: string | und
 }
 
 /**
- * What a compile depends on. Only palette fit reads the palette and working space, and only one
- * without a recipe reads the (cropped) image, so other edits keep the key.
+ * What a compile depends on. Analysis steps (a recolour without a recipe, a palette fit without
+ * curves) read the palette and the cropped image, and a recolour always reads the working space.
+ * Everything else in the key is just the steps, so other edits keep it.
  */
 export function effectsKey(
 	effects: readonly Effect[],
 	context: Required<EffectContext>,
 	crop: CropRect | undefined
 ) {
-	const fits = effects.filter((step) => step.effect === 'recolour');
-	const analysed = fits.some((step) => step.recipe === null);
-	return JSON.stringify([effects, fits.length > 0 && context, analysed && (crop ?? null)]);
+	const analyses = effects.filter(
+		(step) => step.effect === 'recolour' || step.effect === 'palette-fit'
+	);
+	const analysing = (step: Effect) =>
+		(step.effect === 'recolour' && step.recipe === null) ||
+		(step.effect === 'palette-fit' && step.curves === null);
+	// Analysing steps read the palette and the cropped image; only recolour reads the context's
+	// working space, and a palette fit's own space is part of the step already.
+	const readsPalette = analyses.some(analysing);
+	const readsSpace = analyses.some((step) => step.effect === 'recolour');
+	const readsImage = readsPalette;
+	return JSON.stringify([
+		effects,
+		readsPalette && context.palette,
+		readsSpace && context.space,
+		readsImage && (crop ?? null)
+	]);
 }
 
 /** The key the current settings compile under. */
@@ -89,6 +115,25 @@ export function currentEffectsKey() {
 	const context = packageEffectContext(selectedPalette.get(), colorSpace.get());
 	return effectsKey(activeEffectSteps.get(), context, outputSettings.get().crop);
 }
+
+/** The analysed curves matching the current settings; anything else is still arriving. */
+export const resolvedFits = computed(
+	[analysedFits, effectLayers, selectedPalette, colorSpace, outputSettings],
+	(fits) => {
+		const resolved = new Map<string, readonly Curve[]>();
+		if (fits.key !== currentEffectsKey()) return resolved;
+		effectLayers
+			.get()
+			.filter((layer) => layer.step.enabled)
+			.forEach((layer, index) => {
+				if (layer.step.effect === 'palette-fit' && layer.step.curves === null) {
+					const curves = fits.byIndex.get(index);
+					if (curves) resolved.set(layer.id, curves);
+				}
+			});
+		return resolved;
+	}
+);
 
 /**
  * What the shown mask depends on: the steps before its layer and its curves. Layers with the same
@@ -153,17 +198,20 @@ export function startLiveEffects() {
 	/** The mask that last failed; it waits for new inputs, or for Show mask to turn off and on. */
 	let failedMask: { source: ImageData; key: string } | undefined;
 	let requestId = 0;
+	/** The effects each in-flight compile was sent, so its fit curves map back to layers. */
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
 	function reset(reason: string) {
 		worker?.terminate();
 		worker = undefined;
 		loaded = undefined;
+
 		busy = maskBusy = false;
 		failedMask = undefined;
 		effectsIndex.set(undefined);
 		compiledEffects.set(undefined);
 		compiledMask.set(undefined);
+		analysedFits.set({ key: '', byIndex: new Map() });
 		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
 	}
@@ -203,6 +251,7 @@ export function startLiveEffects() {
 			effectsIndex.set(undefined);
 			compiledEffects.set(undefined);
 			compiledMask.set(undefined);
+			analysedFits.set({ key: '', byIndex: new Map() });
 			worker.postMessage({
 				type: 'source',
 				sourceId: sourceId(source),
@@ -271,6 +320,13 @@ export function startLiveEffects() {
 			settle(current, data.key, new Error(data.message));
 		} else if (current && data.type === 'compiled') {
 			compiledEffects.set({ source: current, key: data.key, results: data.results });
+			// Publish only the curves for the settings that produced them, by their index in
+			// the sent steps; a stale reply's fits never sit editable under a current layer.
+			if (data.key === currentEffectsKey()) {
+				const byIndex = new Map<number, readonly Curve[]>();
+				data.fits?.forEach(({ index, curves }) => byIndex.set(index, curves));
+				analysedFits.set({ key: data.key, byIndex });
+			}
 			settle(current, data.key, data.results);
 		}
 		// Settings that moved on will never compile; their processing is superseded anyway.

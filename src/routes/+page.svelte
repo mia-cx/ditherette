@@ -31,6 +31,7 @@
 	import Studio from './components/studio/Studio.svelte';
 	import { startAutoProcessing } from '$lib/processing/client';
 	import { startLiveEffects } from '$lib/processing/live-effects';
+	import '$lib/stores/fit-revert';
 	import {
 		clearAllImageData,
 		isSourceSuperseded,

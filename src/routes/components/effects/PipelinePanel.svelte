@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { EFFECTS, EFFECT_KINDS, type EffectKind } from '$lib/effects/catalog';
+	import { ADDABLE_KINDS, EFFECTS, type EffectKind } from '$lib/effects/catalog';
 	import {
 		addEffect,
 		effectLayers,
@@ -18,6 +18,7 @@
 		DropdownMenuSeparator,
 		DropdownMenuTrigger
 	} from '$lib/components/ui/dropdown-menu';
+	import { Badge } from '$lib/components/ui/badge';
 	import VisibilityCheckbox from '../VisibilityCheckbox.svelte';
 	import EffectControls from './EffectControls.svelte';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDown';
@@ -96,7 +97,7 @@
 			{/snippet}
 		</DropdownMenuTrigger>
 		<DropdownMenuContent align="start" class="w-(--bits-dropdown-menu-anchor-width)">
-			{#each EFFECT_KINDS as kind (kind)}
+			{#each ADDABLE_KINDS as kind (kind)}
 				<DropdownMenuItem disabled={$effectStepsLeft < 1} onSelect={() => add(kind)}
 					>{EFFECTS[kind].label}</DropdownMenuItem
 				>
@@ -174,6 +175,9 @@
 									{/if}
 								{/if}
 								<span class="truncate">{layer.name}</span>
+								{#if layer.step.effect === 'palette-fit' && layer.step.curves !== null}
+									<Badge variant="secondary" class="shrink-0">Edited</Badge>
+								{/if}
 								{#if layer.name !== label && !layer.name.startsWith(label)}
 									<span class="truncate text-xs text-muted-foreground">{label}</span>
 								{/if}

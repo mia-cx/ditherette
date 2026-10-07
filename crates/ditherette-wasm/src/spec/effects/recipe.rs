@@ -16,6 +16,7 @@ use super::{
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    palette_fit::PaletteFit,
     recolour::Recolour,
     white_balance::WhiteBalance,
 };
@@ -31,6 +32,7 @@ pub enum BuiltinEffect {
     WhiteBalance(WhiteBalance),
     HueSaturation(HueSaturation),
     Recolour(Recolour),
+    PaletteFit(PaletteFit),
 }
 
 /// One serialized chain entry: the effect's tagged object plus `enabled`.
@@ -46,6 +48,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.validate(path),
             Self::HueSaturation(effect) => effect.validate(path),
             Self::Recolour(effect) => effect.validate(path),
+            Self::PaletteFit(effect) => effect.validate(path),
         }
     }
 
@@ -62,6 +65,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.check_context(context, path),
             Self::HueSaturation(effect) => effect.check_context(context, path),
             Self::Recolour(effect) => effect.check_context(context, path),
+            Self::PaletteFit(effect) => effect.check_context(context, path),
         }
     }
 
@@ -74,6 +78,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.needs(),
             Self::HueSaturation(effect) => effect.needs(),
             Self::Recolour(effect) => effect.needs(),
+            Self::PaletteFit(effect) => effect.needs(),
         }
     }
 
@@ -86,6 +91,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.apply(image, context),
             Self::HueSaturation(effect) => effect.apply(image, context),
             Self::Recolour(effect) => effect.apply(image, context),
+            Self::PaletteFit(effect) => effect.apply(image, context),
         }
     }
 
@@ -98,6 +104,7 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.apply_masked(image, context, mask),
             Self::HueSaturation(effect) => effect.apply_masked(image, context, mask),
             Self::Recolour(effect) => effect.apply_masked(image, context, mask),
+            Self::PaletteFit(effect) => effect.apply_masked(image, context, mask),
         }
     }
 }

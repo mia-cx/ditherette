@@ -70,5 +70,6 @@ export const NUMBER_FIELDS: {
 			track: track('black', `oklch(0.65 0.13 ${RED_HUE})`, 'white')
 		}
 	],
-	recolour: [{ key: 'strength', label: 'Strength', ...PERCENT, min: 0 }]
+	recolour: [{ key: 'strength', label: 'Strength', ...PERCENT, min: 0 }],
+	'palette-fit': [{ key: 'strength', label: 'Strength', ...PERCENT, min: 0 }]
 };

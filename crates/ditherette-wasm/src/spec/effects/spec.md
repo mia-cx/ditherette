@@ -42,6 +42,8 @@ Ordinary effects need neither. `process` derives both from its own palette and `
 | [hue_saturation.rs](hue_saturation.md) | Oklab hue, saturation, and lightness |
 | [recolour.rs](recolour.md) | Palette-aware recolouring: recipe, application, strength |
 | [recolour_analysis.rs](recolour_analysis.md) | Deterministic image-and-palette analysis |
+| [palette_fit.rs](palette_fit.md) | Palette fit: analysis written as editable curves, applied like `curves` |
+| [palette_fit_analysis.rs](palette_fit_analysis.md) | Deterministic analysis emitting a curve list |
 
 ## Domain model
 

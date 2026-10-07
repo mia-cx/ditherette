@@ -327,7 +327,8 @@ impl Processor {
         });
         let result = match preflight {
             Ok((source, key)) => {
-                let extra = super::effects::process_capacity_bytes(effects, source);
+                let extra = super::effects::process_capacity_bytes(effects, source)
+                    + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
                 let mut effected = super::effects::EffectedInput::new(
                     boundary, effects, context, source, key, previous,
                 );
@@ -377,7 +378,8 @@ impl Processor {
     ) -> Result<crate::prod::effects::recolour::RecolourRecipe, Failure> {
         self.require_ready()?;
         self.begin();
-        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
         let request = super::effects::EffectsRequest {
@@ -389,6 +391,62 @@ impl Processor {
         };
         let result = super::effects::analyze(
             request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+            &mut self.preparation,
+        );
+        let result = self.finish_call(result);
+        self.restore_analyses(analyses, result.is_ok());
+        result
+    }
+
+    /// Analyse the image a `palette-fit` step would receive: the source after `effects`.
+    /// The step's own `space` and `look` select the analysis.
+    pub fn analyze_palette_fit<B: InputBoundary>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        space: crate::prod::effects::palette_fit::FitSpace,
+        look: crate::prod::effects::palette_fit::FitLook,
+        boundary: &mut B,
+    ) -> Result<Vec<crate::prod::effects::curves::Curve>, Failure> {
+        self.analyze_palette_fit_with_allocator(
+            request,
+            space,
+            look,
+            boundary,
+            &mut SystemAllocator,
+        )
+    }
+
+    /// Injectable reservations for palette-fit analysis. Only the curves leave the call.
+    pub fn analyze_palette_fit_with_allocator<B: InputBoundary, A: Allocator>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        space: crate::prod::effects::palette_fit::FitSpace,
+        look: crate::prod::effects::palette_fit::FitLook,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<Vec<crate::prod::effects::curves::Curve>, Failure> {
+        self.require_ready()?;
+        self.begin();
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
+        self.peak_capacity = overhead;
+        let analyses = std::mem::take(&mut self.analyses);
+        let request = super::effects::EffectsRequest {
+            context: crate::prod::effects::EffectContext {
+                analyses: Some(&analyses),
+                ..request.context
+            },
+            ..request
+        };
+        let result = super::effects::analyze_fit(
+            request,
+            space,
+            look,
             boundary,
             allocator,
             self.memory_limit,
@@ -462,7 +520,8 @@ impl Processor {
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
         self.begin();
-        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
         let request = super::effects::EffectsRequest {
@@ -496,7 +555,8 @@ impl Processor {
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
         self.begin();
-        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
         let request = super::effects::EffectsRequest {

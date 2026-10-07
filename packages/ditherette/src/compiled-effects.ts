@@ -93,13 +93,18 @@ function perColour(
 	apply: (source: Rgba8Image) => Rgba8Image
 ): Uint32Array {
 	const unresolved = effects.findIndex(
-		(step) => step.effect === 'recolour' && step.recipe === null
+		(step) =>
+			step.enabled &&
+			((step.effect === 'recolour' && step.recipe === null) ||
+				(step.effect === 'palette-fit' && step.curves === null))
 	);
 	if (unresolved >= 0)
 		throw new DitheretteError(
 			'invalid-request',
-			`effects.${unresolved}.recipe`,
-			'Palette fit needs a recipe; derive one with analyzeRecolour.'
+			`effects.${unresolved}.${effects[unresolved]!.effect === 'palette-fit' ? 'curves' : 'recipe'}`,
+			effects[unresolved]!.effect === 'palette-fit'
+				? 'Palette fit needs its curves; derive them with analyzePaletteFit.'
+				: 'Palette fit needs a recipe; derive one with analyzeRecolour.'
 		);
 	const results = new Uint32Array(colours.length);
 	if (!colours.length) return results;

@@ -102,6 +102,7 @@ function processorMock() {
 		applyEffects: vi.fn(),
 		effectMask: vi.fn(),
 		analyzeRecolour: vi.fn(),
+		analyzePaletteFit: vi.fn(),
 		dispose: vi.fn()
 	};
 }

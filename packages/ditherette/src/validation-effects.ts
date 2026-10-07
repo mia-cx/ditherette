@@ -536,6 +536,29 @@ const builtins: Record<string, Builtin> = {
 				recipe: recipe === null ? null : recolourRecipe(recipe, `${path}.recipe`)
 			};
 		}
+	},
+	'palette-fit': {
+		keys: ['look', 'space', 'strength', 'curves'],
+		needs: (effect) => ({ palette: effect.curves === null, space: false }),
+		normalize: (effect, path) => {
+			const look = field(effect, 'look');
+			if (look !== 'fitted')
+				throw new DitheretteError('invalid-settings', `${path}.look`, 'Unknown look.');
+			const space = field(effect, 'space');
+			if (space !== 'oklab' && space !== 'cielab')
+				throw new DitheretteError(
+					'invalid-settings',
+					`${path}.space`,
+					'Palette fit analyses in oklab or cielab.'
+				);
+			const list = field(effect, 'curves');
+			return {
+				look,
+				space,
+				strength: bounded(field(effect, 'strength'), 0, 1, `${path}.strength`),
+				curves: list === null ? null : curves(list, `${path}.curves`)
+			};
+		}
 	}
 };
 
@@ -627,6 +650,52 @@ export function requireContext(
 				'The recipe was analysed in a different working space than this context.'
 			);
 	}
+}
+
+const fitLooks = ['fitted'];
+const fitSpaces = ['oklab', 'cielab'];
+
+/**
+ * Normalize `analyzePaletteFit`: an `applyEffects` request plus the step's own `look` and
+ * `space`, whose context must hold a visible palette colour; its space feeds the preceding steps.
+ */
+export function validateAnalyzePaletteFit(value: unknown) {
+	const request = object(
+		value,
+		['version', 'source', 'effects', 'look', 'space', 'context', 'onProgress'],
+		'invalid-request',
+		'request'
+	);
+	const look = field(request, 'look');
+	if (!fitLooks.includes(look as string))
+		throw new DitheretteError('invalid-settings', 'look', 'Unknown look.');
+	const space = field(request, 'space');
+	if (!fitSpaces.includes(space as string))
+		throw new DitheretteError(
+			'invalid-settings',
+			'space',
+			'Palette fit analyses in oklab or cielab.'
+		);
+	const input = validateApplyEffects({
+		version: field(request, 'version'),
+		source: field(request, 'source'),
+		effects: field(request, 'effects'),
+		context: field(request, 'context'),
+		onProgress: field(request, 'onProgress')
+	});
+	if (!input.palette?.some((code) => code !== TRANSPARENT_CODE))
+		throw new DitheretteError(
+			'invalid-request',
+			'context.palette',
+			'Analysis requires a visible palette colour.'
+		);
+	return {
+		...input,
+		look: fitLooks.indexOf(look as string),
+		// The step's own space tag; the context space the preceding steps read stays `input.space`.
+		contextSpace: input.space,
+		space: spaces.indexOf(space as string)
+	};
 }
 
 /** Normalize `analyzeRecolour`: an `applyEffects` request whose context must hold a colour and a space. */

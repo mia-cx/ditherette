@@ -156,6 +156,72 @@ pub fn private_analyze_recolour(
     result.map_or_else(status, |()| 0)
 }
 
+/// Analyses `input` after `effects` for a `palette-fit` step, which carries its own `space` and
+/// `look` tags; the context palette is required. `context_space` is what the preceding steps read;
+/// the fit itself keeps its own space. Success writes the curve list to the sink. `look` is 0 for
+/// `fitted`; `space` reuses the working-space tags but only accepts oklab and cielab.
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen(js_name = privateAnalyzePaletteFit)]
+pub fn private_analyze_palette_fit(
+    input: &Uint8Array,
+    source_width: f64,
+    source_height: f64,
+    effects: &str,
+    look: f64,
+    space: f64,
+    context_space: f64,
+    palette: &JsValue,
+    result_sink: &JsValue,
+) -> u32 {
+    let mut processor = match take_ready() {
+        Ok(processor) => processor,
+        Err(error) => return status(error),
+    };
+    let mut entries = [PaletteEntry::Transparent {}; PALETTE_SLOTS];
+    let result = (|| {
+        let (request, steps) = parse(
+            source_width,
+            source_height,
+            effects,
+            palette,
+            context_space,
+            &mut entries,
+        )?;
+        let look = match look {
+            0.0 => crate::prod::effects::palette_fit::FitLook::Fitted,
+            _ => {
+                return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Effects));
+            }
+        };
+        let space = match parse_space(space) {
+            Some(crate::prod::contract::request::WorkingSpace::Oklab) => {
+                crate::prod::effects::palette_fit::FitSpace::Oklab
+            }
+            Some(crate::prod::contract::request::WorkingSpace::Cielab) => {
+                crate::prod::effects::palette_fit::FitSpace::Cielab
+            }
+            _ => {
+                return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Effects));
+            }
+        };
+        let curves = processor.analyze_palette_fit(
+            EffectsRequest {
+                effects: &steps,
+                ..request
+            },
+            space,
+            look,
+            &mut JsBoundary::new(input, result_sink)?,
+        )?;
+        let text = serde_json::to_string(&curves)
+            .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
+        complete_recipe(&text, result_sink)
+            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Output))
+    })();
+    restore_ready(processor);
+    result.map_or_else(status, |()| 0)
+}
+
 /// Shared argument decoding. The returned request borrows `entries`; its effects are separate.
 fn parse<'a>(
     source_width: f64,

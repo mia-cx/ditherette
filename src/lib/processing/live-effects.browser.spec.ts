@@ -79,6 +79,35 @@ const CHAINS: Record<string, Effect[]> = {
 		{ effect: 'exposure', enabled: true, stops: -0.4 },
 		{ effect: 'recolour', enabled: true, strength: 0.8, recipe: null },
 		{ effect: 'hue-saturation', enabled: true, hue: 0, saturation: 0.2, lightness: 0 }
+	],
+	'legacy recolour before a palette fit': [
+		{ effect: 'recolour', enabled: true, strength: 0.8, recipe: null },
+		{
+			effect: 'palette-fit',
+			enabled: true,
+			look: 'fitted',
+			space: 'oklab',
+			strength: 1,
+			curves: null
+		}
+	],
+	'curve fit': [
+		{
+			effect: 'levels',
+			enabled: true,
+			channel: 'rgb',
+			input: { black: 0, white: 1 },
+			gamma: 1.2,
+			output: { black: 0, white: 1 }
+		},
+		{
+			effect: 'palette-fit',
+			enabled: true,
+			look: 'fitted',
+			space: 'oklab',
+			strength: 0.9,
+			curves: null
+		}
 	]
 };
 

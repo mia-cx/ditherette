@@ -1811,6 +1811,101 @@
 				}
 			],
 			"contentSha256": "bbeafff2800609582b8650a02d1bf204263bd819e533905e8a1b4bc0cd9e7772"
+		},
+		{
+			"name": "palette-fit",
+			"summary": "palette-fit: curve-list analysis and curves application",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "832ea728e858656d6e8407c52a3bfe2846ac2dbb6300f9c8f433c9609fa495e1"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "6880630415b1d73d72ea5a903981f110119c314274f7797b31feac7bd8503222"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+						"mode": "100644",
+						"sha256": "2fc24ffb29f5735ffc4bc26de8e0e9150494a922e957efd457a381e317d773d1"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+						"mode": "100644",
+						"sha256": "b5b6999de2df8bba63fd159f578607407aebceacd201102f653a30d2388baa3d"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.md",
+						"mode": "100644",
+						"sha256": "643ed363a19e424e0a7d6d680564e5f19c227fd124da6f1181f0a0d105936d2a"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.rs",
+						"mode": "100644",
+						"sha256": "f62a06731b7a92cc6eaac2e03aed3c681384d088f911a5cf066135591ea5b38d"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/palette_fit_analysis.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit_analysis.md",
+						"mode": "100644",
+						"sha256": "07dbfec33acd07d9143e303e506b4d430d58383c5224b9cb5891a04cea839481"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/palette_fit_analysis.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit_analysis.rs",
+						"mode": "100644",
+						"sha256": "feb0041e4eb69c295417759052660df98ed1629a9624b6c059b8657c79342571"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "94ecfacb3885bb65b14971e66d03ef9262d5e59aeea20d28ed96d2f6f08e638d"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "74318d8661a1cf92fdb981bbd1a5ba3922cffd18ac33b03da08c3102ed7901f6"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "b44ecfea74523fb5efa04e5af03d6e47d1bf2fefb6d525f7d14145661f14ff8a"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "ab6ebc084c70e4ad27c8a93d456079f919e6f1de6768b5484ae1e92a54545e17"
+					}
+				}
+			],
+			"contentSha256": "d048ce8458b1c42856957313562efabe66518eaeb6a17382546017fd79e390b2"
 		}
 	]
 }

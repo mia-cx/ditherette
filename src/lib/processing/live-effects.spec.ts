@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sourceImageData } from '$lib/stores/app';
+import { selectedPalette, setPaletteColorEnabled, sourceImageData } from '$lib/stores/app';
 import {
 	addEffect,
 	effectLayers,
+	moveEffect,
 	removeEffect,
 	setEffectEnabled,
 	setEffectMask,
@@ -10,9 +11,11 @@ import {
 } from '$lib/stores/effects';
 import { shownSource } from './effects-view.svelte';
 import {
+	resolvedFits,
 	compiledEffects,
 	compiledEffectsFor,
 	currentEffectsKey,
+	effectsKey,
 	effectsIndex,
 	maskInputs,
 	shownMask,
@@ -49,16 +52,20 @@ class ControlledWorker {
 					: { type: 'masked', id, sourceId, key, results: outcome }
 		} as MessageEvent<LiveEffectsResponse>);
 	}
-	/** Answer the latest compile. */
-	reply(results = new Uint32Array([1])) {
-		const request = this.compiles.at(-1)!;
+	/** Answer a compile request, the latest by default. */
+	reply(
+		results = new Uint32Array([1]),
+		fits?: { index: number; curves: readonly object[] }[],
+		request = this.compiles.at(-1)!
+	) {
 		this.onmessage?.({
 			data: {
 				type: 'compiled',
 				id: request.id,
 				sourceId: request.sourceId,
 				key: request.key,
-				results
+				results,
+				...(fits ? { fits } : {})
 			}
 		} as MessageEvent<LiveEffectsResponse>);
 	}
@@ -216,5 +223,162 @@ describe('live effects', () => {
 		expect(fresh.messages.map((message) => message.type)).toEqual(['source', 'compile']);
 		fresh.reply(new Uint32Array([3]));
 		await expect(retried).resolves.toEqual(new Uint32Array([3]));
+	});
+});
+
+describe('effectsKey for palette fit', () => {
+	const context = { palette: [], space: 'oklab' as const };
+	const crop = { x: 0, y: 0, width: 2, height: 2 };
+	const analysing = {
+		effect: 'palette-fit' as const,
+		enabled: true,
+		look: 'fitted' as const,
+		space: 'oklab' as const,
+		strength: 1,
+		curves: null
+	};
+	const edited = {
+		...analysing,
+		curves: [
+			{
+				kind: 'remap' as const,
+				x: { model: 'oklch' as const, channel: 'lightness' as const },
+				y: { model: 'oklch' as const, channel: 'lightness' as const },
+				points: [
+					[0, 0],
+					[1, 1]
+				] as [number, number][]
+			}
+		]
+	};
+
+	it('reads the palette and crop while analysing, and neither once edited', () => {
+		const key = effectsKey([analysing], context, crop);
+		const otherPalette = {
+			palette: [{ kind: 'color' as const, rgb: [0, 0, 0] as const }],
+			space: 'oklab' as const
+		};
+		expect(effectsKey([analysing], otherPalette, crop)).not.toBe(key);
+		expect(effectsKey([analysing], context, undefined)).not.toBe(key);
+		expect(effectsKey([analysing], context, crop)).toBe(key);
+
+		const locked = effectsKey([edited], context, crop);
+		expect(effectsKey([edited], otherPalette, crop)).toBe(locked);
+		expect(effectsKey([edited], context, undefined)).toBe(locked);
+		// Space is the step's own, so the context's space never matters.
+		expect(effectsKey([analysing], { ...context, space: 'cielab' as const }, crop)).toBe(key);
+	});
+});
+
+describe('analysed fits', () => {
+	const curves = [
+		{
+			kind: 'remap',
+			x: { model: 'oklch', channel: 'lightness' },
+			y: { model: 'oklch', channel: 'lightness' },
+			points: [
+				[0, 0],
+				[1, 1]
+			]
+		}
+	];
+	const other = [
+		{
+			kind: 'remap',
+			x: { model: 'oklch', channel: 'lightness' },
+			y: { model: 'oklch', channel: 'lightness' },
+			points: [
+				[0, 0.25],
+				[1, 0.75]
+			]
+		}
+	];
+
+	it('publishes curves under the layers that produced them, not the order at reply', () => {
+		const first = addEffect('palette-fit');
+		const second = addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
+		// Give the second fit distinct settings so the next compile keys differently.
+		const step = effectLayers.get().find((item) => item.id === second.id)!.step;
+		if (step.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+		updateEffect(second.id, { ...step, strength: 2 });
+		const request = worker.compiles.at(-1)!;
+		removeEffect(first.id);
+		// The two-fit reply lands stale after the removal: its curves publish under nothing,
+		// so the second fit reads them only once the matching compile answers.
+		worker.reply(new Uint32Array([1]), [{ index: 1, curves: other }], request);
+		expect(resolvedFits.get().size).toBe(0);
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves: other }]);
+		expect(resolvedFits.get().get(second.id)).toBe(other);
+	});
+
+	it.each([
+		['removing', () => removeEffect(effectLayers.get()[0]!.id)],
+		['disabling', () => setEffectEnabled(effectLayers.get()[0]!.id, false)],
+		['reordering', () => moveEffect(effectLayers.get()[0]!.id, 1)]
+	])('publishes no stale curves when a reply lands after %s a fit', (_name, change) => {
+		addEffect('palette-fit');
+		const second = addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		const step = effectLayers.get().find((item) => item.id === second.id)!.step;
+		if (step.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+		updateEffect(second.id, { ...step, strength: 2 });
+		const request = worker.compiles.at(-1)!;
+		change();
+		worker.reply(
+			new Uint32Array([1]),
+			[
+				{ index: 0, curves },
+				{ index: 1, curves }
+			],
+			request
+		);
+		expect(resolvedFits.get().size).toBe(0);
+		const next = worker.compiles.at(-1)!;
+		expect(next.key).not.toBe(request.key);
+		worker.reply(
+			new Uint32Array([1]),
+			[
+				{ index: 0, curves },
+				{ index: 1, curves }
+			],
+			next
+		);
+		expect(resolvedFits.get().size).toBeGreaterThan(0);
+	});
+
+	it('keeps each layer on the curves of the position it now holds', () => {
+		const first = addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
+		const second = addEffect('palette-fit');
+		worker.reply(new Uint32Array([1]), [
+			{ index: 0, curves },
+			{ index: 1, curves: other }
+		]);
+		expect(resolvedFits.get().get(first.id)).toBe(curves);
+		expect(resolvedFits.get().get(second.id)).toBe(other);
+
+		moveEffect(first.id, 1);
+		// Same steps in a new order: no new compile runs, and each layer now reads the
+		// curves for the position it occupies.
+		expect(worker.compiles.at(-1)).toBeDefined();
+		const count = worker.compiles.length;
+		expect(resolvedFits.get().get(first.id)).toBe(other);
+		expect(resolvedFits.get().get(second.id)).toBe(curves);
+		expect(worker.compiles).toHaveLength(count);
+	});
+
+	it('publishes no stale curves when the palette changes mid-compile', () => {
+		addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		const request = worker.compiles.at(-1)!;
+		const colour = selectedPalette.get().find((item) => item.rgb)!;
+		setPaletteColorEnabled(colour.key, false);
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }], request);
+		expect(resolvedFits.get().size).toBe(0);
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
+		expect(resolvedFits.get().size).toBe(1);
 	});
 });

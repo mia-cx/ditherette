@@ -962,3 +962,172 @@ test('masks validate their limits and curves with indexed paths', () =>
 		);
 		assert.ok(apply(processor, [{ ...grading.exposure, mask: [grid] }]));
 	}));
+
+const fit = (overrides = {}) => ({
+	effect: 'palette-fit',
+	enabled: true,
+	look: 'fitted',
+	space: 'oklab',
+	strength: 1,
+	curves: null,
+	...overrides
+});
+const fitContext = { palette };
+
+test('analyzePaletteFit returns editable curves that reproduce automatic palette fit', () =>
+	withProcessor((processor) => {
+		const curves = processor.analyzePaletteFit({
+			version: 1,
+			source: ramp(),
+			effects: [],
+			look: 'fitted',
+			space: 'oklab',
+			context: fitContext
+		});
+		assert.ok(Array.isArray(curves) && curves.length > 0 && curves.length <= 5);
+		const automatic = apply(processor, [fit({ strength: 0.7 })], { context: fitContext });
+		assert.deepEqual(
+			apply(processor, [fit({ strength: 0.7, curves })], { context: fitContext }).data,
+			automatic.data,
+			'explicit curves'
+		);
+		assert.deepEqual(
+			apply(processor, [{ effect: 'curves', enabled: true, curves }], {
+				context: fitContext
+			}).data,
+			apply(processor, [fit()], { context: fitContext }).data,
+			'strength 1 equals a curves step'
+		);
+		assert.deepEqual(
+			apply(processor, [fit({ strength: 0 })], { context: fitContext }).data,
+			ramp().data,
+			'strength 0 is a no-op'
+		);
+		// Analysis sees the image after earlier effects, and answers to palette and space.
+		const after = processor.analyzePaletteFit({
+			version: 1,
+			source: ramp(),
+			effects: [double],
+			look: 'fitted',
+			space: 'oklab',
+			context: fitContext
+		});
+		assert.deepEqual(
+			apply(processor, [double, fit({ curves: after })], { context: fitContext }).data,
+			apply(processor, [double, fit()], { context: fitContext }).data
+		);
+		assert.notDeepEqual(
+			processor.analyzePaletteFit({
+				version: 1,
+				source: ramp(),
+				effects: [],
+				look: 'fitted',
+				space: 'cielab',
+				context: fitContext
+			}),
+			curves
+		);
+		assert.notDeepEqual(
+			processor.analyzePaletteFit({
+				version: 1,
+				source: ramp(),
+				effects: [],
+				look: 'fitted',
+				space: 'oklab',
+				context: { palette: warm }
+			}),
+			curves
+		);
+	}));
+
+test('palette fit composes into process v2 and validates its fields', () =>
+	withProcessor((processor) => {
+		const recipe = { version: 2, effects: [fit()], ...terminal, match: 'oklab-euclidean' };
+		const composed = processor.process({ source: opaqueRamp(), palette, recipe });
+		const staged = processor.process({
+			source: apply(processor, [fit()], { source: opaqueRamp(), context: fitContext }),
+			palette,
+			recipe: { version: 1, ...terminal, match: 'oklab-euclidean' }
+		});
+		assert.deepEqual(composed, staged);
+		// An explicit list needs no palette at all.
+		apply(processor, [fit({ curves: after_fit(processor) })], { context: {} });
+		const fails = (run, code, path) =>
+			assert.throws(run, (error) => error.code === code && error.path === path, path);
+		fails(() => apply(processor, [fit()]), 'invalid-request', 'context.palette');
+		fails(() => apply(processor, [fit({ strength: 2 })]), 'invalid-settings', 'effects.0.strength');
+		fails(() => apply(processor, [fit({ look: 'natural' })]), 'invalid-settings', 'effects.0.look');
+		fails(
+			() => apply(processor, [fit({ space: 'hsv', curves: [] })]),
+			'invalid-settings',
+			'effects.0.space'
+		);
+		fails(
+			() => apply(processor, [fit({ curves: [43] })]),
+			'invalid-settings',
+			'effects.0.curves.0'
+		);
+		fails(
+			() =>
+				processor.analyzePaletteFit({
+					version: 1,
+					source: ramp(),
+					effects: [],
+					look: 'fitted',
+					space: 'oklab',
+					context: { palette: [] }
+				}),
+			'invalid-request',
+			'context.palette'
+		);
+		fails(
+			() =>
+				processor.analyzePaletteFit({
+					version: 1,
+					source: ramp(),
+					effects: [],
+					look: 'vivid',
+					space: 'oklab',
+					context: fitContext
+				}),
+			'invalid-settings',
+			'look'
+		);
+	}));
+
+test('analyzePaletteFit supplies the context space to preceding steps', () =>
+	withProcessor((processor) => {
+		// A recipe-less legacy recolour before the fit still analyses against the context space.
+		const curves = processor.analyzePaletteFit({
+			version: 1,
+			source: ramp(),
+			effects: [auto()],
+			look: 'fitted',
+			space: 'oklab',
+			context: { palette, space: 'oklab' }
+		});
+		assert.ok(curves.length > 0);
+		assert.throws(
+			() =>
+				processor.analyzePaletteFit({
+					version: 1,
+					source: ramp(),
+					effects: [auto()],
+					look: 'fitted',
+					space: 'oklab',
+					context: { palette }
+				}),
+			(error) => error.path === 'context.space' && error.code === 'invalid-request'
+		);
+	}));
+
+function after_fit(processor) {
+	return processor.analyzePaletteFit({
+		version: 1,
+		source: ramp(),
+		effects: [],
+		look: 'fitted',
+		space: 'oklab',
+		context: fitContext
+	});
+}
