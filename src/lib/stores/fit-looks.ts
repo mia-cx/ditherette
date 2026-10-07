@@ -8,7 +8,7 @@ import { effectLayers } from './effects';
  */
 export const looksApplied = atom<ReadonlyMap<string, readonly FitLook[]>>(new Map());
 
-effectLayers.listen((layers) => {
+effectLayers.subscribe((layers) => {
 	const live = new Set(layers.map((layer) => layer.id));
 	const next = new Map(looksApplied.get());
 	let changed = false;

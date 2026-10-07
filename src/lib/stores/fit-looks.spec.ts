@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addEffect, effectLayers, removeEffect, updateEffect } from './effects';
 import { looksApplied } from './fit-looks';
 import './fit-looks';
@@ -33,5 +33,22 @@ describe('looksApplied', () => {
 
 		removeEffect(fit.id);
 		expect(looksApplied.get().has(fit.id)).toBe(false);
+	});
+});
+
+describe('looksApplied seeding', () => {
+	it('seeds the look of a layer that existed before the module loaded', async () => {
+		vi.resetModules();
+		const effects = await import('./effects');
+		const { EFFECTS } = await import('$lib/effects/catalog');
+		effects.effectLayers.set([
+			{ id: 'pre', name: 'Palette fit', step: EFFECTS['palette-fit'].create() }
+		]);
+		const store = await import('./fit-looks');
+		expect(store.looksApplied.get().get('pre')).toEqual(['fitted']);
+		const step = effects.effectLayers.get()[0]!.step;
+		if (step.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+		effects.updateEffect('pre', { ...step, look: 'vivid' });
+		expect(store.looksApplied.get().get('pre')).toEqual(['fitted', 'vivid']);
 	});
 });
