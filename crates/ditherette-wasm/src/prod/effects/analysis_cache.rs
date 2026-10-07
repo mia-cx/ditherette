@@ -44,9 +44,9 @@ impl AnalysisCache {
         let recipe = size_of::<(Key, RecolourRecipe)>()
             + MAX_POINTS * size_of::<[f32; 2]>()
             + MAX_GROUPS * size_of::<Group>();
-        let fit = size_of::<(Key, Vec<Curve>)>()
-            + 5 * size_of::<Curve>()
-            + (MAX_POINTS * 2 + 48 + 16 * 48) * size_of::<f32>();
+        // Emitted lists hold at most 5 curves: a 13-point turn, a 7-point tone, two 2-point
+        // shifts, and a 12-by-5 gain grid.
+        let fit = size_of::<(Key, Vec<Curve>)>() + 5 * size_of::<Curve>() + 768;
         (3 * CAPACITY * (recipe + fit) + size_of::<Self>()) as u64
     }
 
