@@ -358,6 +358,7 @@ class Processor implements Ditherette {
 					input.effects.json,
 					input.look,
 					input.space,
+					input.contextSpace,
 					input.palette,
 					result
 				);

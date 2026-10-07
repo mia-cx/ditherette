@@ -424,7 +424,8 @@ export interface PaletteFitEffect extends StepEnvelope {
 
 /**
  * Analyse the image a palette-fit step would receive: `source` after `effects`.
- * `look` and `space` are the step's own; the context supplies only the palette.
+ * `look` and `space` are the step's own; the context supplies the palette, and its space is what
+ * the preceding steps read (a recipe-less `recolour` before the fit still requires it).
  */
 export interface AnalyzePaletteFitRequest {
 	readonly version: 1;
@@ -433,8 +434,14 @@ export interface AnalyzePaletteFitRequest {
 	readonly effects: readonly Effect[];
 	readonly look: FitLook;
 	readonly space: PaletteFitSpace;
-	/** The palette the fit should reach. Required. */
-	readonly context: { readonly palette: readonly PaletteEntry[] };
+	/**
+	 * The palette the fit should reach. Required. `space` is optional; the preceding steps read
+	 * it (for example a recipe-less `recolour`), while the fit's own analysis ignores it.
+	 */
+	readonly context: {
+		readonly palette: readonly PaletteEntry[];
+		readonly space?: WorkingSpace;
+	};
 	readonly onProgress?: (progress: Progress) => void;
 }
 

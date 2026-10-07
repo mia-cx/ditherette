@@ -80,6 +80,17 @@ const CHAINS: Record<string, Effect[]> = {
 		{ effect: 'recolour', enabled: true, strength: 0.8, recipe: null },
 		{ effect: 'hue-saturation', enabled: true, hue: 0, saturation: 0.2, lightness: 0 }
 	],
+	'legacy recolour before a palette fit': [
+		{ effect: 'recolour', enabled: true, strength: 0.8, recipe: null },
+		{
+			effect: 'palette-fit',
+			enabled: true,
+			look: 'fitted',
+			space: 'oklab',
+			strength: 1,
+			curves: null
+		}
+	],
 	'curve fit': [
 		{
 			effect: 'levels',

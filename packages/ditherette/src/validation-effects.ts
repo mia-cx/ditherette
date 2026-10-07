@@ -657,7 +657,7 @@ const fitSpaces = ['oklab', 'cielab'];
 
 /**
  * Normalize `analyzePaletteFit`: an `applyEffects` request plus the step's own `look` and
- * `space`, whose context must hold a visible palette colour but no space.
+ * `space`, whose context must hold a visible palette colour; its space feeds the preceding steps.
  */
 export function validateAnalyzePaletteFit(value: unknown) {
 	const request = object(
@@ -692,6 +692,8 @@ export function validateAnalyzePaletteFit(value: unknown) {
 	return {
 		...input,
 		look: fitLooks.indexOf(look as string),
+		// The step's own space tag; the context space the preceding steps read stays `input.space`.
+		contextSpace: input.space,
 		space: spaces.indexOf(space as string)
 	};
 }

@@ -45,15 +45,9 @@ export function resolveRecipes(
 			fits?.push({ index, curves: step.curves });
 			return step;
 		}
-		// Analysis reads the image reaching the step, the palette, and the step's own space.
-		const key = JSON.stringify([
-			'fit',
-			preceding,
-			context.palette,
-			crop ?? null,
-			step.space,
-			step.look
-		]);
+		// Analysis reads the image the context produces reaching the step (palette and the
+		// context space the preceding steps use), plus the step's own space and look.
+		const key = JSON.stringify(['fit', preceding, context, crop ?? null, step.space, step.look]);
 		let curves = analyses.get(key) as readonly Curve[] | undefined;
 		if (!curves) {
 			const source = croppedSource(image, crop);
@@ -63,7 +57,7 @@ export function resolveRecipes(
 				effects: preceding,
 				look: step.look,
 				space: step.space,
-				context: { palette: context.palette }
+				context
 			});
 			analyses.set(key, curves);
 		}

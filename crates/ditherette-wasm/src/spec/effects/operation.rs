@@ -97,7 +97,7 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
 }
 
 /// Palette-fit analysis request: like `AnalyzeRequest`, plus the step's own `space` and `look`.
-/// The context's space is ignored; the step carries its own.
+/// The context's space serves the preceding steps; the fit's analysis carries its own.
 #[derive(Debug, Clone, Copy)]
 pub struct AnalyzePaletteFitRequest<'a> {
     pub version: u32,
@@ -109,7 +109,8 @@ pub struct AnalyzePaletteFitRequest<'a> {
 }
 
 /// Runs `effects` on the source, then derives the curve list a `palette-fit` step with this
-/// `space` and `look` appended to `effects` would use. The context supplies only the palette.
+/// `space` and `look` appended to `effects` would use. The context's palette feeds the analysis;
+/// its space feeds the preceding steps (a recipe-less `recolour` still requires it).
 pub fn analyze_palette_fit(
     request: AnalyzePaletteFitRequest<'_>,
 ) -> Result<Vec<Curve>, DitheretteError> {

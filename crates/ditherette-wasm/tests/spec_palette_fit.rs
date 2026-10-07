@@ -410,3 +410,29 @@ fn explicit_curves_ignore_the_context_but_their_fields_validate() {
     bad_space["space"] = json!("hsv");
     assert!(decode_effects(&json!([bad_space]).to_string()).is_err());
 }
+
+#[test]
+fn a_preceding_recolour_reads_the_context_space() {
+    // A recipe-less recolour before the fit still analyses: the context space belongs to it,
+    // not to the fit, which keeps its own space.
+    let data = sweep(0.9);
+    let preceding =
+        steps(json!([{ "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null }]));
+    let palette = wplace_free();
+    let analyze = |space: Option<WorkingSpace>| {
+        analyze_palette_fit(AnalyzePaletteFitRequest {
+            version: 1,
+            source: source(&data),
+            effects: &preceding,
+            context: EffectContext {
+                palette: &palette,
+                space,
+            },
+            space: FitSpace::Oklab,
+            look: FitLook::Fitted,
+        })
+    };
+    assert_eq!(analyze(None).unwrap_err().path, "context.space");
+    let curves = analyze(Some(WorkingSpace::Oklab)).unwrap();
+    assert!(!curves.is_empty());
+}

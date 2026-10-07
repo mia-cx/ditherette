@@ -157,9 +157,9 @@ pub fn private_analyze_recolour(
 }
 
 /// Analyses `input` after `effects` for a `palette-fit` step, which carries its own `space` and
-/// `look` tags; the context palette is required, its space is not. Success writes the curve list
-/// to the sink. `look` is 0 for `fitted`; `space` reuses the working-space tags but only accepts
-/// oklab and cielab.
+/// `look` tags; the context palette is required. `context_space` is what the preceding steps read;
+/// the fit itself keeps its own space. Success writes the curve list to the sink. `look` is 0 for
+/// `fitted`; `space` reuses the working-space tags but only accepts oklab and cielab.
 #[allow(clippy::too_many_arguments)]
 #[wasm_bindgen(js_name = privateAnalyzePaletteFit)]
 pub fn private_analyze_palette_fit(
@@ -169,6 +169,7 @@ pub fn private_analyze_palette_fit(
     effects: &str,
     look: f64,
     space: f64,
+    context_space: f64,
     palette: &JsValue,
     result_sink: &JsValue,
 ) -> u32 {
@@ -183,7 +184,7 @@ pub fn private_analyze_palette_fit(
             source_height,
             effects,
             palette,
-            NO_SPACE,
+            context_space,
             &mut entries,
         )?;
         let look = match look {

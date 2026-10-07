@@ -1814,7 +1814,7 @@
 		},
 		{
 			"name": "palette-fit",
-			"summary": "Palette fit: analysis writes editable curves, applied like the curves effect (#305).",
+			"summary": "palette-fit: curve-list analysis and curves application",
 			"changes": [
 				{
 					"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
@@ -1839,7 +1839,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
 						"mode": "100644",
-						"sha256": "33b76912c77490f6c2b99b2c50518e7cdcf274af4b5cdbeb7d5bb43092ce05aa"
+						"sha256": "b5b6999de2df8bba63fd159f578607407aebceacd201102f653a30d2388baa3d"
 					}
 				},
 				{
@@ -1866,7 +1866,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit_analysis.md",
 						"mode": "100644",
-						"sha256": "b4dfed22615b26785135a188eb4beb6ff0749522e5b96c18deb301311363430b"
+						"sha256": "07dbfec33acd07d9143e303e506b4d430d58383c5224b9cb5891a04cea839481"
 					}
 				},
 				{
@@ -1905,7 +1905,7 @@
 					}
 				}
 			],
-			"contentSha256": "f618ab2b9d178eca9268a9ea184ee94e6e6b01b6930b904d97edb4f111578b6e"
+			"contentSha256": "d048ce8458b1c42856957313562efabe66518eaeb6a17382546017fd79e390b2"
 		}
 	]
 }

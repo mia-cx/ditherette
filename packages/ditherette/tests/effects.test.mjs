@@ -1095,6 +1095,32 @@ test('palette fit composes into process v2 and validates its fields', () =>
 		);
 	}));
 
+test('analyzePaletteFit supplies the context space to preceding steps', () =>
+	withProcessor((processor) => {
+		// A recipe-less legacy recolour before the fit still analyses against the context space.
+		const curves = processor.analyzePaletteFit({
+			version: 1,
+			source: ramp(),
+			effects: [auto()],
+			look: 'fitted',
+			space: 'oklab',
+			context: { palette, space: 'oklab' }
+		});
+		assert.ok(curves.length > 0);
+		assert.throws(
+			() =>
+				processor.analyzePaletteFit({
+					version: 1,
+					source: ramp(),
+					effects: [auto()],
+					look: 'fitted',
+					space: 'oklab',
+					context: { palette }
+				}),
+			(error) => error.path === 'context.space' && error.code === 'invalid-request'
+		);
+	}));
+
 function after_fit(processor) {
 	return processor.analyzePaletteFit({
 		version: 1,
