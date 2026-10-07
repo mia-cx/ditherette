@@ -215,3 +215,35 @@ it('re-analyses every edited fit on one input change and offers Revert on each',
 	expect(restored.effect === 'palette-fit' && restored.curves).toEqual(edited);
 	expect(fitReverts.get().has(first.id)).toBe(true);
 });
+
+it('drops the offer when the fit itself is edited or re-looked; not for strength', () => {
+	const { layer } = fitLayer();
+	const step = () => {
+		const found = effectLayers.get().find((item) => item.id === layer.id)!.step;
+		if (found.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+		return found;
+	};
+	lock(layer.id);
+	updateOutputSettings({ crop: { x: 1, y: 1, width: 4, height: 4 } });
+	expect(fitReverts.get().has(layer.id)).toBe(true);
+
+	// A strength change keeps the pending offer.
+	updateEffect(layer.id, { ...step(), strength: 0.5 });
+	expect(fitReverts.get().has(layer.id)).toBe(true);
+
+	// A new curve edit on top of the re-analysed fit makes the offer stale.
+	updateEffect(layer.id, { ...step(), curves: [edited[0]!] });
+	expect(fitReverts.get().has(layer.id)).toBe(false);
+
+	// Resetting a freshly re-locked fit offers nothing to undo.
+	updateEffect(layer.id, { ...step(), curves: edited });
+	updateEffect(layer.id, { ...step(), curves: null });
+	expect(fitReverts.get().has(layer.id)).toBe(false);
+
+	// And a space switch drops a live offer.
+	updateEffect(layer.id, { ...step(), curves: edited });
+	updateOutputSettings({ crop: { x: 3, y: 3, width: 4, height: 4 } });
+	expect(fitReverts.get().has(layer.id)).toBe(true);
+	updateEffect(layer.id, { ...step(), space: 'cielab', curves: null });
+	expect(fitReverts.get().has(layer.id)).toBe(false);
+});

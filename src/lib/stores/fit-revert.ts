@@ -8,6 +8,7 @@ import {
 	sourceImageData,
 	updateOutputSettings
 } from './app';
+import type { PaletteFitEffect } from 'ditherette';
 import { effectLayers, type EffectLayer } from './effects';
 import {
 	decideLockedFit,
@@ -25,7 +26,10 @@ export type FitLayerRevert = FitRevert<EffectLayer>;
 export const fitReverts = atom<ReadonlyMap<string, FitLayerRevert>>(new Map());
 
 /** The inputs each fit last analysed or locked under, while its snapshot is tracked. */
-const states = new Map<string, FitState<EffectLayer>>();
+const states = new Map<string, FitState<EffectLayer> & { readonly signature: string }>();
+
+/** What a fit itself contributes to its offer: look, space, and the curve list. */
+const signature = (step: PaletteFitEffect) => JSON.stringify([step.look, step.space, step.curves]);
 
 function currentInputs(layers: readonly EffectLayer[], at: number): FitLayerInputs {
 	const palette = activePalette.get();
@@ -56,7 +60,9 @@ let restoring = false;
 /**
  * Re-check every palette fit after any input edit, decided against one snapshot of the layers.
  * A locked fit whose inputs changed re-analyses; a revertable change offers Revert, while an
- * unlocked fit with a pending offer drops it once its inputs move again.
+ * unlocked fit with a pending offer drops it once its inputs move again. The fit's own look,
+ * space, and curves are part of its state: editing, Resetting, or re-spacing the fit drops its
+ * offer, while strength, mask, enabled, and renames do not.
  */
 function check() {
 	if (restoring) return;
@@ -66,20 +72,36 @@ function check() {
 	const drops: string[] = [];
 	layers.forEach((layer, at) => {
 		if (layer.step.effect !== 'palette-fit') return;
+		const sig = signature(layer.step);
 		const state = states.get(layer.id);
 		const inputs = currentInputs(layers, at);
 		if (layer.step.curves === null) {
-			// Track whatever it analyses under now; a pending offer dies on the next change.
-			states.set(layer.id, { inputs });
-			if (state && fitFingerprint(state.inputs) !== fitFingerprint(inputs)) drops.push(layer.id);
+			// Track whatever it analyses under now; a pending offer dies on the next change to
+			// the fit or its inputs.
+			states.set(layer.id, { inputs, signature: sig });
+			if (
+				state &&
+				(state.signature !== sig || fitFingerprint(state.inputs) !== fitFingerprint(inputs))
+			)
+				drops.push(layer.id);
 			return;
 		}
 		if (!state) {
-			states.set(layer.id, { inputs });
+			states.set(layer.id, { inputs, signature: sig });
+			return;
+		}
+		if (state.signature !== sig) {
+			// The fit itself changed: re-edit, Reset, or a space/look switch. A stale offer
+			// would restore a fit that no longer exists, so it drops.
+			states.set(layer.id, { inputs, signature: sig });
+			drops.push(layer.id);
 			return;
 		}
 		const decision = decideLockedFit(layer.step.curves, state, inputs);
-		states.set(layer.id, decision.state);
+		states.set(layer.id, {
+			...decision.state,
+			signature: decision.action === 'reanalyse' ? signature({ ...layer.step, curves: null }) : sig
+		});
 		if (decision.action === 'reanalyse') {
 			changed.push({ ...layer, step: { ...layer.step, curves: null } });
 			const revert = decision.state.revert;
@@ -138,7 +160,13 @@ export function revertFit(layerId: string) {
 	const at = layers.findIndex((layer) => layer.id === layerId);
 	if (at < 0) return;
 	offers((map) => map.delete(layerId));
-	states.set(layerId, { inputs: revert.inputs });
+	// Track the restored step: the layer gets its edited curves and its own inputs back.
+	const step = layers[at]!.step;
+	if (step.effect !== 'palette-fit') return;
+	states.set(layerId, {
+		inputs: revert.inputs,
+		signature: signature({ ...step, curves: revert.curves })
+	});
 	restoring = true;
 	try {
 		// Restore the palette selection: active palette plus each colour's enabled flag.
