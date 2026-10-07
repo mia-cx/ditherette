@@ -58,13 +58,14 @@ export const compiledMask = atom<
 	{ source: ImageData; key: string; results: Uint32Array } | undefined
 >();
 /**
- * The curves the effects worker last resolved for each palette-fit layer, keyed by layer id.
- * Each entry carries the compile key it came from, so a stale reply's curves never look like
- * the current analysis. `resolvedFits` exposes only the entries matching the current settings.
+ * The curves the effects worker last resolved, by their index in the compile's effects.
+ * Entries count only while their key matches the current settings — the layers read them by
+ * position, so a re-ordered pipeline maps each fit to its own analysis.
  */
-export const analysedFits = atom<
-	ReadonlyMap<string, { readonly key: string; readonly curves: readonly Curve[] }>
->(new Map());
+export const analysedFits = atom<{
+	readonly key: string;
+	readonly byIndex: ReadonlyMap<number, readonly Curve[]>;
+}>({ key: '', byIndex: new Map() });
 
 /**
  * What showing a layer's mask needs: the enabled steps before the layer, which make the colours
@@ -117,13 +118,19 @@ export function currentEffectsKey() {
 
 /** The analysed curves matching the current settings; anything else is still arriving. */
 export const resolvedFits = computed(
-	[analysedFits, activeEffectSteps, selectedPalette, colorSpace, outputSettings],
+	[analysedFits, effectLayers, selectedPalette, colorSpace, outputSettings],
 	(fits) => {
-		const key = currentEffectsKey();
 		const resolved = new Map<string, readonly Curve[]>();
-		for (const [layerId, entry] of fits) {
-			if (entry.key === key) resolved.set(layerId, entry.curves);
-		}
+		if (fits.key !== currentEffectsKey()) return resolved;
+		effectLayers
+			.get()
+			.filter((layer) => layer.step.enabled)
+			.forEach((layer, index) => {
+				if (layer.step.effect === 'palette-fit' && layer.step.curves === null) {
+					const curves = fits.byIndex.get(index);
+					if (curves) resolved.set(layer.id, curves);
+				}
+			});
 		return resolved;
 	}
 );
@@ -192,20 +199,19 @@ export function startLiveEffects() {
 	let failedMask: { source: ImageData; key: string } | undefined;
 	let requestId = 0;
 	/** The effects each in-flight compile was sent, so its fit curves map back to layers. */
-	const pending = new Map<number, { effects: readonly Effect[]; layerIds: string[] }>();
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
 	function reset(reason: string) {
 		worker?.terminate();
 		worker = undefined;
 		loaded = undefined;
-		pending.clear();
+
 		busy = maskBusy = false;
 		failedMask = undefined;
 		effectsIndex.set(undefined);
 		compiledEffects.set(undefined);
 		compiledMask.set(undefined);
-		analysedFits.set(new Map());
+		analysedFits.set({ key: '', byIndex: new Map() });
 		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
 	}
@@ -245,7 +251,7 @@ export function startLiveEffects() {
 			effectsIndex.set(undefined);
 			compiledEffects.set(undefined);
 			compiledMask.set(undefined);
-			analysedFits.set(new Map());
+			analysedFits.set({ key: '', byIndex: new Map() });
 			worker.postMessage({
 				type: 'source',
 				sourceId: sourceId(source),
@@ -259,13 +265,6 @@ export function startLiveEffects() {
 		const current = compiledEffects.get();
 		if (effects.length && !busy && (current?.source !== source || current.key !== key)) {
 			busy = true;
-			// The layer ids of the steps being sent, so returned fit indices stay attached to
-			// the layers that produced them even if the list changes mid-flight.
-			const layerIds = effectLayers
-				.get()
-				.filter((layer) => layer.step.enabled)
-				.map((layer) => layer.id);
-			pending.set(requestId + 1, { effects, layerIds });
 			worker.postMessage({
 				type: 'compile',
 				id: ++requestId,
@@ -321,22 +320,15 @@ export function startLiveEffects() {
 			settle(current, data.key, new Error(data.message));
 		} else if (current && data.type === 'compiled') {
 			compiledEffects.set({ source: current, key: data.key, results: data.results });
-			// Each fit index names its position in the sent steps; count enabled fit layers in
-			// the same order the worker resolved them.
-			const sent = pending.get(data.id);
-			// Publish only the curves for the settings that produced them; a stale reply's
-			// fits would otherwise sit editable under a layer they no longer describe.
+			// Publish only the curves for the settings that produced them, by their index in
+			// the sent steps; a stale reply's fits never sit editable under a current layer.
 			if (data.key === currentEffectsKey()) {
-				const fits = new Map<string, { readonly key: string; readonly curves: readonly Curve[] }>();
-				data.fits?.forEach(({ index, curves }) => {
-					const layerId = sent?.layerIds[index];
-					if (layerId) fits.set(layerId, { key: data.key, curves });
-				});
-				analysedFits.set(fits);
+				const byIndex = new Map<number, readonly Curve[]>();
+				data.fits?.forEach(({ index, curves }) => byIndex.set(index, curves));
+				analysedFits.set({ key: data.key, byIndex });
 			}
 			settle(current, data.key, data.results);
 		}
-		pending.delete(data.id);
 		// Settings that moved on will never compile; their processing is superseded anyway.
 		const key = currentEffectsKey();
 		for (const waiter of waiters) {

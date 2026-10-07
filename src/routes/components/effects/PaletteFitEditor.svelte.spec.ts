@@ -41,7 +41,7 @@ beforeEach(async () => {
 	emitted = [];
 	fitReverts.set(new Map());
 	effectLayers.set([{ id: 'fit-1', name: 'Palette fit', step: EFFECTS['palette-fit'].create() }]);
-	analysedFits.set(new Map([['fit-1', { key: currentEffectsKey(), curves: analysed }]]));
+	analysedFits.set({ key: currentEffectsKey(), byIndex: new Map([[0, analysed]]) });
 });
 
 async function editor() {

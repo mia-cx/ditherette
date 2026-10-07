@@ -348,6 +348,28 @@ describe('analysed fits', () => {
 		expect(resolvedFits.get().size).toBeGreaterThan(0);
 	});
 
+	it('keeps each layer on the curves of the position it now holds', () => {
+		const first = addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
+		const second = addEffect('palette-fit');
+		worker.reply(new Uint32Array([1]), [
+			{ index: 0, curves },
+			{ index: 1, curves: other }
+		]);
+		expect(resolvedFits.get().get(first.id)).toBe(curves);
+		expect(resolvedFits.get().get(second.id)).toBe(other);
+
+		moveEffect(first.id, 1);
+		// Same steps in a new order: no new compile runs, and each layer now reads the
+		// curves for the position it occupies.
+		expect(worker.compiles.at(-1)).toBeDefined();
+		const count = worker.compiles.length;
+		expect(resolvedFits.get().get(first.id)).toBe(other);
+		expect(resolvedFits.get().get(second.id)).toBe(curves);
+		expect(worker.compiles).toHaveLength(count);
+	});
+
 	it('publishes no stale curves when the palette changes mid-compile', () => {
 		addEffect('palette-fit');
 		const worker = ControlledWorker.instances.at(-1)!;
