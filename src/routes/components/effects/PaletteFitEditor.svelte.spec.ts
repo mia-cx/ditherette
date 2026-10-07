@@ -3,7 +3,7 @@ import { beforeEach, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { EFFECTS } from '$lib/effects/catalog';
-import { analysedFits } from '$lib/processing/live-effects';
+import { analysedFits, currentEffectsKey } from '$lib/processing/live-effects';
 import { effectLayers } from '$lib/stores/effects';
 import { fitReverts } from '$lib/stores/fit-revert';
 import PaletteFitEditor from './PaletteFitEditor.svelte';
@@ -39,9 +39,9 @@ beforeEach(async () => {
 	await page.viewport(1440, 900);
 	step = EFFECTS['palette-fit'].create();
 	emitted = [];
-	analysedFits.set(new Map([['fit-1', analysed]]));
 	fitReverts.set(new Map());
 	effectLayers.set([{ id: 'fit-1', name: 'Palette fit', step: EFFECTS['palette-fit'].create() }]);
+	analysedFits.set(new Map([['fit-1', { key: currentEffectsKey(), curves: analysed }]]));
 });
 
 async function editor() {

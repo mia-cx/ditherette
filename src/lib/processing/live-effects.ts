@@ -59,9 +59,12 @@ export const compiledMask = atom<
 >();
 /**
  * The curves the effects worker last resolved for each palette-fit layer, keyed by layer id.
- * Edited fits echo their own list; a cleared source clears this.
+ * Each entry carries the compile key it came from, so a stale reply's curves never look like
+ * the current analysis. `resolvedFits` exposes only the entries matching the current settings.
  */
-export const analysedFits = atom<ReadonlyMap<string, readonly Curve[]>>(new Map());
+export const analysedFits = atom<
+	ReadonlyMap<string, { readonly key: string; readonly curves: readonly Curve[] }>
+>(new Map());
 
 /**
  * What showing a layer's mask needs: the enabled steps before the layer, which make the colours
@@ -111,6 +114,19 @@ export function currentEffectsKey() {
 	const context = packageEffectContext(selectedPalette.get(), colorSpace.get());
 	return effectsKey(activeEffectSteps.get(), context, outputSettings.get().crop);
 }
+
+/** The analysed curves matching the current settings; anything else is still arriving. */
+export const resolvedFits = computed(
+	[analysedFits, activeEffectSteps, selectedPalette, colorSpace, outputSettings],
+	(fits) => {
+		const key = currentEffectsKey();
+		const resolved = new Map<string, readonly Curve[]>();
+		for (const [layerId, entry] of fits) {
+			if (entry.key === key) resolved.set(layerId, entry.curves);
+		}
+		return resolved;
+	}
+);
 
 /**
  * What the shown mask depends on: the steps before its layer and its curves. Layers with the same
@@ -308,12 +324,16 @@ export function startLiveEffects() {
 			// Each fit index names its position in the sent steps; count enabled fit layers in
 			// the same order the worker resolved them.
 			const sent = pending.get(data.id);
-			const fits = new Map<string, readonly Curve[]>();
-			data.fits?.forEach(({ index, curves }) => {
-				const layerId = sent?.layerIds[index];
-				if (layerId) fits.set(layerId, curves);
-			});
-			analysedFits.set(fits);
+			// Publish only the curves for the settings that produced them; a stale reply's
+			// fits would otherwise sit editable under a layer they no longer describe.
+			if (data.key === currentEffectsKey()) {
+				const fits = new Map<string, { readonly key: string; readonly curves: readonly Curve[] }>();
+				data.fits?.forEach(({ index, curves }) => {
+					const layerId = sent?.layerIds[index];
+					if (layerId) fits.set(layerId, { key: data.key, curves });
+				});
+				analysedFits.set(fits);
+			}
 			settle(current, data.key, data.results);
 		}
 		pending.delete(data.id);

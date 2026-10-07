@@ -21,7 +21,7 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
 	import { FIT_SPACES } from '$lib/effects/catalog';
-	import { analysedFits } from '$lib/processing/live-effects';
+	import { resolvedFits } from '$lib/processing/live-effects';
 	import { fitReverts, revertFit } from '$lib/stores/fit-revert';
 	import CurvesEditor from './CurvesEditor.svelte';
 	import NumberFieldsEditor from './NumberFieldsEditor.svelte';
@@ -46,7 +46,7 @@
 		FIT_SPACES.find((option) => option.id === space)!.label;
 
 	/** The step's curves while edited, else the analysis the worker last resolved. */
-	const resolved = $derived(step.curves ?? $analysedFits.get(layerId));
+	const resolved = $derived(step.curves ?? $resolvedFits.get(layerId));
 	const curvesStep = $derived<CurvesEffect>({
 		effect: 'curves',
 		enabled: true,

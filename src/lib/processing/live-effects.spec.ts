@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sourceImageData } from '$lib/stores/app';
+import { selectedPalette, setPaletteColorEnabled, sourceImageData } from '$lib/stores/app';
 import {
 	addEffect,
 	effectLayers,
+	moveEffect,
 	removeEffect,
 	setEffectEnabled,
 	setEffectMask,
@@ -10,7 +11,7 @@ import {
 } from '$lib/stores/effects';
 import { shownSource } from './effects-view.svelte';
 import {
-	analysedFits,
+	resolvedFits,
 	compiledEffects,
 	compiledEffectsFor,
 	currentEffectsKey,
@@ -51,9 +52,12 @@ class ControlledWorker {
 					: { type: 'masked', id, sourceId, key, results: outcome }
 		} as MessageEvent<LiveEffectsResponse>);
 	}
-	/** Answer the latest compile. */
-	reply(results = new Uint32Array([1]), fits?: { index: number; curves: readonly object[] }[]) {
-		const request = this.compiles.at(-1)!;
+	/** Answer a compile request, the latest by default. */
+	reply(
+		results = new Uint32Array([1]),
+		fits?: { index: number; curves: readonly object[] }[],
+		request = this.compiles.at(-1)!
+	) {
 		this.onmessage?.({
 			data: {
 				type: 'compiled',
@@ -278,16 +282,81 @@ describe('analysed fits', () => {
 			]
 		}
 	];
+	const other = [
+		{
+			kind: 'remap',
+			x: { model: 'oklch', channel: 'lightness' },
+			y: { model: 'oklch', channel: 'lightness' },
+			points: [
+				[0, 0.25],
+				[1, 0.75]
+			]
+		}
+	];
 
 	it('publishes curves under the layers that produced them, not the order at reply', () => {
 		const first = addEffect('palette-fit');
+		const second = addEffect('palette-fit');
 		const worker = ControlledWorker.instances.at(-1)!;
 		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
-		const second = addEffect('palette-fit');
-		// Remove the first fit while the two-step compile is in flight: the second fit's
-		// curves still land under its own id.
+		// Give the second fit distinct settings so the next compile keys differently.
+		const step = effectLayers.get().find((item) => item.id === second.id)!.step;
+		if (step.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+		updateEffect(second.id, { ...step, strength: 2 });
+		const request = worker.compiles.at(-1)!;
 		removeEffect(first.id);
-		worker.reply(new Uint32Array([1]), [{ index: 1, curves }]);
-		expect(analysedFits.get()).toEqual(new Map([[second.id, curves]]));
+		// The two-fit reply lands stale after the removal: its curves publish under nothing,
+		// so the second fit reads them only once the matching compile answers.
+		worker.reply(new Uint32Array([1]), [{ index: 1, curves: other }], request);
+		expect(resolvedFits.get().size).toBe(0);
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves: other }]);
+		expect(resolvedFits.get().get(second.id)).toBe(other);
+	});
+
+	it.each([
+		['removing', () => removeEffect(effectLayers.get()[0]!.id)],
+		['disabling', () => setEffectEnabled(effectLayers.get()[0]!.id, false)],
+		['reordering', () => moveEffect(effectLayers.get()[0]!.id, 1)]
+	])('publishes no stale curves when a reply lands after %s a fit', (_name, change) => {
+		addEffect('palette-fit');
+		const second = addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		const step = effectLayers.get().find((item) => item.id === second.id)!.step;
+		if (step.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+		updateEffect(second.id, { ...step, strength: 2 });
+		const request = worker.compiles.at(-1)!;
+		change();
+		worker.reply(
+			new Uint32Array([1]),
+			[
+				{ index: 0, curves },
+				{ index: 1, curves }
+			],
+			request
+		);
+		expect(resolvedFits.get().size).toBe(0);
+		const next = worker.compiles.at(-1)!;
+		expect(next.key).not.toBe(request.key);
+		worker.reply(
+			new Uint32Array([1]),
+			[
+				{ index: 0, curves },
+				{ index: 1, curves }
+			],
+			next
+		);
+		expect(resolvedFits.get().size).toBeGreaterThan(0);
+	});
+
+	it('publishes no stale curves when the palette changes mid-compile', () => {
+		addEffect('palette-fit');
+		const worker = ControlledWorker.instances.at(-1)!;
+		const request = worker.compiles.at(-1)!;
+		const colour = selectedPalette.get().find((item) => item.rgb)!;
+		setPaletteColorEnabled(colour.key, false);
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }], request);
+		expect(resolvedFits.get().size).toBe(0);
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
+		expect(resolvedFits.get().size).toBe(1);
 	});
 });
