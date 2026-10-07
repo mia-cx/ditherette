@@ -52,10 +52,7 @@ class ControlledWorker {
 		} as MessageEvent<LiveEffectsResponse>);
 	}
 	/** Answer the latest compile. */
-	reply(
-		results = new Uint32Array([1]),
-		fits?: { index: number; curves: readonly object[] }[]
-	) {
+	reply(results = new Uint32Array([1]), fits?: { index: number; curves: readonly object[] }[]) {
 		const request = this.compiles.at(-1)!;
 		this.onmessage?.({
 			data: {
