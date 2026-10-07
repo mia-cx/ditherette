@@ -774,7 +774,7 @@ fn fit_chain(before: serde_json::Value, after: serde_json::Value) -> serde_json:
 }
 
 #[test]
-fn palette_fit_analyses_are_cached_by_what_they_read() {
+fn palette_fit_analyses_dedupe_within_a_call() {
     let data = ramp();
     let mut processor = processor();
     let run = |processor: &mut Processor, chain: &serde_json::Value| {
@@ -828,19 +828,39 @@ fn palette_fit_analyses_are_cached_by_what_they_read() {
         expected,
         "spec parity"
     );
-    assert_eq!(processor.cached_analyses(), 1);
-    // A different effect after the palette-fit step reuses its analysis.
-    run(
-        &mut processor,
-        &fit_chain(levels_gamma(1.2), levels_gamma(1.7)),
+    // Fit curves are call-scoped working memory: nothing publishes, so repeated calls
+    // re-analyse deterministically to the same bytes.
+    assert_eq!(processor.cached_analyses(), 0);
+    let expected = {
+        let spec_steps = spec::effects::decode_effects(
+            &fit_chain(levels_gamma(1.2), levels_gamma(1.7)).to_string(),
+        )
+        .unwrap();
+        spec::effects::apply_effects(spec::effects::EffectsRequest {
+            version: 1,
+            source: Source {
+                width: WIDTH,
+                height: HEIGHT,
+                data: &data,
+            },
+            effects: &spec_steps,
+            context: spec::effects::EffectContext {
+                palette: &PALETTE,
+                space: None,
+            },
+        })
+        .unwrap()
+        .into_vec()
+    };
+    assert_eq!(
+        run(
+            &mut processor,
+            &fit_chain(levels_gamma(1.2), levels_gamma(1.7)),
+        ),
+        expected,
+        "a second call still matches the reference"
     );
-    assert_eq!(processor.cached_analyses(), 1);
-    // A different effect before it changes what analysis reads.
-    run(
-        &mut processor,
-        &fit_chain(levels_gamma(2.0), levels_gamma(1.7)),
-    );
-    assert_eq!(processor.cached_analyses(), 2);
+    assert_eq!(processor.cached_analyses(), 0);
 
     // Standalone analysis of the same prefix is a hit and matches the reference's curves.
     let prefix = prod_effects::decode_effects(&json!([levels_gamma(2.0)]).to_string()).unwrap();
@@ -865,7 +885,7 @@ fn palette_fit_analyses_are_cached_by_what_they_read() {
             &mut io,
         )
         .unwrap();
-    assert_eq!(processor.cached_analyses(), 2);
+    assert_eq!(processor.cached_analyses(), 0);
     let expected = spec::effects::analyze_palette_fit(spec::effects::AnalyzePaletteFitRequest {
         version: 1,
         source: Source {
@@ -887,7 +907,7 @@ fn palette_fit_analyses_are_cached_by_what_they_read() {
         serde_json::to_value(&expected).unwrap()
     );
 
-    // Process v2 with the palette-fit step matches the reference and reuses the analysis.
+    // Process v2 with the palette-fit step matches the reference.
     let recipe_v2 = spec::effects::decode_recipe_v2(
         &json!({ "version": 2, "effects": fit_chain(levels_gamma(2.0), levels_gamma(1.7)),
             "output": { "width": 7, "height": 5, "resize": { "algorithm": "area" } },
@@ -926,5 +946,5 @@ fn palette_fit_analyses_are_cached_by_what_they_read() {
         )
         .unwrap();
     assert_eq!(actual.indices.data(), expected.indices.data());
-    assert_eq!(processor.cached_analyses(), 2);
+    assert_eq!(processor.cached_analyses(), 0);
 }

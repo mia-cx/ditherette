@@ -327,7 +327,8 @@ impl Processor {
         });
         let result = match preflight {
             Ok((source, key)) => {
-                let extra = super::effects::process_capacity_bytes(effects, source);
+                let extra = super::effects::process_capacity_bytes(effects, source)
+                    + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
                 let mut effected = super::effects::EffectedInput::new(
                     boundary, effects, context, source, key, previous,
                 );
@@ -377,7 +378,8 @@ impl Processor {
     ) -> Result<crate::prod::effects::recolour::RecolourRecipe, Failure> {
         self.require_ready()?;
         self.begin();
-        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
         let request = super::effects::EffectsRequest {
@@ -430,7 +432,8 @@ impl Processor {
     ) -> Result<Vec<crate::prod::effects::curves::Curve>, Failure> {
         self.require_ready()?;
         self.begin();
-        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
         let request = super::effects::EffectsRequest {
@@ -517,7 +520,8 @@ impl Processor {
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
         self.begin();
-        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
         let request = super::effects::EffectsRequest {
@@ -551,7 +555,8 @@ impl Processor {
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
         self.begin();
-        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
         let request = super::effects::EffectsRequest {

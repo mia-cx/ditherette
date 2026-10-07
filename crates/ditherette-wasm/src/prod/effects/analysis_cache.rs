@@ -22,7 +22,8 @@ use crate::prod::contract::request::WorkingSpace;
 
 /// Published analyses retained, most recent last. Pending analyses per call are capped the same.
 pub const CAPACITY: usize = 8;
-/// Published palette-fit lists retained; smaller than `CAPACITY` since each entry is larger.
+/// Palette-fit curves deduplicated within a call. Fit entries are call-scoped working memory,
+/// not retained like recipes, so the instance's planned capacity stays at its fixed floor.
 pub const FIT_CAPACITY: usize = 3;
 
 type Key = [u8; 32];
@@ -31,7 +32,6 @@ type Key = [u8; 32];
 struct Entries {
     published: Vec<(Key, RecolourRecipe)>,
     pending: Vec<(Key, RecolourRecipe)>,
-    fit_published: Vec<(Key, Vec<Curve>)>,
     fit_pending: Vec<(Key, Vec<Curve>)>,
 }
 
@@ -42,14 +42,21 @@ pub struct AnalysisCache(RefCell<Entries>);
 impl AnalysisCache {
     /// Upper bound on owned bytes: while settling, each published list holds up to twice its
     /// capacity before trimming, alongside a full pending list, each entry at its largest.
+    /// `fit_pending` is call-scoped and counted by `fit_working_bytes` instead.
     pub const fn capacity_bytes() -> u64 {
         let recipe = size_of::<(Key, RecolourRecipe)>()
             + MAX_POINTS * size_of::<[f32; 2]>()
             + MAX_GROUPS * size_of::<Group>();
-        // Emitted lists hold at most 5 curves: a 13-point turn, a 7-point tone, two 2-point
-        // shifts, and a 12-by-5 gain grid — at most 640 bytes of points and grid data.
+        (3 * CAPACITY * recipe + size_of::<Self>()) as u64
+    }
+
+    /// The bound calls carrying this cache charge as working capacity: the call-scoped
+    /// `fit_pending` list at its largest. Emitted lists hold at most 5 curves: a 13-point
+    /// turn, a 7-point tone, two 2-point shifts, and a 12-by-5 gain grid — at most 640
+    /// bytes of points and grid data.
+    pub const fn fit_working_bytes() -> u64 {
         let fit = size_of::<(Key, Vec<Curve>)>() + 5 * size_of::<Curve>() + 640;
-        (3 * (CAPACITY * recipe + FIT_CAPACITY * fit) + size_of::<Self>()) as u64
+        (FIT_CAPACITY * fit) as u64
     }
 
     /// The recipe `analyze` would derive for `image`, from the cache when its inputs repeat.
@@ -94,13 +101,7 @@ impl AnalysisCache {
     ) -> Result<Vec<Curve>, TryReserveError> {
         let key = palette_fit_key(image, context, space, look);
         {
-            let mut entries = self.0.borrow_mut();
-            if let Some(index) = entries.fit_published.iter().position(|(k, _)| *k == key) {
-                let entry = entries.fit_published.remove(index);
-                let curves = super::curves::try_clone_curves(&entry.1);
-                entries.fit_published.push(entry);
-                return curves;
-            }
+            let entries = self.0.borrow();
             if let Some((_, curves)) = entries.fit_pending.iter().find(|(k, _)| *k == key) {
                 return super::curves::try_clone_curves(curves);
             }
@@ -120,14 +121,10 @@ impl AnalysisCache {
     pub fn settle(&mut self, success: bool) {
         let entries = self.0.get_mut();
         let pending = std::mem::take(&mut entries.pending);
-        let fit_pending = std::mem::take(&mut entries.fit_pending);
+        // Call-scoped fit curves are always dropped.
+        entries.fit_pending.clear();
         // A failed reservation only drops these optional entries.
-        if !success
-            || entries
-                .published
-                .try_reserve(pending.len() + fit_pending.len())
-                .is_err()
-        {
+        if !success || entries.published.try_reserve(pending.len()).is_err() {
             return;
         }
         for entry in pending {
@@ -137,19 +134,11 @@ impl AnalysisCache {
         }
         let excess = entries.published.len().saturating_sub(CAPACITY);
         entries.published.drain(..excess);
-        for entry in fit_pending {
-            if !entries.fit_published.iter().any(|(k, _)| *k == entry.0) {
-                entries.fit_published.push(entry);
-            }
-        }
-        let excess = entries.fit_published.len().saturating_sub(FIT_CAPACITY);
-        entries.fit_published.drain(..excess);
     }
 
     /// Published entry count, for tests and diagnostics.
     pub fn len(&self) -> usize {
-        let entries = self.0.borrow();
-        entries.published.len() + entries.fit_published.len()
+        self.0.borrow().published.len()
     }
 
     pub fn is_empty(&self) -> bool {
