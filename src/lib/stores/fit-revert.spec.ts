@@ -226,6 +226,43 @@ it('re-analyses every edited fit on one input change and offers Revert on each',
 	}
 });
 
+it('re-analyses a downstream fit whose inputs Revert changed', () => {
+	// C0: lock A. C1: A unlocks; lock B under the new inputs.
+	const first = fitLayer().layer;
+	const second = fitLayer().layer;
+	lock(first.id);
+	updateOutputSettings({ crop: { x: 0, y: 0, width: 2, height: 2 } });
+	lock(second.id);
+
+	// Reverting A restores the C0 inputs for B too, so B re-analyses and offers.
+	revertFit(first.id);
+	const unlocked = effectLayers.get().find((item) => item.id === second.id)!.step;
+	expect(unlocked.effect === 'palette-fit' && unlocked.curves).toBe(null);
+	expect(fitReverts.get().has(second.id)).toBe(true);
+
+	// A strength change afterwards keeps that outcome.
+	const layer = effectLayers.get().find((item) => item.id === second.id)!;
+	if (layer.step.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+	updateEffect(second.id, { ...layer.step, strength: 0.5 });
+	const after = effectLayers.get().find((item) => item.id === second.id)!.step;
+	expect(after.effect === 'palette-fit' && after.curves).toBe(null);
+	expect(fitReverts.get().has(second.id)).toBe(true);
+});
+
+it('drops an unlocked downstream fit stale offer on Revert', () => {
+	const first = fitLayer().layer;
+	const second = fitLayer().layer;
+	lock(first.id);
+	lock(second.id);
+
+	updateOutputSettings({ crop: { x: 0, y: 0, width: 2, height: 2 } });
+	expect(fitReverts.get().has(second.id)).toBe(true);
+
+	// Reverting A restores the inputs B's offer was made against; the offer is obsolete.
+	revertFit(first.id);
+	expect(fitReverts.get().has(second.id)).toBe(false);
+});
+
 it('drops the offer when the fit itself is edited or re-looked; not for strength', () => {
 	const { layer } = fitLayer();
 	const step = () => {

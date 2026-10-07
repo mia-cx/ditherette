@@ -194,19 +194,21 @@ export function revertFit(layerId: string) {
 	} finally {
 		restoring = false;
 	}
-	// The restore also rewrites the layers before it: reconcile every restored fit's state
-	// and offer against the final pipeline, so its next input change is decided on truth.
+	// Re-baseline only what Revert wrote: the restored prefix and the selected fit. Their
+	// offered snapshots just arrived, so their offers are obsolete too.
+	const restored = new Set([layerId, ...revert.inputs.before.map((layer) => layer.id)]);
 	const after = effectLayers.get();
 	after.forEach((layer, at) => {
-		if (layer.step.effect !== 'palette-fit') return;
+		if (layer.step.effect !== 'palette-fit' || !restored.has(layer.id)) return;
 		states.set(layer.id, {
 			inputs: currentInputs(after, at),
 			signature: signature(layer.step)
 		});
+		offers((map) => map.delete(layer.id));
 	});
-	for (const layer of revert.inputs.before) {
-		if (layer.step.effect === 'palette-fit') offers((map) => map.delete(layer.id));
-	}
+	// Downstream fits were not touched by the restore; give them the ordinary input-change
+	// decision so a fit whose inputs just moved re-analyses and a stale offer drops.
+	check();
 }
 
 let source: ImageData | undefined;
