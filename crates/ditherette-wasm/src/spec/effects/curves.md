@@ -105,6 +105,12 @@ A [mask](mask.md) gives each pixel a strength `m` from the step's input. Every c
 
 A step without mask curves always uses `m = 1`.
 
+Only palette fit can take `m` past 1, since its strength runs to 3. The bend then overshoots: the
+scaled result is *not* clamped as a curve value, but the final channel clamps after the formula and
+before converting back. Hue wraps as it already does; saturation and chroma floor at 0; every other
+channel clamps to its normalised `[0, 1]`. For `m <= 1` the bend cannot overshoot, so nothing
+clamps and every byte matches a step that never scaled.
+
 ## Validation order and paths
 
 Two-input validation checks `kind`, `x`, `x2`, `y`, then `grid`.
