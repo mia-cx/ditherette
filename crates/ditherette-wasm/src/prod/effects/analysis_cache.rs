@@ -22,6 +22,8 @@ use crate::prod::contract::request::WorkingSpace;
 
 /// Published analyses retained, most recent last. Pending analyses per call are capped the same.
 pub const CAPACITY: usize = 8;
+/// Published palette-fit lists retained; smaller than `CAPACITY` since each entry is larger.
+pub const FIT_CAPACITY: usize = 3;
 
 type Key = [u8; 32];
 
@@ -45,9 +47,9 @@ impl AnalysisCache {
             + MAX_POINTS * size_of::<[f32; 2]>()
             + MAX_GROUPS * size_of::<Group>();
         // Emitted lists hold at most 5 curves: a 13-point turn, a 7-point tone, two 2-point
-        // shifts, and a 12-by-5 gain grid.
-        let fit = size_of::<(Key, Vec<Curve>)>() + 5 * size_of::<Curve>() + 768;
-        (3 * CAPACITY * (recipe + fit) + size_of::<Self>()) as u64
+        // shifts, and a 12-by-5 gain grid — at most 640 bytes of points and grid data.
+        let fit = size_of::<(Key, Vec<Curve>)>() + 5 * size_of::<Curve>() + 640;
+        (3 * (CAPACITY * recipe + FIT_CAPACITY * fit) + size_of::<Self>()) as u64
     }
 
     /// The recipe `analyze` would derive for `image`, from the cache when its inputs repeat.
@@ -106,7 +108,7 @@ impl AnalysisCache {
         let curves = palette_fit_analysis::analyze(image, context, space, look)?;
         let mut entries = self.0.borrow_mut();
         // Caching is optional: if either reservation fails, the call still has its curves.
-        if entries.fit_pending.len() < CAPACITY && entries.fit_pending.try_reserve(1).is_ok() {
+        if entries.fit_pending.len() < FIT_CAPACITY && entries.fit_pending.try_reserve(1).is_ok() {
             if let Ok(copy) = super::curves::try_clone_curves(&curves) {
                 entries.fit_pending.push((key, copy));
             }
@@ -140,7 +142,7 @@ impl AnalysisCache {
                 entries.fit_published.push(entry);
             }
         }
-        let excess = entries.fit_published.len().saturating_sub(CAPACITY);
+        let excess = entries.fit_published.len().saturating_sub(FIT_CAPACITY);
         entries.fit_published.drain(..excess);
     }
 
