@@ -555,7 +555,8 @@ const builtins: Record<string, Builtin> = {
 			return {
 				look,
 				space,
-				strength: bounded(field(effect, 'strength'), 0, 1, `${path}.strength`),
+				// The only strength allowed past 1: the fit exaggerates its own curves.
+				strength: bounded(field(effect, 'strength'), 0, 3, `${path}.strength`),
 				curves: list === null ? null : curves(list, `${path}.curves`)
 			};
 		}

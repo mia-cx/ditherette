@@ -387,7 +387,7 @@ impl OneInputCurve {
         self.kind == CurveKind::Adjust && self.points.iter().all(|point| point[1] == 0.5)
     }
 
-    /// `strength` is the step's mask value at this pixel, in `(0, 1]`.
+    /// `strength` is the step's mask value at this pixel, in `(0, 1]`; palette fit alone may pass up to 3.
     fn map(
         &self,
         x: ResolvedChannel,
@@ -450,6 +450,7 @@ impl OneInputCurve {
                 }
             }
         }
+        clamp_bent(&mut y_coordinates, y, strength);
         y.model.from_normalized(y_coordinates)
     }
 }
@@ -459,7 +460,7 @@ impl TwoInputCurve {
         self.grid.values.iter().flatten().all(|&value| value == 0.5)
     }
 
-    /// `strength` is the step's mask value at this pixel, in `(0, 1]`.
+    /// `strength` is the step's mask value at this pixel, in `(0, 1]`; palette fit alone may pass up to 3.
     fn map(
         &self,
         x: ResolvedChannel,
@@ -516,6 +517,7 @@ impl TwoInputCurve {
                 y_coordinates[y.index] += weight * (curve - 0.5);
             }
         }
+        clamp_bent(&mut y_coordinates, y, strength);
         y.model.from_normalized(y_coordinates)
     }
 }
@@ -817,6 +819,23 @@ impl Curves {
                 }),
             })
             .collect()
+    }
+}
+
+/// Strengths above 1, only from palette fit, can push the edited channel past its normalised
+/// range. Clamp it after the formula and before converting back: hue already wrapped; saturation
+/// and chroma floor at 0; every other channel clamps to `[0, 1]`. `m <= 1` never overshoots, so
+/// it needs no clamp and stays byte-identical.
+fn clamp_bent(coordinates: &mut [f32; 3], channel: ResolvedChannel, strength: f32) {
+    if strength <= 1.0 {
+        return;
+    }
+    match channel.kind {
+        ChannelKind::Hue => {}
+        ChannelKind::Chroma => coordinates[channel.index] = coordinates[channel.index].max(0.0),
+        ChannelKind::Other => {
+            coordinates[channel.index] = coordinates[channel.index].clamp(0.0, 1.0)
+        }
     }
 }
 

@@ -16,7 +16,7 @@ exactly as a `curves` step does.
 | --- | --- | --- |
 | `look` | `"natural"`, `"fitted"` or `"vivid"` | Which preset tunes the analysis |
 | `space` | `"oklab"` or `"cielab"` | Working space of the analysis and the analysed curves' models |
-| `strength` | `[0, 1]` | Scales every curve's bend, see below |
+| `strength` | `[0, 3]` | Scales every curve's bend past 1, see below |
 | `curves` | `null` or 0 to 16 [curves](curves.md) | `null` analyses automatically; a list is applied as is (edited, locked) |
 
 Plus the common step envelope (`enabled`, `mask`), exactly as for every other step.
@@ -39,7 +39,9 @@ the step receives (unmasked, the whole image) with its `look` and `space` and th
 Then apply the list exactly as the `curves` effect does, with per-pixel strength
 `m = strength * mask(pixel)` used as the curves effect's mask strength (`1` without a mask).
 Strength 0 is therefore an exact no-op without conversion, strength 1 without a mask equals a
-`curves` step with the same list byte for byte, and an empty list is an exact no-op.
+`curves` step with the same list byte for byte, and an empty list is an exact no-op. Above 1 the
+bend overshoots and the channel clamps per the [curves](curves.md) mask-strength rule: at 300% a
+0.5x chroma gain floors at 0 and the colour goes grey.
 
 ## Why this works this way
 
@@ -66,7 +68,3 @@ strength-as-mask-strength rule scales each curve's bend toward neutral rather th
 Production must reproduce the reference byte for byte, for explicit lists and for analysed ones.
 It may cache a step's resolved curves by the exact image reaching the step, the palette, the step's
 `space` and `look`, and the analysis version; strength and mask are not part of the key.
-
-## Non-goals
-
-Strengths above 1.

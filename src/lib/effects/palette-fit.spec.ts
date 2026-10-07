@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ADDABLE_KINDS, EFFECTS } from './catalog';
+import { NUMBER_FIELDS } from '../../routes/components/effects/fields';
 import { decideLockedFit, fitFingerprint, type FitInputs, type FitState } from './palette-fit';
 
 const exposure = EFFECTS.exposure.create();
@@ -36,6 +37,11 @@ describe('catalog', () => {
 		expect(EFFECTS.recolour.label).toBe('Palette fit (legacy)');
 		expect(ADDABLE_KINDS).toContain('palette-fit');
 		expect(ADDABLE_KINDS).not.toContain('recolour');
+	});
+
+	it('lets palette fit strength reach 300% while recolour stays at 100%', () => {
+		expect(NUMBER_FIELDS['palette-fit'][0]).toMatchObject({ key: 'strength', max: 300 });
+		expect(NUMBER_FIELDS.recolour[0]).toMatchObject({ key: 'strength', max: 100 });
 	});
 });
 

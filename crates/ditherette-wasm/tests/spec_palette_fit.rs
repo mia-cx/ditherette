@@ -434,7 +434,7 @@ fn explicit_curves_ignore_the_context_but_their_fields_validate() {
             .path
     };
     assert_eq!(
-        path(fit(1.5, Some(list.clone())), &[], None),
+        path(fit(3.5, Some(list.clone())), &[], None),
         "effects.0.strength"
     );
     assert_eq!(path(fit(1.0, None), &[], None), "context.palette");
@@ -553,5 +553,105 @@ fn vivid_reaches_more_chroma_than_fitted_on_a_muted_image() {
     assert!(
         max_gain(FitLook::Natural) <= 0.5,
         "natural stays at or below neutral"
+    );
+}
+
+#[test]
+fn strength_past_one_scales_the_bend_and_clamps_channels() {
+    // The list a fit applies is a curves list at mask strength `m = strength`, so m up to 3
+    // is legal here and only here: a chroma gain of 0 at 300% floors chroma and greys the
+    // pixel, where an unclamped negative gain would bounce to the opposite hue.
+    let data = sweep(0.9);
+    let muted_palette = wplace_free();
+    let kill_chroma = json!([
+        { "kind": "adjust", "x": { "model": "oklch", "channel": "lightness" },
+          "y": { "model": "oklch", "channel": "chroma" },
+          "points": [[0, 0], [1, 0]] }
+    ]);
+    for out in [
+        run(
+            &data,
+            &steps(json!([fit_in("oklab", 3.0, Some(kill_chroma.clone()))])),
+            &muted_palette,
+            None,
+        )
+        .unwrap(),
+        run(
+            &data,
+            &steps(json!([fit_step(
+                "vivid",
+                "cielab",
+                3.0,
+                Some(kill_chroma.clone())
+            )])),
+            &muted_palette,
+            None,
+        )
+        .unwrap(),
+    ] {
+        for pixel in out.data().chunks_exact(4) {
+            assert_eq!(
+                pixel[0], pixel[1],
+                "grey after chroma floors at 300%: {pixel:?}"
+            );
+            assert_eq!(pixel[1], pixel[2]);
+        }
+    }
+
+    // A remap scaled past 1 clamps the channel before converting back: oklab `a` at 300%
+    // lands on the same bytes as `a` remapped to 1 at full strength, not on the bytes an
+    // unclamped coordinate would give.
+    let top_a = json!([
+        { "kind": "remap", "x": { "model": "oklab", "channel": "a" },
+          "y": { "model": "oklab", "channel": "a" },
+          "points": [[0, 1], [1, 1]] }
+    ]);
+    let at_one = run(
+        &data,
+        &steps(json!([fit(1.0, Some(top_a.clone()))])),
+        &muted_palette,
+        None,
+    )
+    .unwrap();
+    let at_three = run(
+        &data,
+        &steps(json!([fit(3.0, Some(top_a))])),
+        &muted_palette,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        at_three.data(),
+        at_one.data(),
+        "the overshot remap clamps to the channel bound"
+    );
+    // And it is the bound, not the unclamped value: the opposite pull differs.
+    let bottom_a = json!([
+        { "kind": "remap", "x": { "model": "oklab", "channel": "a" },
+          "y": { "model": "oklab", "channel": "a" },
+          "points": [[0, 0], [1, 0]] }
+    ]);
+    assert_ne!(
+        at_three.data(),
+        run(
+            &data,
+            &steps(json!([fit(1.0, Some(bottom_a))])),
+            &muted_palette,
+            None,
+        )
+        .unwrap()
+        .data()
+    );
+
+    // And strengths 2 and 3 validate; 3.01 does not.
+    let mut over = fit(1.0, None);
+    over["strength"] = json!(3.01);
+    assert_eq!(
+        steps(json!([over]))[0]
+            .effect
+            .validate("effects.0")
+            .unwrap_err()
+            .path,
+        "effects.0.strength"
     );
 }

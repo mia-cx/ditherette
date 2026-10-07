@@ -1965,6 +1965,65 @@
 				}
 			],
 			"contentSha256": "2e43c0c3096ef1e2342186a822328244fe82bd47a07e0cc7b12b28ca540193ca"
+		},
+		{
+			"name": "palette-fit-strength",
+			"summary": "palette fit strength to 3; curves clamp the channel when m > 1",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "1c37fcb0bf33cb4a47033c8d77a352f5478299ba9b58e9e463f4c9ad83b72e17"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "cf1463a92a93699dd364cc09be21320377edbd61e93edf94ab9d4801e9e45f8b"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "ed755b14ea640abed5137767ed4c477a7bb32425b6659c21038f36f5eacbc61d"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "1cd64eed628eca2301042edab06ced10bdc64a697cabc8ae961bedf22217f622"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.md",
+						"mode": "100644",
+						"sha256": "6a352cb73c3883a971ad532592e47daeb6980e57f667bb050f27e92e26ab3a4e"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.md",
+						"mode": "100644",
+						"sha256": "07c27870b7b8830141221edc8c2c770a9a645a1087d1281b2f09b5af1305d796"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.rs",
+						"mode": "100644",
+						"sha256": "678e95255e2f6f6e6ee382f661dd878de46afdcb7f7e53cbaa8d646630c6ef4d"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/palette_fit.rs",
+						"mode": "100644",
+						"sha256": "f8160cf2577042609264c60f60c71fa5fac6e562b09116b5746987961bb090eb"
+					}
+				}
+			],
+			"contentSha256": "78369584919c1e82b0909cca71ba67edd43523e831b630517a08f979e553f96e"
 		}
 	]
 }

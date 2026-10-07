@@ -107,7 +107,7 @@ impl PaletteFit {
 
 impl Effect for PaletteFit {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.strength, 0.0, 1.0, format_args!("{path}.strength"))?;
+        check_bounded(self.strength, 0.0, 3.0, format_args!("{path}.strength"))?;
         match &self.curves {
             // An explicit list validates exactly like the `curves` effect's own.
             Some(curves) => {

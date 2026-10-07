@@ -415,7 +415,8 @@ export type PaletteFitSpace = 'oklab' | 'cielab';
  * Fits colour to what the palette can represent through an analysed list of curves — the same
  * treatment `analyzePaletteFit` derives, visible and editable. With `curves: null` it analyses
  * the image reaching it against the context palette; a list applies exactly like a `curves`
- * step. `strength` blends from the input (0) to the full treatment (1).
+ * step. `strength` bends the curves from none (0) through the full treatment (1) to a
+ * three-fold exaggeration (3); it alone runs past 1.
  */
 export interface PaletteFitEffect extends StepEnvelope {
 	readonly effect: 'palette-fit';
