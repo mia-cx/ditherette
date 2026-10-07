@@ -17,7 +17,7 @@ const look = (id: string, next: 'natural' | 'fitted' | 'vivid') => {
 };
 
 describe('looksApplied', () => {
-	it('seeds the layer\'s look, appends switches, and drops removed layers', () => {
+	it("seeds the layer's look, appends switches, and drops removed layers", () => {
 		const layer = addEffect('exposure');
 		const fit = addEffect('palette-fit');
 		expect(looksApplied.get().get(fit.id)).toEqual(['fitted']);

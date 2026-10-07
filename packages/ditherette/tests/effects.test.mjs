@@ -1217,10 +1217,12 @@ test('measurePaletteFit agrees with the curves it measures', () =>
 		assert.ok(m.reach.every((row) => row.length === 12));
 		const curves = processor.analyzePaletteFit(request);
 		// The tone remap's interior knots sit exactly at the measured quantiles.
-		const tone = curves.find(
-			(curve) => curve.kind === 'remap' && curve.x.channel === 'lightness'
-		);
-		if (tone) assert.deepEqual(tone.points.slice(1, -1).map(([x]) => x), [...m.toneQuantiles]);
+		const tone = curves.find((curve) => curve.kind === 'remap' && curve.x.channel === 'lightness');
+		if (tone)
+			assert.deepEqual(
+				tone.points.slice(1, -1).map(([x]) => x),
+				[...m.toneQuantiles]
+			);
 		// A fit with nothing to measure returns null, like an empty curve list.
 		const empty = { width: 2, height: 2, data: new Uint8Array(16) };
 		assert.equal(processor.measurePaletteFit({ ...request, source: empty }), null);

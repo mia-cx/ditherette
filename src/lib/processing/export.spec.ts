@@ -23,8 +23,7 @@ import { exportPng } from './export';
 import { processingIdentityHash } from './hash';
 import type { ProcessedImage } from './types';
 
-const image = () =>
-	({ width: 2, height: 2, data: new Uint8ClampedArray(16) }) as ImageData;
+const image = () => ({ width: 2, height: 2, data: new Uint8ClampedArray(16) }) as ImageData;
 
 function exportableImage(): ProcessedImage {
 	const settingsHash = processingIdentityHash({
