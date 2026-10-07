@@ -76,6 +76,7 @@
 		<div class="grid grid-cols-1 gap-4 {layer.step.enabled ? '' : 'opacity-60'}">
 			<EffectEditor
 				id="effect-{layerId}"
+				layerId={layer.id}
 				step={layer.step}
 				onchange={(step) => updateEffect(layerId, step)}
 			/>

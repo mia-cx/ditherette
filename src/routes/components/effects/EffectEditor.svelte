@@ -2,13 +2,14 @@
 	import type { Effect } from 'ditherette';
 	import { brightnessContrastTone, exposureTone, hueSpectrum, levelsTone } from '$lib/effects/tone';
 	import CurvesEditor from './CurvesEditor.svelte';
+	import PaletteFitEditor from './PaletteFitEditor.svelte';
 	import LevelsEditor from './LevelsEditor.svelte';
 	import NumberFieldsEditor from './NumberFieldsEditor.svelte';
 	import ToneGraph from './ToneGraph.svelte';
 	import { NUMBER_FIELDS } from './fields';
 
-	type Props = { id: string; step: Effect; onchange: (step: Effect) => void };
-	let { id, step, onchange }: Props = $props();
+	type Props = { id: string; step: Effect; layerId: string; onchange: (step: Effect) => void };
+	let { id, step, layerId, onchange }: Props = $props();
 
 	const LEVELS_STROKE = {
 		rgb: 'text-foreground',
@@ -27,6 +28,8 @@
 		<LevelsEditor {id} {step} {onchange} />
 	{:else if step.effect === 'curves'}
 		<CurvesEditor {id} {step} {onchange} />
+	{:else if step.effect === 'palette-fit'}
+		<PaletteFitEditor {id} {layerId} {step} {onchange} />
 	{:else if step.effect === 'brightness-contrast'}
 		<ToneGraph
 			label="Brightness and contrast response"

@@ -18,6 +18,7 @@
 		DropdownMenuSeparator,
 		DropdownMenuTrigger
 	} from '$lib/components/ui/dropdown-menu';
+	import { Badge } from '$lib/components/ui/badge';
 	import VisibilityCheckbox from '../VisibilityCheckbox.svelte';
 	import EffectControls from './EffectControls.svelte';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDown';
@@ -174,6 +175,9 @@
 									{/if}
 								{/if}
 								<span class="truncate">{layer.name}</span>
+								{#if layer.step.effect === 'palette-fit' && layer.step.curves !== null}
+									<Badge variant="secondary" class="shrink-0">Edited</Badge>
+								{/if}
 								{#if layer.name !== label && !layer.name.startsWith(label)}
 									<span class="truncate text-xs text-muted-foreground">{label}</span>
 								{/if}
