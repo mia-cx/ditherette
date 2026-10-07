@@ -37,6 +37,23 @@ const FIT_SPACES: [(spec_fit::FitSpace, palette_fit::FitSpace, &str); 2] = [
         "cielab",
     ),
 ];
+const FIT_LOOKS: [(spec_fit::FitLook, palette_fit::FitLook, &str); 3] = [
+    (
+        spec_fit::FitLook::Natural,
+        palette_fit::FitLook::Natural,
+        "natural",
+    ),
+    (
+        spec_fit::FitLook::Fitted,
+        palette_fit::FitLook::Fitted,
+        "fitted",
+    ),
+    (
+        spec_fit::FitLook::Vivid,
+        palette_fit::FitLook::Vivid,
+        "vivid",
+    ),
+];
 
 /// Saturated swatches, greys, near-greys, translucent pixels, and out-of-range leftovers.
 fn fixture(width: u32, height: u32) -> Vec<u8> {
@@ -66,9 +83,13 @@ fn fixture(width: u32, height: u32) -> Vec<u8> {
         .collect()
 }
 
-fn fit(space: &str, strength: f32, curves: Value) -> Value {
-    json!({ "effect": "palette-fit", "enabled": true, "look": "fitted",
+fn fit_look(look: &str, space: &str, strength: f32, curves: Value) -> Value {
+    json!({ "effect": "palette-fit", "enabled": true, "look": look,
         "space": space, "strength": strength, "curves": curves })
+}
+
+fn fit(space: &str, strength: f32, curves: Value) -> Value {
+    fit_look("fitted", space, strength, curves)
 }
 
 fn spec_run(data: &[u8], width: u32, height: u32, chain: &Value) -> Vec<u8> {
@@ -111,34 +132,36 @@ fn prod_run(data: &[u8], width: u32, height: u32, chain: &Value) -> Vec<u8> {
 #[test]
 fn fitted_chains_match_the_reference() {
     for (_spec_space, _prod_space, tag) in FIT_SPACES {
-        for (width, height, data) in [(16, 16, fixture(16, 16)), (9, 7, fixture(9, 7))] {
-            for chain in [
-                json!([fit(tag, 1.0, Value::Null)]),
-                json!([fit(tag, 0.55, Value::Null)]),
-                // Before, after, masked, disabled, and doubled steps.
-                json!([
-                    { "effect": "exposure", "enabled": true, "stops": -0.4 },
-                    fit(tag, 0.9, Value::Null),
-                    { "effect": "brightness-contrast", "enabled": true,
-                      "brightness": 0.1, "contrast": 0.2 }
-                ]),
-                json!([
-                    { "effect": "palette-fit", "enabled": true, "look": "fitted", "space": tag,
-                      "strength": 1.0, "curves": null,
-                      "mask": [{ "x": { "model": "oklch", "channel": "lightness" },
-                                 "points": [[0, 1], [1, 0.3]] }] }
-                ]),
-                json!([
-                    { "effect": "palette-fit", "enabled": false, "look": "fitted", "space": tag,
-                      "strength": 1.0, "curves": null },
-                    fit(tag, 1.0, Value::Null),
-                ]),
-            ] {
-                assert_eq!(
-                    spec_run(&data, width, height, &chain),
-                    prod_run(&data, width, height, &chain),
-                    "{tag} {width}x{height} {chain}"
-                );
+        for (_spec_look, _prod_look, look) in FIT_LOOKS {
+            for (width, height, data) in [(16, 16, fixture(16, 16)), (9, 7, fixture(9, 7))] {
+                for chain in [
+                    json!([fit_look(look, tag, 1.0, Value::Null)]),
+                    json!([fit_look(look, tag, 0.55, Value::Null)]),
+                    // Before, after, masked, disabled, and doubled steps.
+                    json!([
+                        { "effect": "exposure", "enabled": true, "stops": -0.4 },
+                        fit_look(look, tag, 0.9, Value::Null),
+                        { "effect": "brightness-contrast", "enabled": true,
+                          "brightness": 0.1, "contrast": 0.2 }
+                    ]),
+                    json!([
+                        { "effect": "palette-fit", "enabled": true, "look": look, "space": tag,
+                          "strength": 1.0, "curves": null,
+                          "mask": [{ "x": { "model": "oklch", "channel": "lightness" },
+                                     "points": [[0, 1], [1, 0.3]] }] }
+                    ]),
+                    json!([
+                        { "effect": "palette-fit", "enabled": false, "look": look, "space": tag,
+                          "strength": 1.0, "curves": null },
+                        fit_look(look, tag, 1.0, Value::Null),
+                    ]),
+                ] {
+                    assert_eq!(
+                        spec_run(&data, width, height, &chain),
+                        prod_run(&data, width, height, &chain),
+                        "{look} {tag} {width}x{height} {chain}"
+                    );
+                }
             }
         }
     }
@@ -172,44 +195,46 @@ fn explicit_lists_match_the_reference() {
 fn analysis_matches_the_reference_in_both_spaces() {
     for (width, height, data) in [(16, 16, fixture(16, 16)), (9, 7, fixture(9, 7))] {
         for (spec_space, prod_space, _tag) in FIT_SPACES {
-            let expected = spec::analyze_palette_fit(spec::AnalyzePaletteFitRequest {
-                version: 1,
-                source: Source {
-                    width,
-                    height,
-                    data: &data,
-                },
-                effects: &[],
-                context: spec::EffectContext {
-                    palette: &PALETTE,
-                    space: None,
-                },
-                space: spec_space,
-                look: spec_fit::FitLook::Fitted,
-            })
-            .unwrap();
-            let actual = prod::analyze_palette_fit(prod::AnalyzePaletteFitRequest {
-                version: 1,
-                source: ProdSource {
-                    width,
-                    height,
-                    data: &data,
-                },
-                effects: &[],
-                context: prod::EffectContext {
-                    palette: &PALETTE,
-                    space: None,
-                    analyses: None,
-                },
-                space: prod_space,
-                look: palette_fit::FitLook::Fitted,
-            })
-            .unwrap();
-            assert_eq!(
-                serde_json::to_string(&actual).unwrap(),
-                serde_json::to_string(&expected).unwrap(),
-                "{spec_space:?}"
-            );
+            for (spec_look, prod_look, look_tag) in FIT_LOOKS {
+                let expected = spec::analyze_palette_fit(spec::AnalyzePaletteFitRequest {
+                    version: 1,
+                    source: Source {
+                        width,
+                        height,
+                        data: &data,
+                    },
+                    effects: &[],
+                    context: spec::EffectContext {
+                        palette: &PALETTE,
+                        space: None,
+                    },
+                    space: spec_space,
+                    look: spec_look,
+                })
+                .unwrap();
+                let actual = prod::analyze_palette_fit(prod::AnalyzePaletteFitRequest {
+                    version: 1,
+                    source: ProdSource {
+                        width,
+                        height,
+                        data: &data,
+                    },
+                    effects: &[],
+                    context: prod::EffectContext {
+                        palette: &PALETTE,
+                        space: None,
+                        analyses: None,
+                    },
+                    space: prod_space,
+                    look: prod_look,
+                })
+                .unwrap();
+                assert_eq!(
+                    serde_json::to_string(&actual).unwrap(),
+                    serde_json::to_string(&expected).unwrap(),
+                    "{spec_space:?} {look_tag}"
+                );
+            }
         }
     }
 }

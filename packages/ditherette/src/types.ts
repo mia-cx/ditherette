@@ -398,8 +398,11 @@ export interface AnalyzeRecolourRequest {
 	readonly onProgress?: (progress: Progress) => void;
 }
 
-/** The analysis preset a palette-fit step uses. Only `'fitted'` exists. */
-export type FitLook = 'fitted';
+/**
+ * The analysis preset a palette-fit step uses: `'natural'` adjusts tone only, `'fitted'` adds
+ * shifts and turns with mild chroma gains, and `'vivid'` reaches the palette's full chroma.
+ */
+export type FitLook = 'natural' | 'fitted' | 'vivid';
 
 /**
  * The space a palette-fit step analyses and edits in: one of the lab/lch model pairs.

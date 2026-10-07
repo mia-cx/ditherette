@@ -221,6 +221,8 @@ fn palette_fit_key(
     }]);
     hash.update([match look {
         FitLook::Fitted => 0,
+        FitLook::Natural => 1,
+        FitLook::Vivid => 2,
     }]);
     hash.update(base_key(image, context).finalize());
     hash.finalize().into()

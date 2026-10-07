@@ -23,14 +23,22 @@ divided by 100). Hue is `atan2(v, u)`, chroma `hypot(u, v)`, and the neutral ram
 `min(1, c / 0.02)`. All arithmetic is `f32` in the written order.
 
 The analysis emits up to five curves, in list order: tone, shift a, shift b, chroma gain, hue turn.
-Omitted curves are absent.
+Omitted curves are absent. The `look` selects which steps run and how far gains may grow; every
+other rule is shared:
+
+| Look | Shift | Turns | Gain clamp |
+| --- | --- | --- | --- |
+| `natural` | none (cells measured with `s = 0`) | none (every turn 0, so gain directions are `h_j`) | `[0, 1]` |
+| `fitted` | yes | yes | `[0, 1.25]` |
+| `vivid` | yes | yes | `[0, 2]` |
 
 1. **Tone.** Exactly recolour analysis's Tone rule (quantiles at 1/25/50/75/99%, the palette's
    lightness levels, clamping into the palette range, the quartile pull `0.5 · min(1, 4/n)`,
    knots closer than 0.001 dropped, monotone, within 1e-4 of identity kept as identity).
    Emit it, when it is not identity, as a one-input `remap` with `x = y = {lab model, lightness}`.
    Its function `tone(L)` is used again by step 6; it is the identity when not emitted.
-2. **Shift** (look `fitted`). Exactly recolour's Shift rule: none when neutral is inside the hull
+2. **Shift** (looks `fitted` and `vivid`; `natural` uses `s = 0` and emits nothing). Exactly
+   recolour's Shift rule: none when neutral is inside the hull
    (reach ≥ 0 every 5°), else half-way toward the palette centroid, at most 0.1 long. For the
    shift vector `s = (su, sv)` in opponent units, emit two one-input `adjust` curves with
    `x = {lab, lightness}` and `y = {lab, a}` or `{lab, b}`, each constant at
@@ -51,15 +59,16 @@ Omitted curves are absent.
    `[0, 1]`. Cell mass `M_jr` sums the weights; cell chroma `C_jr` is the weighted mean post-shift
    chroma. Column mass `M_j` and chroma `C_j` sum over rows; `M` is the total. A grey image
    (`M = 0`) emits neither the chroma gain nor the turn.
-5. **Turns** (look `fitted`). For each column with `M_j ≥ 0.02 M`, let `t_j = 0.5 · C_j`. When
+5. **Turns** (looks `fitted` and `vivid`; `natural` never turns, so no turn curve is emitted).
+   For each column with `M_j ≥ 0.02 M`, let `t_j = 0.5 · C_j`. When
    `reach_all(h_j) < t_j`, turn toward the nearest direction within 45° whose `reach_all` reaches
    `t_j`, trying `+5, −5, +10, −10, …, +45, −45`; when none qualifies the column does not turn.
    Other columns keep turn 0. Emit a one-input `adjust` with `x = y = {lch, hue}` and 13 points:
    `[j/12, 0.5 + turn_j / 360]` for `j = 0..11`, plus `[1, 0.5 + turn_0 / 360]` repeating the seam.
    Omit when every turn is 0.
 6. **Chroma gain.** Each cell's slice lightness is `l_r = tone(L_r)` and its direction
-   `h_j + turn_j`. The raw gain is `reach(l_r, h_j + turn_j) / C_jr`, clamped for `fitted` to
-   `[0, 1.25]`. A cell with `M_jr < 0.005 M` or `C_jr = 0` takes the mass-weighted mean gain of
+   `h_j + turn_j`. The raw gain is `reach(l_r, h_j + turn_j) / C_jr`, clamped to `[0, cap]` by the
+   look's cap: 1 for `natural`, 1.25 for `fitted`, 2 for `vivid`. A cell with `M_jr < 0.005 M` or `C_jr = 0` takes the mass-weighted mean gain of
    the qualifying cells in the same row, or of all qualifying cells when the row has none. Then
    `|g − 1| < 0.02` snaps to exactly 1. Emit a two-input `adjust` with `x = {lch, hue}`,
    `x2 = {lab, lightness}`, `y = {lch, chroma}`, columns `j/12`, rows `0, 0.25, …, 1`, and
@@ -95,4 +104,4 @@ reaching the step, the palette, `space`, `look`, and this analysis's version.
 
 ## Non-goals
 
-Looks other than `fitted`, and caching in the reference itself.
+Caching in the reference itself.

@@ -106,6 +106,37 @@ it('switches space without asking while unedited', async () => {
 	expect(emitted.at(-1)).toMatchObject({ space: 'cielab', curves: null });
 });
 
+it('picks a look without asking while unedited', async () => {
+	await editor();
+	await page.getByRole('radio', { name: 'Vivid' }).click();
+	expect(emitted.at(-1)).toMatchObject({ look: 'vivid', curves: null });
+	await expect.element(page.getByText('Your curve edits will be lost.')).not.toBeInTheDocument();
+});
+
+it('keeps the selected look checked when it is clicked again', async () => {
+	await editor();
+	const fitted = page.getByRole('radio', { name: 'Fitted' });
+	await expect.element(fitted).toHaveAttribute('aria-checked', 'true');
+	await fitted.click();
+	expect(emitted).toHaveLength(0);
+	await expect.element(fitted).toHaveAttribute('aria-checked', 'true');
+});
+
+it('asks once before changing look on an edited fit, and cancels', async () => {
+	step = { ...step, curves: [...analysed] };
+	await editor();
+	await page.getByRole('radio', { name: 'Vivid' }).click();
+	await expect.element(page.getByText('Switch to Vivid?')).toBeInTheDocument();
+	await expect.element(page.getByText('Your curve edits will be lost.')).toBeInTheDocument();
+
+	await page.getByRole('button', { name: 'Cancel' }).click();
+	expect(emitted).toHaveLength(0);
+
+	await page.getByRole('radio', { name: 'Vivid' }).click();
+	await page.getByRole('button', { name: 'Switch' }).click();
+	expect(emitted.at(-1)).toMatchObject({ look: 'vivid', curves: null });
+});
+
 it('offers Revert when the fit was re-analysed for new inputs', async () => {
 	await editor();
 	fitReverts.set(

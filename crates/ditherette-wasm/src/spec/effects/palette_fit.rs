@@ -16,11 +16,16 @@ use super::{
     palette_fit_analysis::analyze,
 };
 
-/// Which analysis preset a `palette-fit` step uses. Only `fitted` exists.
+/// Which analysis preset a `palette-fit` step uses: how far the curves move colour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FitLook {
+    /// Tone only: no shift or turn curves, and chroma never grows past the image's own.
+    Natural,
+    /// The default: shifts and turns toward the palette, gains capped mildly above neutral.
     Fitted,
+    /// Like `fitted`, but gains may reach the palette's full slice reach in every cell.
+    Vivid,
 }
 
 /// The space palette fit analyses and edits in: one of the lab/lch model pairs.

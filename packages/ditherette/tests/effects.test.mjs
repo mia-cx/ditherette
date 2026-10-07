@@ -1040,6 +1040,64 @@ test('analyzePaletteFit returns editable curves that reproduce automatic palette
 		);
 	}));
 
+test('palette fit offers natural, fitted, and vivid looks', () =>
+	withProcessor((processor) => {
+		// A muted image against a saturated palette: the looks' gain caps all bind.
+		const muted = {
+			width: 16,
+			height: 16,
+			data: Uint8Array.from({ length: 256 * 4 }, (_, i) =>
+				i % 4 === 3 ? 255 : i % 4 === 0 ? 100 + ((i / 4) & 63) : 100
+			)
+		};
+		const saturated = [
+			{ kind: 'color', rgb: [0, 0, 0] },
+			{ kind: 'color', rgb: [255, 0, 0] },
+			{ kind: 'color', rgb: [0, 255, 0] },
+			{ kind: 'color', rgb: [0, 0, 255] },
+			{ kind: 'color', rgb: [255, 255, 0] },
+			{ kind: 'color', rgb: [0, 255, 255] },
+			{ kind: 'color', rgb: [255, 0, 255] },
+			{ kind: 'color', rgb: [255, 255, 255] }
+		];
+		const context = { palette: saturated };
+		const analyses = Object.fromEntries(
+			['natural', 'fitted', 'vivid'].map((look) => [
+				look,
+				processor.analyzePaletteFit({
+					version: 1,
+					source: muted,
+					effects: [],
+					look,
+					space: 'oklab',
+					context
+				})
+			])
+		);
+		assert.notDeepEqual(analyses.natural, analyses.fitted, 'natural differs from fitted');
+		assert.notDeepEqual(analyses.vivid, analyses.fitted, 'vivid differs from fitted');
+		for (const [look, curves] of Object.entries(analyses)) {
+			assert.deepEqual(
+				apply(processor, [fit({ look, curves })], { source: muted, context }).data,
+				apply(processor, [fit({ look })], { source: muted, context }).data,
+				`${look}: explicit curves equal the automatic step`
+			);
+		}
+		assert.throws(
+			() =>
+				processor.analyzePaletteFit({
+					version: 1,
+					source: ramp(),
+					effects: [],
+					look: 'gentle',
+					space: 'oklab',
+					context: fitContext
+				}),
+			(error) => error.path === 'look' && error.code === 'invalid-settings'
+		);
+		assert.ok(apply(processor, [fit({ look: 'vivid', strength: 0.5 })], { context: fitContext }));
+	}));
+
 test('palette fit composes into process v2 and validates its fields', () =>
 	withProcessor((processor) => {
 		const recipe = { version: 2, effects: [fit()], ...terminal, match: 'oklab-euclidean' };
@@ -1056,7 +1114,7 @@ test('palette fit composes into process v2 and validates its fields', () =>
 			assert.throws(run, (error) => error.code === code && error.path === path, path);
 		fails(() => apply(processor, [fit()]), 'invalid-request', 'context.palette');
 		fails(() => apply(processor, [fit({ strength: 2 })]), 'invalid-settings', 'effects.0.strength');
-		fails(() => apply(processor, [fit({ look: 'natural' })]), 'invalid-settings', 'effects.0.look');
+		fails(() => apply(processor, [fit({ look: 'gentle' })]), 'invalid-settings', 'effects.0.look');
 		fails(
 			() => apply(processor, [fit({ space: 'hsv', curves: [] })]),
 			'invalid-settings',
@@ -1086,7 +1144,7 @@ test('palette fit composes into process v2 and validates its fields', () =>
 					version: 1,
 					source: ramp(),
 					effects: [],
-					look: 'vivid',
+					look: 'gentle',
 					space: 'oklab',
 					context: fitContext
 				}),

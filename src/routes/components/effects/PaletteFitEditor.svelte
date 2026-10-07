@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { CurvesEffect, PaletteFitEffect, PaletteFitSpace } from 'ditherette';
+	import type { CurvesEffect, FitLook, PaletteFitEffect, PaletteFitSpace } from 'ditherette';
 	import {
 		AlertDialog,
 		AlertDialogAction,
@@ -19,6 +19,7 @@
 	} from '$lib/components/ui/collapsible';
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
 	import { FIT_SPACES } from '$lib/effects/catalog';
 	import { resolvedFits } from '$lib/processing/live-effects';
@@ -35,15 +36,24 @@
 	};
 	let { id, layerId, step, onchange }: Props = $props();
 
+	const LOOKS: { id: FitLook; label: string }[] = [
+		{ id: 'natural', label: 'Natural' },
+		{ id: 'fitted', label: 'Fitted' },
+		{ id: 'vivid', label: 'Vivid' }
+	];
+
 	let expanded = $state(false);
-	/** A pending space switch that would discard edited curves. */
+	/** Pending switches that would discard edited curves. */
 	let confirmSpace = $state<PaletteFitSpace | undefined>();
+	let confirmLook = $state<FitLook | undefined>();
 	let confirmOpen = $state(false);
-	/** The space select's shown value; cancelled confirmations must snap it back. */
+	/** The pickers' shown values; cancelled confirmations must snap them back. */
 	let spaceChoice = $derived<PaletteFitSpace>(step.space);
+	let lookChoice = $derived<FitLook>(step.look);
 
 	const spaceLabel = (space: PaletteFitSpace) =>
 		FIT_SPACES.find((option) => option.id === space)!.label;
+	const lookLabel = (look: FitLook) => LOOKS.find((option) => option.id === look)!.label;
 
 	/** The step's curves while edited, else the analysis the worker last resolved. */
 	const resolved = $derived(step.curves ?? $resolvedFits.get(layerId));
@@ -68,21 +78,58 @@
 		}
 	}
 
+	function chooseLook(look: string) {
+		// Re-clicking the selected look writes ''; keep the current look checked instead.
+		if (!look) {
+			lookChoice = step.look;
+			return;
+		}
+		if (look === step.look) return;
+		if (step.curves === null) {
+			onchange({ ...step, look: look as FitLook, curves: null });
+		} else {
+			confirmLook = look as FitLook;
+			confirmOpen = true;
+		}
+	}
+
 	function closeConfirm() {
 		confirmOpen = false;
 		confirmSpace = undefined;
+		confirmLook = undefined;
 		spaceChoice = step.space;
+		lookChoice = step.look;
 	}
 
 	function reanalyse() {
 		const space = confirmSpace;
+		const look = confirmLook;
 		confirmSpace = undefined;
-		if (space) onchange({ ...step, space, curves: null });
+		confirmLook = undefined;
+		if (space || look)
+			onchange({ ...step, space: space ?? step.space, look: look ?? step.look, curves: null });
 		else closeConfirm();
 	}
 </script>
 
 <div class="grid grid-cols-1 gap-4">
+	<div class="grid gap-1.5">
+		<Label id="{id}-look">Look</Label>
+		<ToggleGroup
+			type="single"
+			variant="outline"
+			size="sm"
+			bind:value={lookChoice}
+			onValueChange={chooseLook}
+			aria-label="Palette fit look"
+			class="w-full"
+			id="{id}-look"
+		>
+			{#each LOOKS as look (look.id)}
+				<ToggleGroupItem value={look.id} class="flex-1 text-xs">{look.label}</ToggleGroupItem>
+			{/each}
+		</ToggleGroup>
+	</div>
 	<NumberFieldsEditor {id} {step} fields={NUMBER_FIELDS['palette-fit']} {onchange} />
 	<div class="grid gap-1.5">
 		<Label for="{id}-space">Space</Label>
@@ -140,13 +187,17 @@
 		<AlertDialogContent>
 			<AlertDialogHeader>
 				<AlertDialogTitle
-					>Re-analyse in {confirmSpace ? spaceLabel(confirmSpace) : ''}?</AlertDialogTitle
+					>{confirmLook
+						? `Switch to ${lookLabel(confirmLook)}`
+						: `Re-analyse in ${confirmSpace ? spaceLabel(confirmSpace) : ''}`}?</AlertDialogTitle
 				>
 				<AlertDialogDescription>Your curve edits will be lost.</AlertDialogDescription>
 			</AlertDialogHeader>
 			<AlertDialogFooter>
 				<AlertDialogCancel>Cancel</AlertDialogCancel>
-				<AlertDialogAction onclick={reanalyse}>Re-analyse</AlertDialogAction>
+				<AlertDialogAction onclick={reanalyse}
+					>{confirmLook ? 'Switch' : 'Re-analyse'}</AlertDialogAction
+				>
 			</AlertDialogFooter>
 		</AlertDialogContent>
 	</AlertDialog>

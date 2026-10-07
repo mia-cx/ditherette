@@ -169,6 +169,20 @@ describe('palette-fit tracking across sources and palette edits', () => {
 		expect(reverts.get().has(layer.id)).toBe(false);
 	});
 
+	it('a look change is not an input change and offers no Revert', () => {
+		const { layer } = fitLayer();
+		lock(layer.id);
+		const step = () => {
+			const found = effectLayers.get().find((item) => item.id === layer.id)!.step;
+			if (found.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+			return found;
+		};
+		updateEffect(layer.id, { ...step(), look: 'vivid' });
+		expect(step().look).toBe('vivid');
+		expect(step().curves).toEqual(edited);
+		expect(fitReverts.get().has(layer.id)).toBe(false);
+	});
+
 	it('re-analyses a locked fit on a colour value edit, offering no Revert', () => {
 		const palette: Palette = {
 			name: 'Custom test',

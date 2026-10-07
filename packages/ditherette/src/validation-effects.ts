@@ -542,7 +542,7 @@ const builtins: Record<string, Builtin> = {
 		needs: (effect) => ({ palette: effect.curves === null, space: false }),
 		normalize: (effect, path) => {
 			const look = field(effect, 'look');
-			if (look !== 'fitted')
+			if (!fitLooks.includes(look as string))
 				throw new DitheretteError('invalid-settings', `${path}.look`, 'Unknown look.');
 			const space = field(effect, 'space');
 			if (space !== 'oklab' && space !== 'cielab')
@@ -652,7 +652,8 @@ export function requireContext(
 	}
 }
 
-const fitLooks = ['fitted'];
+// Order is the wasm look tag: 0 = fitted, 1 = natural, 2 = vivid.
+const fitLooks = ['fitted', 'natural', 'vivid'];
 const fitSpaces = ['oklab', 'cielab'];
 
 /**
