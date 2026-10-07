@@ -173,8 +173,6 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 	}
 };
 
-
-
 export const EFFECT_KINDS = Object.keys(EFFECTS) as EffectKind[];
 
 /** Kinds the add-effect menu offers; legacy kinds stay loadable but cannot be added. */

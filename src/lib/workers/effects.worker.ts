@@ -73,10 +73,7 @@ self.onmessage = async ({ data }: MessageEvent<LiveEffectsRequest>) => {
 		const compiled = effects.length
 			? compileEffects(ditherette, { version: 1, colours, effects: resolved, context })
 			: colours;
-		post(
-			{ type: 'compiled', id, sourceId, key, results: compiled, fits },
-			[compiled.buffer]
-		);
+		post({ type: 'compiled', id, sourceId, key, results: compiled, fits }, [compiled.buffer]);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Effects failed.';
 		post({ type: data.type === 'mask' ? 'mask-failed' : 'failed', id, sourceId, key, message });
