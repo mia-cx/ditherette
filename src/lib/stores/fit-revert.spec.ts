@@ -1,16 +1,18 @@
 import { useTestStorageEngine } from '@nanostores/persistent';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Curve } from 'ditherette';
 import { WPLACE_PALETTE_NAME } from '$lib/palette/wplace';
 import {
 	activePalette,
 	activePaletteName,
+	customPalettes,
 	outputSettings,
 	paletteEnabled,
 	setPaletteColorEnabled,
 	sourceImageData,
 	updateOutputSettings
 } from './app';
+import type { Palette } from '$lib/processing/types';
 import { addEffect, effectLayers, setEffectEnabled, updateEffect } from './effects';
 import { fitReverts, revertFit } from './fit-revert';
 
@@ -46,6 +48,7 @@ beforeEach(() => {
 	effectLayers.set([]);
 	sourceImageData.set(image());
 	activePaletteName.set(WPLACE_PALETTE_NAME);
+	customPalettes.set([]);
 });
 
 useTestStorageEngine();
@@ -134,5 +137,62 @@ describe('palette-fit input tracking', () => {
 		expect(fitReverts.get().has(layer.id)).toBe(false);
 		const step = effectLayers.get().find((item) => item.id === layer.id)!.step;
 		expect(step.effect === 'palette-fit' && step.curves).toBe(null);
+	});
+});
+
+describe('palette-fit tracking across sources and palette edits', () => {
+	it("keeps restored edits through the session's first source, clears them on a new one", async () => {
+		vi.resetModules();
+		const {
+			effectLayers: layers,
+			updateEffect: update,
+			addEffect: add
+		} = await import('./effects');
+		const app = await import('./app');
+		const { fitReverts: reverts } = await import('./fit-revert');
+
+		layers.set([]);
+		const layer = add('palette-fit');
+		const step = layer.step;
+		if (step.effect !== 'palette-fit') throw new Error('Expected a palette-fit layer.');
+		update(layer.id, { ...step, curves: edited });
+
+		// Restoring the persisted source keeps the saved edits.
+		app.sourceImageData.set(image());
+		const kept = layers.get().find((item) => item.id === layer.id)!.step;
+		expect(kept.effect === 'palette-fit' && kept.curves).toEqual(edited);
+
+		// Loading a different image clears them without offering Revert.
+		app.sourceImageData.set(image());
+		const cleared = layers.get().find((item) => item.id === layer.id)!.step;
+		expect(cleared.effect === 'palette-fit' && cleared.curves).toBe(null);
+		expect(reverts.get().has(layer.id)).toBe(false);
+	});
+
+	it('re-analyses a locked fit on a colour value edit, offering no Revert', () => {
+		const palette: Palette = {
+			name: 'Custom test',
+			source: 'custom',
+			colors: [{ name: 'Dark', key: '112233', rgb: { r: 0x11, g: 0x22, b: 0x33 }, kind: 'custom' }]
+		};
+		customPalettes.set([palette]);
+		activePaletteName.set('Custom test');
+		const { layer } = fitLayer();
+		lock(layer.id);
+
+		customPalettes.set([
+			{
+				...palette,
+				colors: [{ ...palette.colors[0]!, rgb: { r: 0, g: 0, b: 0 } }]
+			}
+		]);
+		const step = effectLayers.get().find((item) => item.id === layer.id)!.step;
+		expect(step.effect === 'palette-fit' && step.curves).toBe(null);
+		expect(fitReverts.get().has(layer.id)).toBe(false);
+
+		// Switching to a different palette keeps the offer.
+		lock(layer.id);
+		activePaletteName.set(WPLACE_PALETTE_NAME);
+		expect(fitReverts.get().has(layer.id)).toBe(true);
 	});
 });

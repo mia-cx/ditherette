@@ -11,9 +11,13 @@ interface Holder {
 	readonly step: import('ditherette').Effect;
 }
 
+const rgb = (n: number) => ({ r: n, g: n, b: n });
+const values = { '#000000': rgb(0), '#FFFFFF': rgb(255), transparent: null };
+
 const inputs = (overrides: Partial<FitInputs<Holder>> = {}): FitInputs<Holder> => ({
 	paletteName: 'Test palette',
 	enabled: { '#000000': true, '#FFFFFF': true },
+	values,
 	crop: undefined,
 	before: [{ step: exposure }],
 	...overrides
@@ -40,6 +44,9 @@ describe('fitFingerprint', () => {
 		const base = inputs();
 		expect(fitFingerprint({ ...base, paletteName: 'Other' })).not.toBe(fitFingerprint(base));
 		expect(fitFingerprint({ ...base, enabled: { ...base.enabled, '#FFFFFF': false } })).not.toBe(
+			fitFingerprint(base)
+		);
+		expect(fitFingerprint({ ...base, values: { ...values, '#000000': rgb(64) } })).not.toBe(
 			fitFingerprint(base)
 		);
 		expect(fitFingerprint({ ...base, crop: { x: 1, y: 2, width: 3, height: 4 } })).not.toBe(
@@ -92,11 +99,21 @@ describe('decideLockedFit', () => {
 		expect(decision.action).toBe('reanalyse');
 		expect(decision.state.inputs).toBe(next);
 		expect(decision.state.revert).toEqual({ inputs: locked, curves: edited });
+	});
 
-		// A further change replaces the snapshot rather than stacking.
-		const third = inputs({ paletteName: 'Third' });
-		const again = decideLockedFit(edited, decision.state, third);
-		expect(again.action).toBe('reanalyse');
-		expect(again.state.revert).toEqual({ inputs: next, curves: edited });
+	it('keeps Revert when a different palette is selected, drops it for a colour edit', () => {
+		const locked = inputs();
+		const switched = decideLockedFit(edited, { inputs: locked }, inputs({ paletteName: 'Other' }));
+		expect(switched.state.revert).toBeDefined();
+
+		// Editing a colour inside the same palette re-analyses without a snapshot: Revert could
+		// not restore the RGB values anyway.
+		const recoloured = decideLockedFit(
+			edited,
+			{ inputs: locked },
+			inputs({ values: { ...values, '#000000': rgb(64) } })
+		);
+		expect(recoloured.action).toBe('reanalyse');
+		expect(recoloured.state.revert).toBeUndefined();
 	});
 });

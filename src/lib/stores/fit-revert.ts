@@ -38,6 +38,7 @@ function currentInputs(layers: readonly EffectLayer[], at: number): FitLayerInpu
 				paletteColorEnabled(enabled, palette.name, color.key)
 			])
 		),
+		values: Object.fromEntries(palette.colors.map((color) => [color.key, color.rgb ?? null])),
 		crop: outputSettings.get().crop,
 		before: layers.slice(0, at)
 	};
@@ -49,13 +50,14 @@ function offers(next: (map: Map<string, FitLayerRevert>) => void) {
 	fitReverts.set(map);
 }
 
-/**
- * Re-check every palette fit after any input edit. A locked fit whose inputs changed re-analyses
- * and offers Revert; an unlocked fit with a pending offer drops it once its inputs move again.
- */
 /** Revert writes several stores; their mid-restore states must not re-analyse the fit. */
 let restoring = false;
 
+/**
+ * Re-check every palette fit after any input edit. A locked fit whose inputs changed re-analyses;
+ * a revertable change offers Revert, while an unlocked fit with a pending offer drops it once its
+ * inputs move again.
+ */
 function check() {
 	if (restoring) return;
 	const layers = effectLayers.get();
@@ -79,10 +81,11 @@ function check() {
 		}
 		const decision = decideLockedFit(layer.step.curves, state, inputs);
 		states.set(layer.id, decision.state);
-		if (decision.action === 'reanalyse' && decision.state.revert) {
-			const revert = decision.state.revert;
+		if (decision.action === 'reanalyse') {
 			changed.push({ ...layer, step: { ...layer.step, curves: null } });
-			offers((map) => map.set(layer.id, revert));
+			const revert = decision.state.revert;
+			if (revert) offers((map) => map.set(layer.id, revert));
+			else drops.push(layer.id);
 		}
 	});
 	for (const id of drops) offers((map) => map.delete(id));
@@ -114,7 +117,7 @@ function reset() {
 
 /**
  * Undo one re-analysis: restore the palette selection, crop, earlier layers, and the edited
- * curves. The snapshot is then consumed — Revert has only one level.
+ * curves. The snapshot is then consumed; Revert has only one level.
  */
 export function revertFit(layerId: string) {
 	const revert = fitReverts.get().get(layerId);
@@ -155,10 +158,9 @@ export function revertFit(layerId: string) {
 
 let source: ImageData | undefined;
 sourceImageData.listen((next) => {
-	if (next !== source) {
-		source = next;
-		if (next) reset();
-	}
+	// The first source of a session restores saved edits; only replacing it clears them.
+	if (source && next && next !== source) reset();
+	if (next) source = next;
 });
 [effectLayers, activePalette, paletteEnabled, outputSettings].forEach((store) =>
 	store.listen(check)

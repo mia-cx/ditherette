@@ -9,14 +9,14 @@ import type {
 import { croppedSource } from './package-adapter';
 import type { CropRect } from './types';
 
-/** One analysed analysis: which input position its curves belong to. */
+/** One palette fit's resolved curves, by its position in the input. */
 export type AnalysedFit = { readonly index: number; readonly curves: readonly Curve[] };
 
 /**
  * Give each recipe-less recolour and curves-less palette fit the data `process` would derive:
  * analysed on the cropped source, after the steps before it. `analyses` caches each analysis by
  * what it read, for one image. When `fits` is passed, it receives every palette-fit step's
- * resolved curves — the analysed list, or its own explicit list — so the UI can show them.
+ * resolved curves, the analysed list or its own explicit list, so the UI can show them.
  */
 export function resolveRecipes(
 	ditherette: Ditherette,

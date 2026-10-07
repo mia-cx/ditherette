@@ -79,8 +79,8 @@ export function maskInputs(layers: readonly EffectLayer[], layerId: string | und
 
 /**
  * What a compile depends on. Analysis steps (a recolour without a recipe, a palette fit without
- * curves) read the palette and the cropped image, and a recolour always reads the working space —
- * everything else in the key is just the steps, so other edits keep it.
+ * curves) read the palette and the cropped image, and a recolour always reads the working space.
+ * Everything else in the key is just the steps, so other edits keep it.
  */
 export function effectsKey(
 	effects: readonly Effect[],

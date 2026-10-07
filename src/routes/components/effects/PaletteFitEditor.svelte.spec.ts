@@ -116,6 +116,7 @@ it('offers Revert when the fit was re-analysed for new inputs', async () => {
 					inputs: {
 						paletteName: 'Wplace (Default)',
 						enabled: {},
+						values: {},
 						crop: undefined,
 						before: []
 					},
