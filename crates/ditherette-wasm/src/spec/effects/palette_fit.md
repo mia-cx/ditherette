@@ -14,7 +14,7 @@ exactly as a `curves` step does.
 
 | Field | Domain | Meaning |
 | --- | --- | --- |
-| `look` | `"fitted"` | Which preset tunes the analysis |
+| `look` | `"natural"`, `"fitted"` or `"vivid"` | Which preset tunes the analysis |
 | `space` | `"oklab"` or `"cielab"` | Working space of the analysis and the analysed curves' models |
 | `strength` | `[0, 1]` | Scales every curve's bend, see below |
 | `curves` | `null` or 0 to 16 [curves](curves.md) | `null` analyses automatically; a list is applied as is (edited, locked) |
@@ -69,4 +69,4 @@ It may cache a step's resolved curves by the exact image reaching the step, the 
 
 ## Non-goals
 
-Looks beyond `fitted`, and strengths above 1.
+Strengths above 1.

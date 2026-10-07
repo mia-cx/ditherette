@@ -108,9 +108,19 @@ fn steps(value: Value) -> Vec<EffectStep> {
     decode_effects(&value.to_string()).unwrap()
 }
 
-fn fit_in(space: &str, strength: f32, curves: Option<Value>) -> Value {
-    json!({ "effect": "palette-fit", "enabled": true, "look": "fitted",
+const LOOKS: [(&str, FitLook); 3] = [
+    ("natural", FitLook::Natural),
+    ("fitted", FitLook::Fitted),
+    ("vivid", FitLook::Vivid),
+];
+
+fn fit_step(look: &str, space: &str, strength: f32, curves: Option<Value>) -> Value {
+    json!({ "effect": "palette-fit", "enabled": true, "look": look,
         "space": space, "strength": strength, "curves": curves })
+}
+
+fn fit_in(space: &str, strength: f32, curves: Option<Value>) -> Value {
+    fit_step("fitted", space, strength, curves)
 }
 
 fn fit(strength: f32, curves: Option<Value>) -> Value {
@@ -121,6 +131,7 @@ fn analyze(
     data: &[u8],
     palette: &[PaletteEntry],
     space: FitSpace,
+    look: FitLook,
     effects: &[EffectStep],
 ) -> Vec<Curve> {
     analyze_palette_fit(AnalyzePaletteFitRequest {
@@ -132,7 +143,7 @@ fn analyze(
             space: None,
         },
         space,
-        look: FitLook::Fitted,
+        look,
     })
     .unwrap()
 }
@@ -159,7 +170,13 @@ fn curves_step(curves: &[Curve]) -> Value {
 #[test]
 fn analysis_writes_valid_curves_that_change_with_image_palette_and_space() {
     let (vivid, muted) = (sweep(0.9), sweep(0.3));
-    let curves = analyze(&vivid, &wplace_free(), FitSpace::Oklab, &[]);
+    let curves = analyze(
+        &vivid,
+        &wplace_free(),
+        FitSpace::Oklab,
+        FitLook::Fitted,
+        &[],
+    );
     assert!(!curves.is_empty() && curves.len() <= 5);
     Curves {
         curves: curves.clone(),
@@ -168,22 +185,40 @@ fn analysis_writes_valid_curves_that_change_with_image_palette_and_space() {
     .unwrap();
     assert_eq!(
         curves,
-        analyze(&vivid, &wplace_free(), FitSpace::Oklab, &[]),
+        analyze(
+            &vivid,
+            &wplace_free(),
+            FitSpace::Oklab,
+            FitLook::Fitted,
+            &[]
+        ),
         "deterministic"
     );
     assert_ne!(
         curves,
-        analyze(&muted, &wplace_free(), FitSpace::Oklab, &[]),
+        analyze(
+            &muted,
+            &wplace_free(),
+            FitSpace::Oklab,
+            FitLook::Fitted,
+            &[]
+        ),
         "image content"
     );
     assert_ne!(
         curves,
-        analyze(&vivid, &warm(), FitSpace::Oklab, &[]),
+        analyze(&vivid, &warm(), FitSpace::Oklab, FitLook::Fitted, &[]),
         "palette"
     );
     assert_ne!(
         curves,
-        analyze(&vivid, &wplace_free(), FitSpace::Cielab, &[]),
+        analyze(
+            &vivid,
+            &wplace_free(),
+            FitSpace::Cielab,
+            FitLook::Fitted,
+            &[]
+        ),
         "space"
     );
     // Analysis sees the image after the earlier steps.
@@ -193,7 +228,13 @@ fn analysis_writes_valid_curves_that_change_with_image_palette_and_space() {
     );
     assert_ne!(
         curves,
-        analyze(&vivid, &wplace_free(), FitSpace::Oklab, &levels),
+        analyze(
+            &vivid,
+            &wplace_free(),
+            FitSpace::Oklab,
+            FitLook::Fitted,
+            &levels
+        ),
         "earlier steps"
     );
 }
@@ -201,7 +242,7 @@ fn analysis_writes_valid_curves_that_change_with_image_palette_and_space() {
 #[test]
 fn nothing_to_fit_means_no_curves() {
     let transparent: Vec<u8> = (0..SIZE * SIZE).flat_map(|_| [9, 9, 9, 0]).collect();
-    assert!(analyze(&transparent, &warm(), FitSpace::Oklab, &[]).is_empty());
+    assert!(analyze(&transparent, &warm(), FitSpace::Oklab, FitLook::Fitted, &[]).is_empty());
     // The step is then an exact no-op.
     let data = transparent;
     let output = run(&data, &steps(json!([fit(1.0, None)])), &warm(), None).unwrap();
@@ -237,12 +278,14 @@ fn a_grey_image_gets_no_gain_or_turn() {
         })
         .collect();
     for space in [FitSpace::Oklab, FitSpace::Cielab] {
-        let curves = analyze(&ramp, &wplace_free(), space, &[]);
-        for curve in &curves {
-            let json = serde_json::to_value(curve).unwrap();
-            let y = json["y"]["channel"].as_str().unwrap();
-            assert_ne!(y, "chroma", "gain curve on a grey image");
-            assert_ne!(y, "hue", "turn curve on a grey image");
+        for (tag, look) in LOOKS {
+            let curves = analyze(&ramp, &wplace_free(), space, look, &[]);
+            for curve in &curves {
+                let json = serde_json::to_value(curve).unwrap();
+                let y = json["y"]["channel"].as_str().unwrap();
+                assert_ne!(y, "chroma", "{tag}: gain curve on a grey image");
+                assert_ne!(y, "hue", "{tag}: turn curve on a grey image");
+            }
         }
     }
 }
@@ -252,32 +295,39 @@ fn application_matches_curves_with_the_same_list() {
     let data = sweep(0.8);
     let palette = wplace_free();
     for space in [FitSpace::Oklab, FitSpace::Cielab] {
-        let curves = analyze(&data, &palette, space, &[]);
-        let tag = match space {
-            FitSpace::Oklab => "oklab",
-            FitSpace::Cielab => "cielab",
-        };
-        let fitted = run(
-            &data,
-            &steps(json!([fit_in(tag, 1.0, None)])),
-            &palette,
-            None,
-        )
-        .unwrap();
-        let curved = run(&data, &steps(json!([curves_step(&curves)])), &palette, None).unwrap();
-        assert_eq!(fitted, curved, "{space:?}: strength 1 without mask");
-        // The same list handed back explicit equals the automatic step.
-        let explicit = run(
-            &data,
-            &steps(json!([fit(
-                1.0,
-                Some(serde_json::to_value(&curves).unwrap())
-            )])),
-            &palette,
-            None,
-        )
-        .unwrap();
-        assert_eq!(explicit, curved, "{space:?}: explicit curves");
+        for (look_tag, look) in LOOKS {
+            let curves = analyze(&data, &palette, space, look, &[]);
+            let tag = match space {
+                FitSpace::Oklab => "oklab",
+                FitSpace::Cielab => "cielab",
+            };
+            let fitted = run(
+                &data,
+                &steps(json!([fit_step(look_tag, tag, 1.0, None)])),
+                &palette,
+                None,
+            )
+            .unwrap();
+            let curved = run(&data, &steps(json!([curves_step(&curves)])), &palette, None).unwrap();
+            assert_eq!(
+                fitted, curved,
+                "{space:?} {look_tag}: strength 1 without mask"
+            );
+            // The same list handed back explicit equals the automatic step.
+            let explicit = run(
+                &data,
+                &steps(json!([fit_step(
+                    look_tag,
+                    tag,
+                    1.0,
+                    Some(serde_json::to_value(&curves).unwrap())
+                )])),
+                &palette,
+                None,
+            )
+            .unwrap();
+            assert_eq!(explicit, curved, "{space:?} {look_tag}: explicit curves");
+        }
     }
 }
 
@@ -285,7 +335,7 @@ fn application_matches_curves_with_the_same_list() {
 fn a_grey_palette_pulls_all_chroma_out() {
     // Zero reach in every hue: every cell's gain clamps to 0, so colours go grey.
     let data = sweep(0.9);
-    let curves = analyze(&data, &greys(), FitSpace::Oklab, &[]);
+    let curves = analyze(&data, &greys(), FitSpace::Oklab, FitLook::Fitted, &[]);
     let gain = curves.iter().find_map(|curve| match curve {
         Curve::TwoInput(curve) => Some(curve),
         _ => None,
@@ -331,7 +381,7 @@ fn strength_scales_the_bend_and_mask_multiplies_it() {
     );
     // strength * mask is the curves mask strength: a constant 0.5 mask at strength 1 equals
     // strength 0.5 unmasked, on every pixel.
-    let curves = analyze(&data, &palette, FitSpace::Oklab, &[]);
+    let curves = analyze(&data, &palette, FitSpace::Oklab, FitLook::Fitted, &[]);
     let masked = json!([{
         "effect": "palette-fit", "enabled": true, "look": "fitted", "space": "oklab",
         "strength": 1.0, "curves": null,
@@ -357,7 +407,7 @@ fn strength_scales_the_bend_and_mask_multiplies_it() {
 #[test]
 fn explicit_curves_ignore_the_context_but_their_fields_validate() {
     let data = sweep(0.5);
-    let curves = analyze(&data, &wplace_free(), FitSpace::Oklab, &[]);
+    let curves = analyze(&data, &wplace_free(), FitSpace::Oklab, FitLook::Fitted, &[]);
     let list = serde_json::to_value(&curves).unwrap();
     // No palette and no space needed once the list is explicit.
     let output = run(
@@ -404,7 +454,7 @@ fn explicit_curves_ignore_the_context_but_their_fields_validate() {
     );
     // An unknown look or space fails to decode at the step.
     let mut bad_look = fit(1.0, None);
-    bad_look["look"] = json!("natural");
+    bad_look["look"] = json!("gentle");
     assert!(decode_effects(&json!([bad_look]).to_string()).is_err());
     let mut bad_space = fit(1.0, None);
     bad_space["space"] = json!("hsv");
@@ -435,4 +485,73 @@ fn a_preceding_recolour_reads_the_context_space() {
     assert_eq!(analyze(None).unwrap_err().path, "context.space");
     let curves = analyze(Some(WorkingSpace::Oklab)).unwrap();
     assert!(!curves.is_empty());
+}
+
+#[test]
+fn natural_emits_no_shift_or_turn_and_never_grows_chroma() {
+    let data = sweep(0.9);
+    for space in [FitSpace::Oklab, FitSpace::Cielab] {
+        let curves = analyze(&data, &warm(), space, FitLook::Natural, &[]);
+        for curve in &curves {
+            let json = serde_json::to_value(curve).unwrap();
+            let y = json["y"]["channel"].as_str().unwrap();
+            assert!(
+                y != "a" && y != "b",
+                "{space:?}: natural emits no shift curve"
+            );
+            assert!(
+                !(json["x"]["channel"].as_str() == Some("hue") && y == "hue"),
+                "{space:?}: natural emits no turn curve"
+            );
+        }
+        if let Some(gain) = curves.iter().find_map(|curve| match curve {
+            Curve::TwoInput(curve) => Some(curve),
+            _ => None,
+        }) {
+            assert!(
+                gain.grid.values.iter().flatten().all(|&value| value <= 0.5),
+                "{space:?}: natural gains never grow chroma"
+            );
+        }
+    }
+}
+
+#[test]
+fn vivid_reaches_more_chroma_than_fitted_on_a_muted_image() {
+    // A muted image against a saturated palette has cells fitted clamps at 1.25; vivid may
+    // reach the slice's full reach (2).
+    let data = sweep(0.25);
+    let saturated = colors(&[
+        [0, 0, 0],
+        [255, 0, 0],
+        [0, 255, 0],
+        [0, 0, 255],
+        [255, 255, 0],
+        [0, 255, 255],
+        [255, 0, 255],
+        [255, 255, 255],
+    ]);
+    let max_gain = |look: FitLook| {
+        analyze(&data, &saturated, FitSpace::Oklab, look, &[])
+            .iter()
+            .find_map(|curve| match curve {
+                Curve::TwoInput(curve) => Some(
+                    curve
+                        .grid
+                        .values
+                        .iter()
+                        .flatten()
+                        .fold(0.0f32, |a, &b| a.max(b)),
+                ),
+                _ => None,
+            })
+            .unwrap_or(0.0)
+    };
+    let fitted = max_gain(FitLook::Fitted);
+    assert!(fitted > 0.5, "fitted should grow chroma here: {fitted}");
+    assert!(max_gain(FitLook::Vivid) > fitted, "vivid exceeds fitted");
+    assert!(
+        max_gain(FitLook::Natural) <= 0.5,
+        "natural stays at or below neutral"
+    );
 }

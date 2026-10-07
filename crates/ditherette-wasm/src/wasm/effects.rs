@@ -187,8 +187,11 @@ pub fn private_analyze_palette_fit(
             context_space,
             &mut entries,
         )?;
+        // Look tags: 0 = fitted, 1 = natural, 2 = vivid.
         let look = match look {
             0.0 => crate::prod::effects::palette_fit::FitLook::Fitted,
+            1.0 => crate::prod::effects::palette_fit::FitLook::Natural,
+            2.0 => crate::prod::effects::palette_fit::FitLook::Vivid,
             _ => {
                 return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Effects));
             }

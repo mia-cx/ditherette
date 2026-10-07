@@ -45,8 +45,15 @@ const MIN_CELL_MASS: f32 = 0.005;
 const REACH_SHARE: f32 = 0.5;
 /// Largest hue turn toward a reachable direction, searched in 5-degree steps.
 const MAX_TURN: f32 = 45.0;
-/// `fitted` clamps each cell's chroma gain to this range.
-const GAIN_RANGE: (f32, f32) = (0.0, 1.25);
+/// Each look's chroma gain cap: `natural` never grows chroma, `vivid` reaches the palette's
+/// full slice reach, and `fitted` sits between.
+fn gain_cap(look: FitLook) -> f32 {
+    match look {
+        FitLook::Natural => 1.0,
+        FitLook::Fitted => 1.25,
+        FitLook::Vivid => 2.0,
+    }
+}
 
 /// One read pixel: working-space coordinates and its alpha weight in `(0, 1]`.
 struct Sample {
@@ -84,9 +91,18 @@ pub fn analyze(
         return Vec::new();
     }
     let tone = tone(&samples, &palette);
-    let shift = shift(&palette);
+    // `natural` measures the cells with no shift and never turns a column.
+    let shift = if matches!(look, FitLook::Natural) {
+        [0.0, 0.0]
+    } else {
+        shift(&palette)
+    };
     let cells = cells(&samples, shift);
-    let turns = turns(&cells, &palette);
+    let turns = if matches!(look, FitLook::Natural) {
+        [0.0; COLUMNS]
+    } else {
+        turns(&cells, &palette)
+    };
     let gains = gains(&cells, &palette, &tone, &turns, look);
     emit(space, tone, shift, gains, turns)
 }
@@ -385,7 +401,7 @@ fn gains(
     if cells.total == 0.0 {
         return None;
     }
-    let FitLook::Fitted = look;
+    let cap = gain_cap(look);
     let tone = Spline::new(tone);
     let mut gains = [[0.0; ROWS]; COLUMNS];
     let mut qualifies = [[false; ROWS]; COLUMNS];
@@ -397,8 +413,7 @@ fn gains(
             if qualifying {
                 let l = tone.eval(r as f32 * ROW_STEP);
                 let direction = j as f32 * COLUMN_DEGREES + turns[j];
-                *cell = (slice_reach(palette, l, direction) / cells.chroma[j][r])
-                    .clamp(GAIN_RANGE.0, GAIN_RANGE.1);
+                *cell = (slice_reach(palette, l, direction) / cells.chroma[j][r]).clamp(0.0, cap);
             }
         }
     }
