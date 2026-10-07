@@ -1113,7 +1113,17 @@ test('palette fit composes into process v2 and validates its fields', () =>
 		const fails = (run, code, path) =>
 			assert.throws(run, (error) => error.code === code && error.path === path, path);
 		fails(() => apply(processor, [fit()]), 'invalid-request', 'context.palette');
-		fails(() => apply(processor, [fit({ strength: 2 })]), 'invalid-settings', 'effects.0.strength');
+		// Palette fit is the only strength allowed past 1.
+		apply(processor, [fit({ strength: 3 })], {
+			source: opaqueRamp(),
+			context: fitContext
+		});
+		fails(
+			() => apply(processor, [fit({ strength: 3.01 })]),
+			'invalid-settings',
+			'effects.0.strength'
+		);
+		fails(() => apply(processor, [auto(1.01)]), 'invalid-settings', 'effects.0.strength');
 		fails(() => apply(processor, [fit({ look: 'gentle' })]), 'invalid-settings', 'effects.0.look');
 		fails(
 			() => apply(processor, [fit({ space: 'hsv', curves: [] })]),
