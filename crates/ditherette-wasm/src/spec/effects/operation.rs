@@ -26,7 +26,10 @@ use crate::{
 
 use super::{
     chain::{apply_chain, validate_chain, EffectContext},
+    curves::Curve,
     image::EffectImage,
+    palette_fit::{FitLook, FitSpace},
+    palette_fit_analysis,
     recipe::{decode_steps, EffectStep},
     recolour::RecolourRecipe,
     recolour_analysis::analyze,
@@ -91,6 +94,44 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
     let mut image = EffectImage::from_rgba8(source_view(request.source)?);
     apply_chain(&mut image, request.effects, &request.context)?;
     Ok(analyze(&image, &request.context))
+}
+
+/// Palette-fit analysis request: like `AnalyzeRequest`, plus the step's own `space` and `look`.
+/// The context's space is ignored; the step carries its own.
+#[derive(Debug, Clone, Copy)]
+pub struct AnalyzePaletteFitRequest<'a> {
+    pub version: u32,
+    pub source: Source<'a>,
+    pub effects: &'a [EffectStep],
+    pub context: EffectContext<'a>,
+    pub space: FitSpace,
+    pub look: FitLook,
+}
+
+/// Runs `effects` on the source, then derives the curve list a `palette-fit` step with this
+/// `space` and `look` appended to `effects` would use. The context supplies only the palette.
+pub fn analyze_palette_fit(
+    request: AnalyzePaletteFitRequest<'_>,
+) -> Result<Vec<Curve>, DitheretteError> {
+    if request.version != EFFECTS_VERSION {
+        return Err(unsupported("version"));
+    }
+    validate_chain(request.effects, &request.context)?;
+    if request.context.colors().next().is_none() {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidRequest,
+            "context.palette",
+            "Analysis requires a visible palette colour.",
+        ));
+    }
+    let mut image = EffectImage::from_rgba8(source_view(request.source)?);
+    apply_chain(&mut image, request.effects, &request.context)?;
+    Ok(palette_fit_analysis::analyze(
+        &image,
+        &request.context,
+        request.space,
+        request.look,
+    ))
 }
 
 /// Recipe v1's terminal settings plus the ordered effects that precede them.

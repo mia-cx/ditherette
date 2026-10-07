@@ -13,6 +13,8 @@ pub mod levels;
 pub mod mask;
 pub mod model;
 pub mod operation;
+pub mod palette_fit;
+pub mod palette_fit_analysis;
 pub mod recipe;
 pub mod recolour;
 pub mod recolour_analysis;
@@ -22,7 +24,7 @@ pub mod white_balance;
 pub use chain::{apply_chain, Effect, EffectContext, Needs, Step};
 pub use image::EffectImage;
 pub use operation::{
-    analyze_recolour, apply_effects, decode_recipe_v2, process, AnalyzeRequest, EffectsRequest,
-    ProcessRequestV2, RecipeV2,
+    analyze_palette_fit, analyze_recolour, apply_effects, decode_recipe_v2, process,
+    AnalyzePaletteFitRequest, AnalyzeRequest, EffectsRequest, ProcessRequestV2, RecipeV2,
 };
 pub use recipe::{decode_effects, BuiltinEffect, EffectStep};
