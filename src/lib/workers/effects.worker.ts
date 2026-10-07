@@ -8,7 +8,7 @@ import {
 	type Rgba8Image
 } from 'ditherette';
 import type { LiveEffectsRequest, LiveEffectsResponse } from '$lib/processing/live-effects';
-import { resolveRecipes, type AnalysedFit } from '$lib/processing/recipes';
+import { measureFits, resolveRecipes, type AnalysedFit } from '$lib/processing/recipes';
 import { initializePackageProcessor } from '$lib/processing/worker-pipeline';
 
 /**
@@ -59,6 +59,11 @@ self.onmessage = async ({ data }: MessageEvent<LiveEffectsRequest>) => {
 			fits
 		);
 		const { colours } = loaded;
+		if (data.type === 'measure') {
+			const fits = measureFits(ditherette, loaded.image, effects, context, crop, analyses);
+			post({ type: 'measured', id, sourceId, key, fits });
+			return;
+		}
 		if (data.type === 'mask') {
 			const results = compileEffectMask(ditherette, {
 				version: 1,
@@ -76,6 +81,17 @@ self.onmessage = async ({ data }: MessageEvent<LiveEffectsRequest>) => {
 		post({ type: 'compiled', id, sourceId, key, results: compiled, fits }, [compiled.buffer]);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Effects failed.';
-		post({ type: data.type === 'mask' ? 'mask-failed' : 'failed', id, sourceId, key, message });
+		post({
+			type:
+				data.type === 'mask'
+					? 'mask-failed'
+					: data.type === 'measure'
+						? 'measure-failed'
+						: 'failed',
+			id,
+			sourceId,
+			key,
+			message
+		});
 	}
 };

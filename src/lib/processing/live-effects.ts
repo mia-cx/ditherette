@@ -3,13 +3,14 @@ import type { Curve, Effect, EffectContext, MaskCurve } from 'ditherette';
 import { colorSpace, outputSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
 import { activeEffectSteps, effectLayers, type EffectLayer } from '$lib/stores/effects';
 import { packageEffectContext } from './package-adapter';
+import type { MeasuredFit } from './recipes';
 import type { CropRect } from './types';
 
 type Compile = {
 	id: number;
 	sourceId: number;
 	key: string;
-	effects: Effect[];
+	effects: readonly Effect[];
 	context: Required<EffectContext>;
 	crop?: CropRect;
 };
@@ -17,7 +18,9 @@ export type LiveEffectsRequest =
 	| { type: 'source'; sourceId: number; source: ImageData }
 	| ({ type: 'compile' } & Compile)
 	/** `effects` are the steps before the masked one; each colour's result is its mask as grey. */
-	| ({ type: 'mask'; mask: MaskCurve[] } & Compile);
+	| ({ type: 'mask'; mask: MaskCurve[] } & Compile)
+	/** Measure every palette-fit step's internals for the export event. */
+	| ({ type: 'measure' } & Compile);
 export type LiveEffectsResponse =
 	| {
 			type: 'indexed';
@@ -27,6 +30,14 @@ export type LiveEffectsResponse =
 			count: number;
 	  }
 	| {
+			type: 'measured';
+			id: number;
+			sourceId: number;
+			key: string;
+			/** Each palette-fit step's state and measurements, by index into `effects`. */
+			fits: MeasuredFit[];
+	  }
+	| {
 			type: 'compiled' | 'masked';
 			id: number;
 			sourceId: number;
@@ -34,6 +45,13 @@ export type LiveEffectsResponse =
 			results: Uint32Array;
 			/** Each palette-fit step's resolved curves, by index into `effects`. Only `compiled`. */
 			fits?: readonly { readonly index: number; readonly curves: readonly Curve[] }[];
+	  }
+	| {
+			type: 'measure-failed';
+			id: number;
+			sourceId: number;
+			key: string;
+			message: string;
 	  }
 	| {
 			type: 'failed' | 'mask-failed';
@@ -188,6 +206,21 @@ function settle(source: ImageData, key: string, outcome: Uint32Array | Error) {
  * while the output is still dithering. One compile runs at a time; edits during it fold into the
  * next, and the latest edit wins. Returns a stop function.
  */
+/** The running session's measure call; `undefined` before `startLiveEffects` or after stop. */
+let session:
+	| { measure(steps: readonly Effect[]): Promise<ReadonlyMap<number, MeasuredFit>> }
+	| undefined;
+
+/**
+ * Measure the enabled palette-fit steps in the effects worker for the export event. Resolves
+ * per-layer measurements for `steps`, or an empty map when no worker is running.
+ */
+export function measurePaletteFits(
+	steps: readonly Effect[]
+): Promise<ReadonlyMap<number, MeasuredFit>> {
+	return session?.measure(steps) ?? Promise.resolve(new Map());
+}
+
 export function startLiveEffects() {
 	let worker: Worker | undefined;
 	let sources = new WeakMap<ImageData, number>();
@@ -198,7 +231,10 @@ export function startLiveEffects() {
 	/** The mask that last failed; it waits for new inputs, or for Show mask to turn off and on. */
 	let failedMask: { source: ImageData; key: string } | undefined;
 	let requestId = 0;
-	/** The effects each in-flight compile was sent, so its fit curves map back to layers. */
+	const measureWaiters = new Map<
+		number,
+		{ resolve: (fits: ReadonlyMap<number, MeasuredFit>) => void; reject: (error: Error) => void }
+	>();
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
 	function reset(reason: string) {
@@ -214,11 +250,14 @@ export function startLiveEffects() {
 		analysedFits.set({ key: '', byIndex: new Map() });
 		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
+		for (const waiter of measureWaiters.values()) waiter.reject(new Error(reason));
+		measureWaiters.clear();
 	}
 
 	function stop() {
 		reset('The image changed.');
 		sources = new WeakMap();
+		session = undefined;
 	}
 
 	function crashed(event: Event) {
@@ -312,6 +351,20 @@ export function startLiveEffects() {
 			}
 			return update();
 		}
+		if (data.type === 'measured' || data.type === 'measure-failed') {
+			const waiter = measureWaiters.get(data.id);
+			measureWaiters.delete(data.id);
+			if (!waiter) return;
+			if (data.type === 'measure-failed') {
+				waiter.reject(new Error(data.message));
+				return;
+			}
+			// Fit indices name positions in the sent steps; the caller owns the layer order.
+			const fits = new Map<number, MeasuredFit>();
+			data.fits.forEach((fit) => fits.set(fit.index, fit));
+			waiter.resolve(fits);
+			return;
+		}
 		busy = false;
 		if (current && data.type === 'failed') {
 			// The preview is optional, so its failure stays out of the output's error; processing
@@ -338,6 +391,27 @@ export function startLiveEffects() {
 		}
 		update();
 	}
+
+	/** Measure every enabled palette-fit step in the worker, keyed by its index in `steps`. */
+	function measure(steps: readonly Effect[]): Promise<ReadonlyMap<number, MeasuredFit>> {
+		const source = sourceImageData.get();
+		const active = worker;
+		if (!active || !source) return Promise.resolve(new Map());
+		return new Promise((resolve, reject) => {
+			const id = ++requestId;
+			measureWaiters.set(id, { resolve, reject });
+			active.postMessage({
+				type: 'measure',
+				id,
+				sourceId: sourceId(source),
+				key: '',
+				effects: steps,
+				context: packageEffectContext(selectedPalette.get(), colorSpace.get()),
+				crop: outputSettings.get().crop
+			} satisfies LiveEffectsRequest);
+		});
+	}
+	session = { measure };
 
 	const unsubscribers = [
 		sourceImageData.listen(update),
