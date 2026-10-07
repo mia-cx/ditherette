@@ -137,6 +137,9 @@ fn fitted_chains_match_the_reference() {
                 for chain in [
                     json!([fit_look(look, tag, 1.0, Value::Null)]),
                     json!([fit_look(look, tag, 0.55, Value::Null)]),
+                    // Strengths past 1 bend further and clamp the channel per the reference.
+                    json!([fit_look(look, tag, 2.0, Value::Null)]),
+                    json!([fit_look(look, tag, 3.0, Value::Null)]),
                     // Before, after, masked, disabled, and doubled steps.
                     json!([
                         { "effect": "exposure", "enabled": true, "stops": -0.4 },
@@ -180,7 +183,7 @@ fn explicit_lists_match_the_reference() {
     ]);
     let data = fixture(12, 10);
     for (_, _, tag) in FIT_SPACES {
-        for strength in [0.0, 0.4, 1.0] {
+        for strength in [0.0, 0.5, 1.0, 2.0, 3.0] {
             let chain = json!([fit(tag, strength, curves.clone())]);
             assert_eq!(
                 spec_run(&data, 12, 10, &chain),
