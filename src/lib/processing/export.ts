@@ -64,12 +64,19 @@ export function exportPng() {
 
 /** Post the anonymous export event: settings and colour measurements, never the image. */
 async function sendExportEvent(image: ProcessedImage) {
+	// One synchronous snapshot: everything the event reports is read before the measurement
+	// await, so a mid-measurement edit can't split the event between two states.
 	const effects = activeEffectSteps.get();
-	const measured = await measurePaletteFits(effects);
+	const layers = effectLayers.get();
 	const applied = looksApplied.get();
+	const output = outputSettings.get();
+	const dither = ditherSettings.get();
+	const space = colorSpace.get();
+	const palette = activePalette.get();
+	const enabled = paletteEnabled.get();
+	const measured = await measurePaletteFits(effects);
 	const fits: FitEvent[] = [];
-	effectLayers
-		.get()
+	layers
 		.filter((layer) => layer.step.enabled)
 		.forEach((layer, index) => {
 			const step = layer.step;
@@ -84,11 +91,11 @@ async function sendExportEvent(image: ProcessedImage) {
 			});
 		});
 	const event = buildExportEvent({
-		output: outputSettings.get(),
-		dither: ditherSettings.get(),
-		colorSpace: colorSpace.get(),
-		palette: activePalette.get(),
-		enabled: paletteEnabled.get(),
+		output,
+		dither,
+		colorSpace: space,
+		palette,
+		enabled,
 		effects,
 		fits,
 		width: image.width,
