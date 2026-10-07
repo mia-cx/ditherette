@@ -3,6 +3,7 @@
 //! Mirrors `spec::effects::palette_fit_analysis` with fallible allocation and cached-friendly
 //! inputs. Sampling, palette, tone, shift, and flat reach follow `recolour_analysis` exactly.
 
+use serde::Serialize;
 use std::collections::TryReserveError;
 
 use crate::prod::contract::request::WorkingSpace;
@@ -78,6 +79,80 @@ pub fn analyze(
     space: FitSpace,
     look: FitLook,
 ) -> Result<Vec<Curve>, TryReserveError> {
+    let Some(measured) = measured(image, context, space, look)? else {
+        return Ok(Vec::new());
+    };
+    let gains = gains(
+        &measured.cells,
+        &measured.palette,
+        &measured.tone,
+        &measured.turns,
+        look,
+    );
+    emit(space, measured.tone, measured.shift, gains, measured.turns)
+}
+
+/// What the analysis measured, for the export event. Diagnostic only: not part of the
+/// effect contract, and never read by `analyze`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FitMeasurements {
+    /// The image's 1/25/50/75/99-percent lightness quantiles.
+    pub tone_quantiles: [f32; 5],
+    /// `|s|`, the grey shift's length in opponent units; 0 when there is no shift.
+    pub grey_shift: f32,
+    /// `reach[r][j]` is the palette's slice reach at `tone(L_r)` in direction `h_j + turn_j`,
+    /// the same value the cell's gain divided down.
+    pub reach: [[f32; COLUMNS]; ROWS],
+}
+
+/// The same measurements `analyze` takes, returned instead of curves. `None` when `analyze`
+/// would emit nothing (no samples or no palette).
+pub fn measure(
+    image: &EffectImage,
+    context: &EffectContext<'_>,
+    space: FitSpace,
+    look: FitLook,
+) -> Result<Option<FitMeasurements>, TryReserveError> {
+    let Some(measured) = measured(image, context, space, look)? else {
+        return Ok(None);
+    };
+    let spline = Spline::new(&measured.tone);
+    let mut reach = [[0.0; COLUMNS]; ROWS];
+    for (r, row) in reach.iter_mut().enumerate() {
+        let l = spline.eval(r as f32 * ROW_STEP);
+        for (j, cell) in row.iter_mut().enumerate() {
+            *cell = slice_reach(
+                &measured.palette,
+                l,
+                j as f32 * COLUMN_DEGREES + measured.turns[j],
+            );
+        }
+    }
+    Ok(Some(FitMeasurements {
+        tone_quantiles: measured.tone_quantiles,
+        grey_shift: measured.shift[0].hypot(measured.shift[1]),
+        reach,
+    }))
+}
+
+/// The shared measurement step: palette in the working space, samples, tone, shift, cells,
+/// and turns, computed exactly as `analyze` reads them.
+struct Measured {
+    palette: Vec<[f32; 3]>,
+    tone: Vec<[f32; 2]>,
+    tone_quantiles: [f32; 5],
+    shift: [f32; 2],
+    cells: Cells,
+    turns: [f32; COLUMNS],
+}
+
+fn measured(
+    image: &EffectImage,
+    context: &EffectContext<'_>,
+    space: FitSpace,
+    look: FitLook,
+) -> Result<Option<Measured>, TryReserveError> {
     let working = space.working_space();
     let mut colors: Vec<[u8; 3]> = Vec::new();
     colors.try_reserve_exact(context.colors().count())?;
@@ -96,9 +171,10 @@ pub fn analyze(
     }));
     let samples = sample(image, working)?;
     if samples.is_empty() || palette.is_empty() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
-    let tone = tone(&samples, &palette)?;
+    let tone_quantiles = lightness_quantiles(&samples)?;
+    let tone = tone(tone_quantiles, &palette)?;
     // `natural` measures the cells with no shift and never turns a column.
     let shift = if matches!(look, FitLook::Natural) {
         [0.0, 0.0]
@@ -111,8 +187,14 @@ pub fn analyze(
     } else {
         turns(&cells, &palette)
     };
-    let gains = gains(&cells, &palette, &tone, &turns, look);
-    emit(space, tone, shift, gains, turns)
+    Ok(Some(Measured {
+        palette,
+        tone,
+        tone_quantiles,
+        shift,
+        cells,
+        turns,
+    }))
 }
 
 /// Byte greys carry `f32` residue off neutral in perceptual spaces; treat them as grey.
@@ -174,11 +256,8 @@ fn palette_quantile(levels: &[f32], p: f32) -> f32 {
     levels[below] + (position - below as f32) * (levels[above] - levels[below])
 }
 
-/// Exactly `recolour_analysis`'s tone rule: the image's 1%–99% lightness range fitted into the
-/// palette's, with quartiles pulled toward sparse palettes' own levels, and identity kept when
-/// either side is flat or the result stays within 1e-4 of identity.
-fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryReserveError> {
-    let identity = vec![[0.0, 0.0], [1.0, 1.0]];
+/// The image's weighted lightness quantiles, the five `TONE_QUANTILES` ranks clamped to [0, 1].
+fn lightness_quantiles(samples: &[Sample]) -> Result<[f32; 5], TryReserveError> {
     let mut sorted: Vec<(f32, f32)> = Vec::new();
     sorted.try_reserve_exact(samples.len())?;
     sorted.extend(
@@ -188,7 +267,14 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryRe
     );
     sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
     let total: f32 = sorted.iter().map(|(_, weight)| weight).sum();
-    let xs = TONE_QUANTILES.map(|p| quantile(&sorted, total, p).clamp(0.0, 1.0));
+    Ok(TONE_QUANTILES.map(|p| quantile(&sorted, total, p).clamp(0.0, 1.0)))
+}
+
+/// Exactly `recolour_analysis`'s tone rule: the image's 1%–99% lightness range fitted into the
+/// palette's, with quartiles pulled toward sparse palettes' own levels, and identity kept when
+/// either side is flat or the result stays within 1e-4 of identity.
+fn tone(xs: [f32; 5], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryReserveError> {
+    let identity = vec![[0.0, 0.0], [1.0, 1.0]];
     let mut levels: Vec<f32> = Vec::new();
     levels.try_reserve_exact(palette.len())?;
     levels.extend(palette.iter().map(|color| color[0].clamp(0.0, 1.0)));

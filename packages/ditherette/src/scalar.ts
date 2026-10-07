@@ -15,6 +15,7 @@ import type {
 	AnalyzePaletteFitRequest,
 	AnalyzeRecolourRequest,
 	Curve,
+	FitMeasurements,
 	EffectMaskRequest,
 	RecolourRecipe
 } from './types.js';
@@ -45,6 +46,7 @@ export type Bindings = Pick<
 	| 'privateProcessEffects'
 	| 'privateAnalyzeRecolour'
 	| 'privateAnalyzePaletteFit'
+	| 'privateMeasurePaletteFit'
 	| 'privateEffectMask'
 > &
 	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse'>>;
@@ -352,6 +354,38 @@ class Processor implements Ditherette {
 			let status: number;
 			try {
 				status = bindings.privateAnalyzePaletteFit(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.effects.json,
+					input.look,
+					input.space,
+					input.contextSpace,
+					input.palette,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status);
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
+	measurePaletteFit(request: AnalyzePaletteFitRequest): FitMeasurements | null {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateAnalyzePaletteFit(request);
+			const result: ResultSink<FitMeasurements | null> = {
+				value: undefined,
+				onProgress: input.onProgress
+			};
+			let status: number;
+			try {
+				status = bindings.privateMeasurePaletteFit(
 					input.data,
 					input.sourceWidth,
 					input.sourceHeight,

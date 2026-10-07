@@ -483,6 +483,36 @@ pub fn analyze_palette_fit(
     .map_err(|_| unavailable())
 }
 
+/// Runs `effects` on the source, then returns what a `palette-fit` step with this `space`
+/// and `look` would measure. Diagnostic only; not part of the effect contract.
+pub fn measure_palette_fit(
+    request: AnalyzePaletteFitRequest<'_>,
+) -> Result<Option<palette_fit_analysis::FitMeasurements>, DitheretteError> {
+    if request.version != EFFECTS_VERSION {
+        return Err(unsupported("version"));
+    }
+    validate_chain(request.effects, &request.context)?;
+    if request.context.colors().next().is_none() {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidRequest,
+            "context.palette",
+            "Measurement requires a visible palette colour.",
+        ));
+    }
+    let source = source_view(request.source)?;
+    let steps = resolve_analyses(
+        source.data(),
+        source.dimensions(),
+        request.effects,
+        &request.context,
+    )
+    .map_err(|_| unavailable())?;
+    let image = carrier_after(source.data(), source.dimensions(), &steps, &request.context)
+        .map_err(|_| unavailable())?;
+    palette_fit_analysis::measure(&image, &request.context, request.space, request.look)
+        .map_err(|_| unavailable())
+}
+
 /// Applies an already validated chain to packed RGBA8. Alpha bytes are never written.
 pub fn apply_in_place<E: Effect, M: AsRef<[MaskCurve]>>(
     data: &mut [u8],

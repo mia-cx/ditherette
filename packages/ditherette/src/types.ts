@@ -515,6 +515,17 @@ export interface ProcessRequest {
 }
 
 /** One isolated processor. Calls are synchronous; hosts choose their execution context. */
+/**
+ * The measurements behind a palette fit's curves. `reach[r][j]` is the palette's slice reach at
+ * `toneQuantiles` row `r` in the turned hue direction of column `j`; `greyShift` is the shift
+ * vector's length in opponent units (0 for `natural` or an unshifted palette).
+ */
+export interface FitMeasurements {
+	readonly toneQuantiles: readonly [number, number, number, number, number];
+	readonly greyShift: number;
+	readonly reach: readonly (readonly number[])[];
+}
+
 export interface Ditherette {
 	/** Apply the full recipe, preserving the same RGBA8 boundaries as staged calls. */
 	process(request: ProcessRequest): IndexedImage;
@@ -532,6 +543,12 @@ export interface Ditherette {
 	 * reuse the processor's cached analysis. `look` and `space` are the step's own.
 	 */
 	analyzePaletteFit(request: AnalyzePaletteFitRequest): Curve[];
+	/**
+	 * What `analyzePaletteFit` measured for the same request: the image's tone quantiles, the
+	 * grey shift's length, and each cell's slice reach. `null` when analysis finds nothing to
+	 * measure (no samples or no palette). Diagnostic only: not part of the effect contract.
+	 */
+	measurePaletteFit(request: AnalyzePaletteFitRequest): FitMeasurements | null;
 	/** Return the source itself at unchanged dimensions; otherwise return independent JS-owned RGBA8. */
 	resize(request: ResizeRequest): Rgba8Image;
 	/** Match source pixels to the supplied palette without resizing or dithering. */

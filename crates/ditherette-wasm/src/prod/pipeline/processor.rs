@@ -459,6 +459,62 @@ impl Processor {
         result
     }
 
+    /// Measure the image a `palette-fit` step would receive: the source after `effects`.
+    /// Diagnostic only; the measurements are not part of the effect contract.
+    pub fn measure_palette_fit<B: InputBoundary>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        space: crate::prod::effects::palette_fit::FitSpace,
+        look: crate::prod::effects::palette_fit::FitLook,
+        boundary: &mut B,
+    ) -> Result<Option<crate::prod::effects::palette_fit_analysis::FitMeasurements>, Failure> {
+        self.measure_palette_fit_with_allocator(
+            request,
+            space,
+            look,
+            boundary,
+            &mut SystemAllocator,
+        )
+    }
+
+    /// Injectable reservations for palette-fit measurement. Only the measurements leave.
+    pub fn measure_palette_fit_with_allocator<B: InputBoundary, A: Allocator>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        space: crate::prod::effects::palette_fit::FitSpace,
+        look: crate::prod::effects::palette_fit::FitLook,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<Option<crate::prod::effects::palette_fit_analysis::FitMeasurements>, Failure> {
+        self.require_ready()?;
+        self.begin();
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
+        self.peak_capacity = overhead;
+        let analyses = std::mem::take(&mut self.analyses);
+        let request = super::effects::EffectsRequest {
+            context: crate::prod::effects::EffectContext {
+                analyses: Some(&analyses),
+                ..request.context
+            },
+            ..request
+        };
+        let result = super::effects::measure_fit(
+            request,
+            space,
+            look,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+            &mut self.preparation,
+        );
+        let result = self.finish_call(result);
+        self.restore_analyses(analyses, result.is_ok());
+        result
+    }
+
     /// Shared `process` body. `extra` charges adapter-owned bytes for the whole call.
     fn process_owning<B: super::quantize::QuantizeBoundary, A: Allocator>(
         &mut self,

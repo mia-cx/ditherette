@@ -34,6 +34,7 @@ export type {
 	EffectContext,
 	EffectMaskRequest,
 	FitLook,
+	FitMeasurements,
 	ExposureEffect,
 	HueSaturationEffect,
 	LevelsEffect,

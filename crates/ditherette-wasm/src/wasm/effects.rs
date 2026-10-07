@@ -225,6 +225,73 @@ pub fn private_analyze_palette_fit(
     result.map_or_else(status, |()| 0)
 }
 
+/// Measures the image a `palette-fit` step would receive, with the same arguments as
+/// `privateAnalyzePaletteFit`. Diagnostic only; the JSON measurements are not part of the
+/// effect contract.
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen(js_name = privateMeasurePaletteFit)]
+pub fn private_measure_palette_fit(
+    input: &Uint8Array,
+    source_width: f64,
+    source_height: f64,
+    effects: &str,
+    look: f64,
+    space: f64,
+    context_space: f64,
+    palette: &JsValue,
+    result_sink: &JsValue,
+) -> u32 {
+    let mut processor = match take_ready() {
+        Ok(processor) => processor,
+        Err(error) => return status(error),
+    };
+    let mut entries = [PaletteEntry::Transparent {}; PALETTE_SLOTS];
+    let result = (|| {
+        let (request, steps) = parse(
+            source_width,
+            source_height,
+            effects,
+            palette,
+            context_space,
+            &mut entries,
+        )?;
+        let look = match look {
+            0.0 => crate::prod::effects::palette_fit::FitLook::Fitted,
+            1.0 => crate::prod::effects::palette_fit::FitLook::Natural,
+            2.0 => crate::prod::effects::palette_fit::FitLook::Vivid,
+            _ => {
+                return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Effects));
+            }
+        };
+        let space = match parse_space(space) {
+            Some(crate::prod::contract::request::WorkingSpace::Oklab) => {
+                crate::prod::effects::palette_fit::FitSpace::Oklab
+            }
+            Some(crate::prod::contract::request::WorkingSpace::Cielab) => {
+                crate::prod::effects::palette_fit::FitSpace::Cielab
+            }
+            _ => {
+                return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Effects));
+            }
+        };
+        let measurements = processor.measure_palette_fit(
+            EffectsRequest {
+                effects: &steps,
+                ..request
+            },
+            space,
+            look,
+            &mut JsBoundary::new(input, result_sink)?,
+        )?;
+        let text = serde_json::to_string(&measurements)
+            .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
+        complete_recipe(&text, result_sink)
+            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Output))
+    })();
+    restore_ready(processor);
+    result.map_or_else(status, |()| 0)
+}
+
 /// Shared argument decoding. The returned request borrows `entries`; its effects are separate.
 fn parse<'a>(
     source_width: f64,
