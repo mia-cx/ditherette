@@ -19,10 +19,12 @@ use super::{
         validate_chain, Effect, EffectContext, Needs, Planned, PreparedPointwise,
         PreparedPointwiseState, Step, MAX_EFFECTS, PREPARED_STEP_BYTES,
     },
-    curves::MAX_POINTS,
+    curves::{Curve, MAX_POINTS},
     image::{byte, EffectImage},
     mask::{MaskCurve, PreparedMask},
     memo::{byte_memo_bytes, try_memoized, try_memoized_bytes, FLOAT_MEMO_BYTES},
+    palette_fit::{FitLook, FitSpace, PaletteFit},
+    palette_fit_analysis,
     recipe::{BuiltinEffect, EffectStep},
     recolour::{Group, Recolour, RecolourRecipe, MAX_GROUPS},
     recolour_analysis::analyze,
@@ -49,7 +51,7 @@ pub fn apply_effects(request: EffectsRequest<'_>) -> Result<Rgba8Image, Ditheret
     validate_chain(request.effects, &request.context)?;
     let source = source_view(request.source)?;
     let mut data = source.data().to_vec();
-    let steps = resolve_recolour(
+    let steps = resolve_analyses(
         &data,
         source.dimensions(),
         request.effects,
@@ -163,11 +165,13 @@ pub fn carrier_after_bytes<E: Effect, M: AsRef<[MaskCurve]>>(
     EffectImage::carrier_bytes(pixels) + memo + masked + scratch + BOOKKEEPING_BYTES
 }
 
-/// A step as it runs: the caller's own effect, or a recolour step with the recipe it derived.
-/// Borrowing the rest means resolution copies no curve points or recipes.
+/// A step as it runs: the caller's own effect, a recolour step with the recipe it derived,
+/// or a palette-fit step with the curves it derived. Borrowing the rest means resolution
+/// copies no curve points or recipes.
 pub enum Resolved<'a> {
     Given(&'a BuiltinEffect),
     Recolour(Recolour),
+    PaletteFit(PaletteFit),
 }
 
 impl Effect for Resolved<'_> {
@@ -175,6 +179,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.validate(path),
             Self::Recolour(effect) => effect.validate(path),
+            Self::PaletteFit(effect) => effect.validate(path),
         }
     }
 
@@ -182,6 +187,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.needs(),
             Self::Recolour(effect) => effect.needs(),
+            Self::PaletteFit(effect) => effect.needs(),
         }
     }
 
@@ -193,6 +199,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.check_context(context, path),
             Self::Recolour(effect) => effect.check_context(context, path),
+            Self::PaletteFit(effect) => effect.check_context(context, path),
         }
     }
 
@@ -200,6 +207,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.apply(image, context),
             Self::Recolour(effect) => effect.apply(image, context),
+            Self::PaletteFit(effect) => effect.apply(image, context),
         }
     }
 
@@ -213,6 +221,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.apply_masked(image, input, strengths, context),
             Self::Recolour(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::PaletteFit(effect) => effect.apply_masked(image, input, strengths, context),
         }
     }
 
@@ -226,6 +235,9 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
             Self::Recolour(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
+            Self::PaletteFit(effect) => {
+                effect.map_prepared_masked(prepared, rgb, strength, context)
+            }
         }
     }
 
@@ -233,6 +245,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.per_channel(),
             Self::Recolour(effect) => effect.per_channel(),
+            Self::PaletteFit(effect) => effect.per_channel(),
         }
     }
 
@@ -240,6 +253,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.map_channel(channel, value),
             Self::Recolour(effect) => effect.map_channel(channel, value),
+            Self::PaletteFit(effect) => effect.map_channel(channel, value),
         }
     }
 
@@ -252,6 +266,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.map_prepared_channel(prepared, channel, value),
             Self::Recolour(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::PaletteFit(effect) => effect.map_prepared_channel(prepared, channel, value),
         }
     }
 
@@ -259,6 +274,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.working_bytes(),
             Self::Recolour(effect) => effect.working_bytes(),
+            Self::PaletteFit(effect) => effect.working_bytes(),
         }
     }
 
@@ -266,6 +282,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.pointwise(),
             Self::Recolour(effect) => effect.pointwise(),
+            Self::PaletteFit(effect) => effect.pointwise(),
         }
     }
 
@@ -273,6 +290,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.map_pixel(rgb, context),
             Self::Recolour(effect) => effect.map_pixel(rgb, context),
+            Self::PaletteFit(effect) => effect.map_pixel(rgb, context),
         }
     }
 
@@ -280,6 +298,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.prepare_pointwise(),
             Self::Recolour(effect) => effect.prepare_pointwise(),
+            Self::PaletteFit(effect) => effect.prepare_pointwise(),
         }
     }
 
@@ -292,6 +311,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.map_prepared(prepared, rgb, context),
             Self::Recolour(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::PaletteFit(effect) => effect.map_prepared(prepared, rgb, context),
         }
     }
 
@@ -304,6 +324,7 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.map_prepared_linear(prepared, linear, context),
             Self::Recolour(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::PaletteFit(effect) => effect.map_prepared_linear(prepared, linear, context),
         }
     }
 }
@@ -311,10 +332,11 @@ impl Effect for Resolved<'_> {
 /// A step as it runs, borrowing the caller's mask.
 pub type ResolvedStep<'a> = Step<Resolved<'a>, &'a [MaskCurve]>;
 
-/// Replaces each enabled recipe-less `recolour` step with the recipe it would derive from the
-/// carrier reaching it, in order. The result is pointwise everywhere, so it memoizes.
-/// Analysis reads the unmasked carrier; the step's mask still applies to its result.
-pub fn resolve_recolour<'a>(
+/// Replaces each enabled recipe-less `recolour` or `curves`-less `palette-fit` step with the
+/// recipe or curve list it would derive from the carrier reaching it, in order. The result is
+/// pointwise everywhere, so it memoizes. Analysis reads the unmasked carrier; the step's mask
+/// still applies to its result.
+pub fn resolve_analyses<'a>(
     data: &[u8],
     dimensions: ImageDimensions,
     steps: &'a [EffectStep],
@@ -328,21 +350,39 @@ pub fn resolve_recolour<'a>(
         effect: Resolved::Given(&step.effect),
     }));
     for index in 0..resolved.len() {
-        let Resolved::Given(BuiltinEffect::Recolour(recolour)) = resolved[index].effect else {
-            continue;
-        };
-        if !resolved[index].enabled || recolour.recipe.is_some() || recolour.strength == 0.0 {
-            continue;
+        match resolved[index].effect {
+            Resolved::Given(BuiltinEffect::Recolour(recolour))
+                if resolved[index].enabled
+                    && recolour.recipe.is_none()
+                    && recolour.strength != 0.0 =>
+            {
+                let image = carrier_after(data, dimensions, &resolved[..index], context)?;
+                let recipe = match context.analyses {
+                    Some(cache) => cache.analyze(&image, context),
+                    None => analyze(&image, context),
+                }?;
+                resolved[index].effect = Resolved::Recolour(Recolour {
+                    strength: recolour.strength,
+                    recipe: Some(recipe),
+                });
+            }
+            Resolved::Given(BuiltinEffect::PaletteFit(fit))
+                if resolved[index].enabled && fit.curves.is_none() && fit.strength != 0.0 =>
+            {
+                let image = carrier_after(data, dimensions, &resolved[..index], context)?;
+                let curves = match context.analyses {
+                    Some(cache) => cache.analyze_palette_fit(&image, context, fit.space, fit.look),
+                    None => palette_fit_analysis::analyze(&image, context, fit.space, fit.look),
+                }?;
+                resolved[index].effect = Resolved::PaletteFit(PaletteFit {
+                    look: fit.look,
+                    space: fit.space,
+                    strength: fit.strength,
+                    curves: Some(curves),
+                });
+            }
+            _ => continue,
         }
-        let image = carrier_after(data, dimensions, &resolved[..index], context)?;
-        let recipe = match context.analyses {
-            Some(cache) => cache.analyze(&image, context),
-            None => analyze(&image, context),
-        }?;
-        resolved[index].effect = Resolved::Recolour(Recolour {
-            strength: recolour.strength,
-            recipe: Some(recipe),
-        });
     }
     Ok(resolved)
 }
@@ -378,7 +418,7 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
         ));
     }
     let source = source_view(request.source)?;
-    let steps = resolve_recolour(
+    let steps = resolve_analyses(
         source.data(),
         source.dimensions(),
         request.effects,
@@ -390,6 +430,55 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
     match request.context.analyses {
         Some(cache) => cache.analyze(&image, &request.context),
         None => analyze(&image, &request.context),
+    }
+    .map_err(|_| unavailable())
+}
+
+/// Palette-fit analysis request: like `AnalyzeRequest`, plus the step's own `space` and `look`.
+/// The context supplies only the palette; its space is ignored by palette fit.
+#[derive(Debug, Clone, Copy)]
+pub struct AnalyzePaletteFitRequest<'a> {
+    pub version: u32,
+    pub source: Source<'a>,
+    pub effects: &'a [EffectStep],
+    pub context: EffectContext<'a>,
+    pub space: FitSpace,
+    pub look: FitLook,
+}
+
+/// Runs `effects` on the source, then derives the curve list a `palette-fit` step with this
+/// `space` and `look` appended to `effects` would use.
+pub fn analyze_palette_fit(
+    request: AnalyzePaletteFitRequest<'_>,
+) -> Result<Vec<Curve>, DitheretteError> {
+    if request.version != EFFECTS_VERSION {
+        return Err(unsupported("version"));
+    }
+    validate_chain(request.effects, &request.context)?;
+    if request.context.colors().next().is_none() {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidRequest,
+            "context.palette",
+            "Analysis requires a visible palette colour.",
+        ));
+    }
+    let source = source_view(request.source)?;
+    let steps = resolve_analyses(
+        source.data(),
+        source.dimensions(),
+        request.effects,
+        &request.context,
+    )
+    .map_err(|_| unavailable())?;
+    let image = carrier_after(source.data(), source.dimensions(), &steps, &request.context)
+        .map_err(|_| unavailable())?;
+    match request.context.analyses {
+        Some(cache) => {
+            cache.analyze_palette_fit(&image, &request.context, request.space, request.look)
+        }
+        None => {
+            palette_fit_analysis::analyze(&image, &request.context, request.space, request.look)
+        }
     }
     .map_err(|_| unavailable())
 }

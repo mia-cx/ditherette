@@ -1,5 +1,7 @@
 //! Ordered one-input and two-input colour-model channel adjustments.
 
+use std::collections::TryReserveError;
+
 use serde::{Deserialize, Serialize};
 
 use crate::prod::contract::error::{DitheretteError, ErrorCode};
@@ -141,6 +143,52 @@ pub struct TwoInputCurve {
 pub enum Curve {
     OneInput(OneInputCurve),
     TwoInput(TwoInputCurve),
+}
+
+fn try_clone_vec<T: Copy>(items: &[T]) -> Result<Vec<T>, TryReserveError> {
+    let mut copy = Vec::new();
+    copy.try_reserve_exact(items.len())?;
+    copy.extend_from_slice(items);
+    Ok(copy)
+}
+
+fn try_clone_curve(curve: &Curve) -> Result<Curve, TryReserveError> {
+    Ok(match curve {
+        Curve::OneInput(curve) => Curve::OneInput(OneInputCurve {
+            kind: curve.kind,
+            x: curve.x,
+            y: curve.y,
+            points: try_clone_vec(&curve.points)?,
+        }),
+        Curve::TwoInput(curve) => Curve::TwoInput(TwoInputCurve {
+            kind: curve.kind,
+            x: curve.x,
+            x2: curve.x2,
+            y: curve.y,
+            grid: CurveGrid {
+                columns: try_clone_vec(&curve.grid.columns)?,
+                rows: try_clone_vec(&curve.grid.rows)?,
+                values: {
+                    let mut values = Vec::new();
+                    values.try_reserve_exact(curve.grid.values.len())?;
+                    for row in &curve.grid.values {
+                        values.push(try_clone_vec(row)?);
+                    }
+                    values
+                },
+            },
+        }),
+    })
+}
+
+/// Fallible clone of a curve list, for resolution and validation that hold their own copy.
+pub fn try_clone_curves(curves: &[Curve]) -> Result<Vec<Curve>, TryReserveError> {
+    let mut copy = Vec::new();
+    copy.try_reserve_exact(curves.len())?;
+    for curve in curves {
+        copy.push(try_clone_curve(curve)?);
+    }
+    Ok(copy)
 }
 
 /// Up to 16 ordered channel curves.
@@ -540,12 +588,12 @@ pub struct PreparedCurves {
 }
 
 impl PreparedCurves {
-    fn new(effect: &Curves) -> Self {
+    pub fn new(curves: &[Curve]) -> Self {
         let mut prepared = Self {
             curves: [None; MAX_CURVES],
             len: 0,
         };
-        for (curve_index, curve) in effect.curves.iter().enumerate() {
+        for (curve_index, curve) in curves.iter().enumerate() {
             let entry = match curve {
                 Curve::OneInput(curve) => {
                     if curve.is_neutral_adjustment() {
@@ -582,7 +630,7 @@ impl PreparedCurves {
     }
 
     /// `strength` is the step's mask value at this pixel, in `(0, 1]`.
-    fn map(&self, effect: &Curves, source: [f32; 3], strength: f32) -> [f32; 3] {
+    pub fn map(&self, curves: &[Curve], source: [f32; 3], strength: f32) -> [f32; 3] {
         let mut current = source;
         for prepared in self.curves[..self.len].iter().flatten() {
             current = match prepared {
@@ -608,7 +656,7 @@ impl PreparedCurves {
                     x2,
                     y,
                 } => {
-                    let Curve::TwoInput(curve) = &effect.curves[*curve_index] else {
+                    let Curve::TwoInput(curve) = &curves[*curve_index] else {
                         unreachable!("prepared grid index resolved to a one-input curve")
                     };
                     PreparedCurve::map_two_input(curve, *x, *x2, *y, source, current, strength)
@@ -855,6 +903,21 @@ impl Curve {
 }
 
 impl Curves {
+    /// A list of curves validates exactly like a `Curves` step's own list.
+    pub fn validate_list(curves: &[Curve], path: &str) -> Result<(), DitheretteError> {
+        if curves.len() > MAX_CURVES {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                StackPath::new(format_args!("{path}.curves")).as_str(),
+                format!("Expected 0 to {MAX_CURVES} curves."),
+            ));
+        }
+        for (index, curve) in curves.iter().enumerate() {
+            curve.validate(StackPath::new(format_args!("{path}.curves.{index}")).as_str())?;
+        }
+        Ok(())
+    }
+
     /// Checks point count, bounds, and strictly increasing x, naming the failing point.
     pub fn validate_points(points: &[[f32; 2]], path: &str) -> Result<(), DitheretteError> {
         if !(MIN_POINTS..=MAX_POINTS).contains(&points.len()) {
@@ -879,7 +942,7 @@ impl Curves {
     }
 
     fn prepared(&self) -> PreparedCurves {
-        PreparedCurves::new(self)
+        PreparedCurves::new(&self.curves)
     }
 
     fn table_foldable(&self) -> bool {
@@ -896,17 +959,7 @@ impl Curves {
 
 impl Effect for Curves {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        if self.curves.len() > MAX_CURVES {
-            return Err(DitheretteError::new(
-                ErrorCode::InvalidSettings,
-                StackPath::new(format_args!("{path}.curves")).as_str(),
-                format!("Expected 0 to {MAX_CURVES} curves."),
-            ));
-        }
-        for (index, curve) in self.curves.iter().enumerate() {
-            curve.validate(StackPath::new(format_args!("{path}.curves.{index}")).as_str())?;
-        }
-        Ok(())
+        Self::validate_list(&self.curves, path)
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {
@@ -915,7 +968,7 @@ impl Effect for Curves {
         }
         let prepared = self.prepared();
         for rgb in &mut image.rgb {
-            *rgb = prepared.map(self, *rgb, 1.0);
+            *rgb = prepared.map(&self.curves, *rgb, 1.0);
         }
     }
 
@@ -933,7 +986,7 @@ impl Effect for Curves {
         let prepared = self.prepared();
         for (rgb, &strength) in image.rgb.iter_mut().zip(strengths) {
             if strength != 0.0 {
-                *rgb = prepared.map(self, *rgb, strength);
+                *rgb = prepared.map(&self.curves, *rgb, strength);
             }
         }
     }
@@ -943,7 +996,7 @@ impl Effect for Curves {
     }
 
     fn map_channel(&self, channel: usize, value: f32) -> f32 {
-        self.prepared().map(self, [value; 3], 1.0)[channel]
+        self.prepared().map(&self.curves, [value; 3], 1.0)[channel]
     }
 
     fn pointwise(&self) -> bool {
@@ -951,7 +1004,7 @@ impl Effect for Curves {
     }
 
     fn map_pixel(&self, rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
-        self.prepared().map(self, rgb, 1.0)
+        self.prepared().map(&self.curves, rgb, 1.0)
     }
 
     fn prepare_pointwise(&self) -> PreparedPointwise {
@@ -967,7 +1020,7 @@ impl Effect for Curves {
         let PreparedPointwise::Curves(prepared) = prepared else {
             unreachable!("curves received another effect's prepared state")
         };
-        prepared.map(self, [value; 3], 1.0)[channel]
+        prepared.map(&self.curves, [value; 3], 1.0)[channel]
     }
 
     fn map_prepared(
@@ -979,7 +1032,7 @@ impl Effect for Curves {
         let PreparedPointwise::Curves(prepared) = prepared else {
             unreachable!("curves received another effect's prepared state")
         };
-        prepared.map(self, rgb, 1.0)
+        prepared.map(&self.curves, rgb, 1.0)
     }
 
     fn map_prepared_masked(
@@ -995,6 +1048,6 @@ impl Effect for Curves {
         if strength == 0.0 {
             return rgb;
         }
-        prepared.map(self, rgb, strength)
+        prepared.map(&self.curves, rgb, strength)
     }
 }

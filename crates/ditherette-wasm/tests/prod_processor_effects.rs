@@ -762,3 +762,169 @@ fn invalid_masks_fail_at_the_mask_path() {
         Failure::new(ErrorCode::InvalidSettings, ErrorPath::Mask)
     );
 }
+
+fn fit_chain(before: serde_json::Value, after: serde_json::Value) -> serde_json::Value {
+    let mut chain = vec![before];
+    chain.push(
+        json!({ "effect": "palette-fit", "enabled": true, "look": "fitted",
+        "space": "oklab", "strength": 0.8, "curves": null }),
+    );
+    chain.push(after);
+    serde_json::Value::Array(chain)
+}
+
+#[test]
+fn palette_fit_analyses_are_cached_by_what_they_read() {
+    let data = ramp();
+    let mut processor = processor();
+    let run = |processor: &mut Processor, chain: &serde_json::Value| {
+        let effects = prod_effects::decode_effects(&chain.to_string()).unwrap();
+        let mut io = Io {
+            data: &data,
+            events: None,
+        };
+        processor
+            .apply_effects(
+                EffectsRequest {
+                    source_width: WIDTH,
+                    source_height: HEIGHT,
+                    effects: &effects,
+                    context: prod_effects::EffectContext {
+                        palette: &PALETTE,
+                        space: None,
+                        analyses: None,
+                    },
+                },
+                &mut io,
+            )
+            .unwrap()
+    };
+    let expected = {
+        let spec_steps = spec::effects::decode_effects(
+            &fit_chain(levels_gamma(1.2), levels_gamma(0.9)).to_string(),
+        )
+        .unwrap();
+        spec::effects::apply_effects(spec::effects::EffectsRequest {
+            version: 1,
+            source: Source {
+                width: WIDTH,
+                height: HEIGHT,
+                data: &data,
+            },
+            effects: &spec_steps,
+            context: spec::effects::EffectContext {
+                palette: &PALETTE,
+                space: None,
+            },
+        })
+        .unwrap()
+        .into_vec()
+    };
+    assert_eq!(
+        run(
+            &mut processor,
+            &fit_chain(levels_gamma(1.2), levels_gamma(0.9))
+        ),
+        expected,
+        "spec parity"
+    );
+    assert_eq!(processor.cached_analyses(), 1);
+    // A different effect after the palette-fit step reuses its analysis.
+    run(
+        &mut processor,
+        &fit_chain(levels_gamma(1.2), levels_gamma(1.7)),
+    );
+    assert_eq!(processor.cached_analyses(), 1);
+    // A different effect before it changes what analysis reads.
+    run(
+        &mut processor,
+        &fit_chain(levels_gamma(2.0), levels_gamma(1.7)),
+    );
+    assert_eq!(processor.cached_analyses(), 2);
+
+    // Standalone analysis of the same prefix is a hit and matches the reference's curves.
+    let prefix = prod_effects::decode_effects(&json!([levels_gamma(2.0)]).to_string()).unwrap();
+    let mut io = Io {
+        data: &data,
+        events: None,
+    };
+    let curves = processor
+        .analyze_palette_fit(
+            EffectsRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                effects: &prefix,
+                context: prod_effects::EffectContext {
+                    palette: &PALETTE,
+                    space: None,
+                    analyses: None,
+                },
+            },
+            prod_effects::palette_fit::FitSpace::Oklab,
+            prod_effects::palette_fit::FitLook::Fitted,
+            &mut io,
+        )
+        .unwrap();
+    assert_eq!(processor.cached_analyses(), 2);
+    let expected = spec::effects::analyze_palette_fit(spec::effects::AnalyzePaletteFitRequest {
+        version: 1,
+        source: Source {
+            width: WIDTH,
+            height: HEIGHT,
+            data: &data,
+        },
+        effects: &spec::effects::decode_effects(&json!([levels_gamma(2.0)]).to_string()).unwrap(),
+        context: spec::effects::EffectContext {
+            palette: &PALETTE,
+            space: None,
+        },
+        space: spec::effects::palette_fit::FitSpace::Oklab,
+        look: spec::effects::palette_fit::FitLook::Fitted,
+    })
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(&curves).unwrap(),
+        serde_json::to_value(&expected).unwrap()
+    );
+
+    // Process v2 with the palette-fit step matches the reference and reuses the analysis.
+    let recipe_v2 = spec::effects::decode_recipe_v2(
+        &json!({ "version": 2, "effects": fit_chain(levels_gamma(2.0), levels_gamma(1.7)),
+            "output": { "width": 7, "height": 5, "resize": { "algorithm": "area" } },
+            "alpha": { "mode": "preserve", "threshold": 127.5 }, "match": "oklab-euclidean",
+            "dither": { "family": "none" } })
+        .to_string(),
+    )
+    .unwrap();
+    let expected = spec::effects::process(spec::effects::ProcessRequestV2 {
+        source: Source {
+            width: WIDTH,
+            height: HEIGHT,
+            data: &data,
+        },
+        palette: &PALETTE,
+        recipe: &recipe_v2,
+    })
+    .unwrap();
+    let mut io = Io {
+        data: &data,
+        events: None,
+    };
+    let effects =
+        prod_effects::decode_effects(&fit_chain(levels_gamma(2.0), levels_gamma(1.7)).to_string())
+            .unwrap();
+    let actual = processor
+        .process_effects(
+            ProcessRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                palette: &PALETTE,
+                recipe: prod_recipe(&recipe_v2),
+            },
+            &effects,
+            &mut io,
+        )
+        .unwrap();
+    assert_eq!(actual.indices.data(), expected.indices.data());
+    assert_eq!(processor.cached_analyses(), 2);
+}

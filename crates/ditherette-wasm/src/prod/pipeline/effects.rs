@@ -25,10 +25,13 @@ use crate::{
         effects::{
             apply_in_place, carrier_after, carrier_after_bytes, carrier_bytes,
             chain::validate_chain,
+            curves::Curve,
             mask::{validate as validate_mask, MaskCurve},
             operation::BOOKKEEPING_BYTES,
+            palette_fit::{FitLook, FitSpace},
+            palette_fit_analysis,
             recolour::RecolourRecipe,
-            recolour_analysis, resolve_recolour, write_mask, EffectContext, EffectImage,
+            recolour_analysis, resolve_analyses, write_mask, EffectContext, EffectImage,
             EffectStep,
         },
     },
@@ -100,7 +103,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     progress.report(boundary.progress(), Stage::Effects, 0, pixels)?;
     let [source, output, _, _] = &mut call.scratch.buffers;
     output.copy_from_slice(source);
-    let steps = resolve_recolour(output, dimensions, request.effects, &request.context)
+    let steps = resolve_analyses(output, dimensions, request.effects, &request.context)
         .map_err(|_| unavailable())?;
     apply_in_place(output, dimensions, &steps, &request.context).map_err(|_| unavailable())?;
     progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
@@ -162,7 +165,7 @@ pub(super) fn analyze<B: InputBoundary, A: Allocator>(
     call.prepare(None, None, [len, 0, 0, 0], 0, peak, allocator)?;
     progress.report(boundary.progress(), Stage::Effects, 0, pixels)?;
     let source = &call.scratch.buffers[0];
-    let steps = resolve_recolour(source, dimensions, request.effects, &request.context)
+    let steps = resolve_analyses(source, dimensions, request.effects, &request.context)
         .map_err(|_| unavailable())?;
     let image =
         carrier_after(source, dimensions, &steps, &request.context).map_err(|_| unavailable())?;
@@ -175,6 +178,67 @@ pub(super) fn analyze<B: InputBoundary, A: Allocator>(
     call.release_working_capacity(carrier);
     progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
     call.finish(progress.finish(Ok(recipe), boundary.progress()))
+}
+
+/// Palette-fit analysis of the image a step would receive, following `analyze`. The step's own
+/// `space` and `look` select the analysis; the context supplies only the palette.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn analyze_fit<B: InputBoundary, A: Allocator>(
+    request: EffectsRequest<'_>,
+    space: FitSpace,
+    look: FitLook,
+    boundary: &mut B,
+    allocator: &mut A,
+    limit: u64,
+    overhead: u64,
+    peak: &mut u64,
+    store: &mut Store,
+) -> Result<Vec<Curve>, Failure> {
+    validate(request.effects, &request.context)?;
+    if request.context.colors().next().is_none() {
+        return Err(Failure::new(
+            ErrorCode::InvalidRequest,
+            ErrorPath::ContextPalette,
+        ));
+    }
+    let dimensions = dimensions(request.source_width, request.source_height, true)?;
+    let len = dimensions
+        .storage_len::<Rgba8>()
+        .map_err(|_| Failure::new(ErrorCode::InvalidImage, ErrorPath::Source))?;
+    if boundary.input_len()? != len {
+        return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
+    }
+    let mut progress = Control::new(boundary.progress().is_some());
+    progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
+    let owned = overhead
+        .checked_add(size_of::<EffectsRequest<'_>>() as u64)
+        .ok_or_else(memory_limit)?;
+    let mut call = Call::snapshot(store, len, owned, limit, peak, allocator)?;
+    call.source(dimensions, |bytes, compare| {
+        boundary.snapshot_input(bytes, compare)
+    })?;
+    let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
+    // The carrier always exists here; earlier steps may add scratch; analysis adds its samples.
+    let carrier = carrier_after_bytes(request.effects, dimensions)
+        .max(EffectImage::carrier_bytes(pixels) + BOOKKEEPING_BYTES)
+        + palette_fit_analysis::ANALYSIS_BYTES;
+    call.charge_working_capacity(carrier, peak)?;
+    call.prepare(None, None, [len, 0, 0, 0], 0, peak, allocator)?;
+    progress.report(boundary.progress(), Stage::Effects, 0, pixels)?;
+    let source = &call.scratch.buffers[0];
+    let steps = resolve_analyses(source, dimensions, request.effects, &request.context)
+        .map_err(|_| unavailable())?;
+    let image =
+        carrier_after(source, dimensions, &steps, &request.context).map_err(|_| unavailable())?;
+    let curves = match request.context.analyses {
+        Some(cache) => cache.analyze_palette_fit(&image, &request.context, space, look),
+        None => palette_fit_analysis::analyze(&image, &request.context, space, look),
+    }
+    .map_err(|_| unavailable())?;
+    drop(image);
+    call.release_working_capacity(carrier);
+    progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
+    call.finish(progress.finish(Ok(curves), boundary.progress()))
 }
 
 /// Each pixel's strength for `mask` on a step appended to `request.effects`, as grey.
@@ -215,7 +279,7 @@ pub(super) fn mask<B: Boundary, A: Allocator>(
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
     progress.report(boundary.progress(), Stage::Effects, 0, pixels)?;
     let [source, output, _, _] = &mut call.scratch.buffers;
-    let steps = resolve_recolour(source, dimensions, request.effects, &request.context)
+    let steps = resolve_analyses(source, dimensions, request.effects, &request.context)
         .map_err(|_| unavailable())?;
     write_mask(source, dimensions, &steps, mask, &request.context, output)
         .map_err(|_| unavailable())?;
@@ -314,7 +378,7 @@ impl<'a, B: InputBoundary> EffectedInput<'a, B> {
         self.progress
             .report(self.inner.progress(), Stage::Effects, 0, pixels)?;
         destination.copy_from_slice(&self.raw);
-        let steps = resolve_recolour(destination, self.dimensions, self.effects, &self.context)
+        let steps = resolve_analyses(destination, self.dimensions, self.effects, &self.context)
             .map_err(|_| unavailable())?;
         apply_in_place(destination, self.dimensions, &steps, &self.context)
             .map_err(|_| unavailable())?;

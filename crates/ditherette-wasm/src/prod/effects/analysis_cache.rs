@@ -1,8 +1,9 @@
-//! Processor-owned memo of recolour analyses, keyed by exactly what analysis reads.
+//! Processor-owned memo of recolour and palette-fit analyses, keyed by exactly what they read.
 //!
 //! The key hashes the sampled carrier values and alpha, the dimensions, the retained palette,
-//! and the space. Any unchanged recolour stage therefore hits, whichever call reaches it, and
-//! edits after it never re-analyse. New entries publish only when the call succeeds.
+//! and the space (and look, for palette fit). Any unchanged analysis stage therefore hits,
+//! whichever call reaches it, and edits after it never re-analyse. New entries publish only when
+//! the call succeeds.
 
 use std::{cell::RefCell, collections::TryReserveError, mem::size_of};
 
@@ -10,8 +11,10 @@ use sha2::{Digest, Sha256};
 
 use super::{
     chain::EffectContext,
-    curves::MAX_POINTS,
+    curves::{Curve, MAX_POINTS},
     image::EffectImage,
+    palette_fit::{FitLook, FitSpace},
+    palette_fit_analysis,
     recolour::{Group, RecolourRecipe, MAX_GROUPS},
     recolour_analysis::{analyze, sample_step},
 };
@@ -26,6 +29,8 @@ type Key = [u8; 32];
 struct Entries {
     published: Vec<(Key, RecolourRecipe)>,
     pending: Vec<(Key, RecolourRecipe)>,
+    fit_published: Vec<(Key, Vec<Curve>)>,
+    fit_pending: Vec<(Key, Vec<Curve>)>,
 }
 
 /// Interior mutability lets effects reach the cache through a shared context.
@@ -33,13 +38,16 @@ struct Entries {
 pub struct AnalysisCache(RefCell<Entries>);
 
 impl AnalysisCache {
-    /// Upper bound on owned bytes: while settling, published holds up to twice its capacity
-    /// before trimming, alongside a full pending list, each recipe at its largest.
+    /// Upper bound on owned bytes: while settling, each published list holds up to twice its
+    /// capacity before trimming, alongside a full pending list, each entry at its largest.
     pub const fn capacity_bytes() -> u64 {
         let recipe = size_of::<(Key, RecolourRecipe)>()
             + MAX_POINTS * size_of::<[f32; 2]>()
             + MAX_GROUPS * size_of::<Group>();
-        (3 * CAPACITY * recipe + size_of::<Self>()) as u64
+        let fit = size_of::<(Key, Vec<Curve>)>()
+            + 5 * size_of::<Curve>()
+            + (MAX_POINTS * 2 + 48 + 16 * 48) * size_of::<f32>();
+        (3 * CAPACITY * (recipe + fit) + size_of::<Self>()) as u64
     }
 
     /// The recipe `analyze` would derive for `image`, from the cache when its inputs repeat.
@@ -48,7 +56,7 @@ impl AnalysisCache {
         image: &EffectImage,
         context: &EffectContext<'_>,
     ) -> Result<RecolourRecipe, TryReserveError> {
-        let key = key(image, context);
+        let key = recolour_key(image, context);
         {
             let mut entries = self.0.borrow_mut();
             if let Some(index) = entries.published.iter().position(|(k, _)| *k == key) {
@@ -73,12 +81,51 @@ impl AnalysisCache {
         Ok(recipe)
     }
 
+    /// The curves a `palette-fit` step would derive for `image`, cached by its inputs:
+    /// the image, palette, and the step's `space` and `look`.
+    pub fn analyze_palette_fit(
+        &self,
+        image: &EffectImage,
+        context: &EffectContext<'_>,
+        space: FitSpace,
+        look: FitLook,
+    ) -> Result<Vec<Curve>, TryReserveError> {
+        let key = palette_fit_key(image, context, space, look);
+        {
+            let mut entries = self.0.borrow_mut();
+            if let Some(index) = entries.fit_published.iter().position(|(k, _)| *k == key) {
+                let entry = entries.fit_published.remove(index);
+                let curves = super::curves::try_clone_curves(&entry.1);
+                entries.fit_published.push(entry);
+                return curves;
+            }
+            if let Some((_, curves)) = entries.fit_pending.iter().find(|(k, _)| *k == key) {
+                return super::curves::try_clone_curves(curves);
+            }
+        }
+        let curves = palette_fit_analysis::analyze(image, context, space, look)?;
+        let mut entries = self.0.borrow_mut();
+        // Caching is optional: if either reservation fails, the call still has its curves.
+        if entries.fit_pending.len() < CAPACITY && entries.fit_pending.try_reserve(1).is_ok() {
+            if let Ok(copy) = super::curves::try_clone_curves(&curves) {
+                entries.fit_pending.push((key, copy));
+            }
+        }
+        Ok(curves)
+    }
+
     /// Publishes this call's analyses on success and drops them on failure.
     pub fn settle(&mut self, success: bool) {
         let entries = self.0.get_mut();
         let pending = std::mem::take(&mut entries.pending);
+        let fit_pending = std::mem::take(&mut entries.fit_pending);
         // A failed reservation only drops these optional entries.
-        if !success || entries.published.try_reserve(pending.len()).is_err() {
+        if !success
+            || entries
+                .published
+                .try_reserve(pending.len() + fit_pending.len())
+                .is_err()
+        {
             return;
         }
         for entry in pending {
@@ -88,11 +135,19 @@ impl AnalysisCache {
         }
         let excess = entries.published.len().saturating_sub(CAPACITY);
         entries.published.drain(..excess);
+        for entry in fit_pending {
+            if !entries.fit_published.iter().any(|(k, _)| *k == entry.0) {
+                entries.fit_published.push(entry);
+            }
+        }
+        let excess = entries.fit_published.len().saturating_sub(CAPACITY);
+        entries.fit_published.drain(..excess);
     }
 
     /// Published entry count, for tests and diagnostics.
     pub fn len(&self) -> usize {
-        self.0.borrow().published.len()
+        let entries = self.0.borrow();
+        entries.published.len() + entries.fit_published.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -100,8 +155,36 @@ impl AnalysisCache {
     }
 }
 
-/// SHA-256 of every input `analyze` reads, in its sampling order.
-fn key(image: &EffectImage, context: &EffectContext<'_>) -> Key {
+/// SHA-256 of the shared inputs an analysis reads, in its sampling order.
+fn base_key(image: &EffectImage, context: &EffectContext<'_>) -> Sha256 {
+    let mut hash = Sha256::new();
+    let width = image.dimensions.width_usize();
+    let height = image.dimensions.height() as usize;
+    hash.update((width as u64).to_le_bytes());
+    hash.update((height as u64).to_le_bytes());
+    // Length first, so the palette and sample records cannot shift into each other.
+    hash.update((context.colors().count() as u64).to_le_bytes());
+    for color in context.colors() {
+        hash.update(color);
+    }
+    let step = sample_step(width, height);
+    for y in (0..height).step_by(step) {
+        for x in (0..width).step_by(step) {
+            let index = y * width + x;
+            let alpha = image.alpha[index];
+            hash.update([alpha]);
+            if alpha > 0 {
+                for channel in image.rgb[index] {
+                    hash.update(channel.to_bits().to_le_bytes());
+                }
+            }
+        }
+    }
+    hash
+}
+
+/// SHA-256 of every input `analyze` reads: the context's working space included.
+fn recolour_key(image: &EffectImage, context: &EffectContext<'_>) -> Key {
     let mut hash = Sha256::new();
     hash.update(b"ditherette-recolour-analysis-v1\0");
     let width = image.dimensions.width_usize();
@@ -128,6 +211,27 @@ fn key(image: &EffectImage, context: &EffectContext<'_>) -> Key {
             }
         }
     }
+    hash.finalize().into()
+}
+
+/// SHA-256 of every input palette-fit analysis reads: the step's own `space` and `look`,
+/// not the context's space, which the step ignores.
+fn palette_fit_key(
+    image: &EffectImage,
+    context: &EffectContext<'_>,
+    space: FitSpace,
+    look: FitLook,
+) -> Key {
+    let mut hash = Sha256::new();
+    hash.update(b"ditherette-palette-fit-analysis-v1\0");
+    hash.update([match space {
+        FitSpace::Oklab => 0,
+        FitSpace::Cielab => 1,
+    }]);
+    hash.update([match look {
+        FitLook::Fitted => 0,
+    }]);
+    hash.update(base_key(image, context).finalize());
     hash.finalize().into()
 }
 

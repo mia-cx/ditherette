@@ -52,7 +52,7 @@ Photos repeat colours locally; illustrations repeat them everywhere. Effects wit
 
 A step [mask](../../spec/effects/mask.md) keeps the chain pointwise: its strength depends only on the colour entering the step. A masked step never joins the leading tables, since its mask reads all three channels. Inside the memo, each masked step evaluates a fixed-size `PreparedMask` on the colour reaching it, then calls `map_prepared_masked`. Mask curves whose values are all 1 are dropped while preparing, which is exact because they multiply by 1. Resolved chains borrow each caller's mask, so resolution copies no curve data. On the continuous-carrier path, a masked step that is not pointwise reserves a copy of its input and its strengths fallibly, and the memory estimate charges both.
 
-A recipe-less `recolour` step is global, since it analyses the whole image reaching it. `resolve_recolour` first replaces each one with the recipe it would derive: it builds the carrier up to that step (memoized too), analyses it through the cache, and substitutes the result. The resolved chain is pointwise end to end.
+A recipe-less `recolour` step is global, since it analyses the whole image reaching it. `resolve_analyses` first replaces each one (and each `curves`-less `palette-fit` step) with the recipe or curve list it would derive: it builds the carrier up to that step (memoized too), analyses it through the cache, and substitutes the result. The resolved chain is pointwise end to end.
 
 Criterion `crit_effects`, same host and fixtures, 8-colour palette, Oklab:
 
