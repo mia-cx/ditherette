@@ -54,9 +54,9 @@ function offers(next: (map: Map<string, FitLayerRevert>) => void) {
 let restoring = false;
 
 /**
- * Re-check every palette fit after any input edit. A locked fit whose inputs changed re-analyses;
- * a revertable change offers Revert, while an unlocked fit with a pending offer drops it once its
- * inputs move again.
+ * Re-check every palette fit after any input edit, decided against one snapshot of the layers.
+ * A locked fit whose inputs changed re-analyses; a revertable change offers Revert, while an
+ * unlocked fit with a pending offer drops it once its inputs move again.
  */
 function check() {
 	if (restoring) return;
@@ -68,11 +68,10 @@ function check() {
 		if (layer.step.effect !== 'palette-fit') return;
 		const state = states.get(layer.id);
 		const inputs = currentInputs(layers, at);
-		const same = state && fitFingerprint(state.inputs) === fitFingerprint(inputs);
 		if (layer.step.curves === null) {
 			// Track whatever it analyses under now; a pending offer dies on the next change.
 			states.set(layer.id, { inputs });
-			if (state && !same && fitReverts.get().has(layer.id)) drops.push(layer.id);
+			if (state && fitFingerprint(state.inputs) !== fitFingerprint(inputs)) drops.push(layer.id);
 			return;
 		}
 		if (!state) {
@@ -96,7 +95,20 @@ function check() {
 		}
 	if (changed.length) {
 		const byId = new Map(changed.map((layer) => [layer.id, layer]));
-		effectLayers.set(layers.map((layer) => byId.get(layer.id) ?? layer));
+		// Publishing the unlocks re-enters this check through the layers listener; keep it
+		// from deciding twice, then re-baseline the unlocked fits against the new layers.
+		restoring = true;
+		try {
+			effectLayers.set(layers.map((layer) => byId.get(layer.id) ?? layer));
+		} finally {
+			restoring = false;
+		}
+		const after = effectLayers.get();
+		after.forEach((layer, at) => {
+			if (layer.step.effect !== 'palette-fit') return;
+			const state = states.get(layer.id);
+			if (state) states.set(layer.id, { ...state, inputs: currentInputs(after, at) });
+		});
 	}
 }
 

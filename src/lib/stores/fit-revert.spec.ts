@@ -196,3 +196,22 @@ describe('palette-fit tracking across sources and palette edits', () => {
 		expect(fitReverts.get().has(layer.id)).toBe(true);
 	});
 });
+
+it('re-analyses every edited fit on one input change and offers Revert on each', () => {
+	const first = fitLayer().layer;
+	const second = fitLayer().layer;
+	lock(first.id);
+	lock(second.id);
+
+	updateOutputSettings({ crop: { x: 0, y: 0, width: 2, height: 2 } });
+	for (const layer of [first, second]) {
+		const step = effectLayers.get().find((item) => item.id === layer.id)!.step;
+		expect(step.effect === 'palette-fit' && step.curves).toBe(null);
+		expect(fitReverts.get().has(layer.id)).toBe(true);
+	}
+
+	revertFit(second.id);
+	const restored = effectLayers.get().find((item) => item.id === second.id)!.step;
+	expect(restored.effect === 'palette-fit' && restored.curves).toEqual(edited);
+	expect(fitReverts.get().has(first.id)).toBe(true);
+});
