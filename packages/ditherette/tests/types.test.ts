@@ -303,11 +303,20 @@ const colourChannels = [
 	{ model: 'ycbcr', channel: 'cb' }
 ] satisfies import('../src/index.js').ColourChannel[];
 // @ts-expect-error HSV has value, not lightness.
-const invalidHsvChannel: import('../src/index.js').ColourChannel = { model: 'hsv', channel: 'lightness' };
+const invalidHsvChannel: import('../src/index.js').ColourChannel = {
+	model: 'hsv',
+	channel: 'lightness'
+};
 // @ts-expect-error Cartesian Oklab has a and b, not hue.
-const invalidOklabChannel: import('../src/index.js').ColourChannel = { model: 'oklab', channel: 'hue' };
+const invalidOklabChannel: import('../src/index.js').ColourChannel = {
+	model: 'oklab',
+	channel: 'hue'
+};
 // @ts-expect-error RGB models have primary channels, not luma.
-const invalidRgbChannel: import('../src/index.js').ColourChannel = { model: 'srgb', channel: 'luma' };
+const invalidRgbChannel: import('../src/index.js').ColourChannel = {
+	model: 'srgb',
+	channel: 'luma'
+};
 const oldCurvesShape = {
 	effect: 'curves',
 	enabled: true,
@@ -350,24 +359,78 @@ processor.then((instance) => {
 		effects: [],
 		context: { palette: quantize.palette, space: 'oklab' }
 	});
-	const step: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 1, recipe };
-	const auto: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 0.5, recipe: null };
+	const step: import('../src/index.js').Effect = {
+		effect: 'recolour',
+		enabled: true,
+		strength: 1,
+		recipe
+	};
+	const auto: import('../src/index.js').Effect = {
+		effect: 'recolour',
+		enabled: true,
+		strength: 0.5,
+		recipe: null
+	};
+	const fitCurves: import('../src/index.js').Curve[] = instance.analyzePaletteFit({
+		version: 1,
+		source: request.source,
+		effects: [],
+		look: 'fitted',
+		space: 'oklab',
+		context: { palette: quantize.palette }
+	});
+	const fit: import('../src/index.js').Effect = {
+		effect: 'palette-fit',
+		enabled: true,
+		look: 'fitted',
+		space: 'cielab',
+		strength: 0.5,
+		curves: fitCurves
+	};
+	const fitAuto: import('../src/index.js').PaletteFitEffect = {
+		effect: 'palette-fit',
+		enabled: true,
+		look: 'fitted',
+		space: 'oklab',
+		strength: 1,
+		curves: null
+	};
+	void [fit, fitAuto];
+	// @ts-expect-error Palette fit analyses in a lab space, not the context's list.
+	const badFitSpace: import('../src/index.js').PaletteFitSpace = 'oklch';
+	void badFitSpace;
 	const masked: import('../src/index.js').Effect = {
 		effect: 'exposure',
 		enabled: true,
 		stops: 1,
 		mask: [
-			{ x: { model: 'oklch', channel: 'lightness' }, points: [[0, 1], [1, 0]] },
+			{
+				x: { model: 'oklch', channel: 'lightness' },
+				points: [
+					[0, 1],
+					[1, 0]
+				]
+			},
 			{
 				x: { model: 'oklch', channel: 'hue' },
 				x2: { model: 'oklch', channel: 'chroma' },
-				grid: { columns: [0, 0.5], rows: [0, 1], values: [[1, 0], [1, 1]] }
+				grid: {
+					columns: [0, 0.5],
+					rows: [0, 1],
+					values: [
+						[1, 0],
+						[1, 1]
+					]
+				}
 			}
 		]
 	};
 	const unmixed: import('../src/index.js').MaskCurve = {
 		x: { model: 'srgb', channel: 'red' },
-		points: [[0, 1], [1, 0]],
+		points: [
+			[0, 1],
+			[1, 0]
+		],
 		// @ts-expect-error A mask curve has no output channel.
 		y: { model: 'srgb', channel: 'red' }
 	};
@@ -388,6 +451,11 @@ processor.then((instance) => {
 	void [greys, compiledMask];
 	// @ts-expect-error A mask is curves, not a step.
 	instance.effectMask({ version: 1, source: request.source, effects: [], mask: [masked] });
-	// @ts-expect-error Analysis needs a working space.
-	instance.analyzeRecolour({ version: 1, source: request.source, effects: [], context: { palette: quantize.palette } });
+	instance.analyzeRecolour({
+		version: 1,
+		source: request.source,
+		effects: [],
+		// @ts-expect-error Analysis needs a working space.
+		context: { palette: quantize.palette }
+	});
 });

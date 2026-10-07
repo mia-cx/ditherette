@@ -12,7 +12,9 @@ import type {
 	ProcessRequest,
 	Progress,
 	ApplyEffectsRequest,
+	AnalyzePaletteFitRequest,
 	AnalyzeRecolourRequest,
+	Curve,
 	EffectMaskRequest,
 	RecolourRecipe
 } from './types.js';
@@ -20,6 +22,7 @@ import { normalizeInitInput, validateResize, validateQuantize } from './validati
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
 import { processErrorPath, validateProcess } from './validation-process.js';
 import {
+	validateAnalyzePaletteFit,
 	validateAnalyzeRecolour,
 	validateApplyEffects,
 	validateEffectMask
@@ -28,11 +31,22 @@ import {
 type ScalarBindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
 >;
-export type Bindings = Pick<ScalarBindings,
-	'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
-	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize' |
-	'privateApplyEffects' | 'privateProcessEffects' | 'privateAnalyzeRecolour' |
-	'privateEffectMask'> &
+export type Bindings = Pick<
+	ScalarBindings,
+	| 'privateInitialize'
+	| 'privateDispose'
+	| 'privateErrorPath'
+	| 'privateProcess'
+	| 'privateResize'
+	| 'privateQuantize'
+	| 'privatePerturb'
+	| 'privateDitherAndQuantize'
+	| 'privateApplyEffects'
+	| 'privateProcessEffects'
+	| 'privateAnalyzeRecolour'
+	| 'privateAnalyzePaletteFit'
+	| 'privateEffectMask'
+> &
 	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse'>>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
@@ -162,12 +176,20 @@ export function normalizeWasmInput(wasm: InitInput | undefined): InitInput | und
 }
 
 /** Share the existing processing boundary while keeping artifact resources instance-owned. */
-export function initializeProcessor(bindings: Bindings, memoryLimitBytes: number, release?: () => void): Ditherette {
+export function initializeProcessor(
+	bindings: Bindings,
+	memoryLimitBytes: number,
+	release?: () => void
+): Ditherette {
 	let status: number;
 	try {
 		status = bindings.privateInitialize(memoryLimitBytes);
 	} catch {
-		throw new DitheretteError('wasm-memory-unavailable', 'wasm', errorMessages['wasm-memory-unavailable']);
+		throw new DitheretteError(
+			'wasm-memory-unavailable',
+			'wasm',
+			errorMessages['wasm-memory-unavailable']
+		);
 	}
 	if (status !== 0) throw failure(bindings, status);
 	return new Processor(bindings, release);
@@ -321,6 +343,34 @@ class Processor implements Ditherette {
 		}
 	}
 
+	analyzePaletteFit(request: AnalyzePaletteFitRequest): Curve[] {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateAnalyzePaletteFit(request);
+			const result: ResultSink<Curve[]> = { value: undefined, onProgress: input.onProgress };
+			let status: number;
+			try {
+				status = bindings.privateAnalyzePaletteFit(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.effects.json,
+					input.look,
+					input.space,
+					input.palette,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status);
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
 	resize(request: ResizeRequest): Rgba8Image {
 		const bindings = this.#requireIdle();
 		// Guard before touching caller properties: getters can attempt recursive calls too.
@@ -341,29 +391,32 @@ class Processor implements Ditherette {
 			try {
 				const sourcePixels = input.sourceWidth * input.sourceHeight;
 				const outputPixels = input.outputWidth * input.outputHeight;
-				const sparseNearest = input.algorithm === 0 && input.onProgress === undefined &&
+				const sparseNearest =
+					input.algorithm === 0 &&
+					input.onProgress === undefined &&
 					(outputPixels <= sourcePixels / 4 || outputPixels > sourcePixels);
-				status = sparseNearest && bindings.privateResizeNearestSparse
-					? bindings.privateResizeNearestSparse(
-						input.data,
-						input.sourceWidth,
-						input.sourceHeight,
-						input.outputWidth,
-						input.outputHeight,
-						input.anchor,
-						result
-					)
-					: bindings.privateResize(
-						input.data,
-						input.sourceWidth,
-						input.sourceHeight,
-						input.outputWidth,
-						input.outputHeight,
-						input.algorithm,
-						input.anchor,
-						input.support,
-						result
-					);
+				status =
+					sparseNearest && bindings.privateResizeNearestSparse
+						? bindings.privateResizeNearestSparse(
+								input.data,
+								input.sourceWidth,
+								input.sourceHeight,
+								input.outputWidth,
+								input.outputHeight,
+								input.anchor,
+								result
+							)
+						: bindings.privateResize(
+								input.data,
+								input.sourceWidth,
+								input.sourceHeight,
+								input.outputWidth,
+								input.outputHeight,
+								input.algorithm,
+								input.anchor,
+								input.support,
+								result
+							);
 			} catch (error) {
 				throw this.#trap(error);
 			}

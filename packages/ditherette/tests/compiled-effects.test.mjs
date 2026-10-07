@@ -80,6 +80,16 @@ const CHAINS = {
 		{ effect: 'exposure', enabled: true, stops: -0.3 },
 		{ effect: 'recolour', enabled: true, strength: 0.8, recipe: null }
 	],
+	'curve fit': [
+		{
+			effect: 'palette-fit',
+			enabled: true,
+			look: 'fitted',
+			space: 'oklab',
+			strength: 0.9,
+			curves: null
+		}
+	],
 	// Masks read only the colour entering their step, so the chain stays exact per colour.
 	masked: [
 		{
@@ -125,21 +135,33 @@ async function withProcessor(run) {
 	}
 }
 
-/** Give each recipe-less palette fit the recipe `applyEffects` would derive from `image`. */
+/** Give each analysis step the data `applyEffects` would derive from `image`. */
 function resolved(processor, image, effects) {
-	return effects.map((step, index) =>
-		step.effect === 'recolour' && step.recipe === null
-			? {
-					...step,
-					recipe: processor.analyzeRecolour({
-						version: 1,
-						source: image,
-						effects: effects.slice(0, index),
-						context
-					})
-				}
-			: step
-	);
+	return effects.map((step, index) => {
+		if (step.effect === 'recolour' && step.recipe === null)
+			return {
+				...step,
+				recipe: processor.analyzeRecolour({
+					version: 1,
+					source: image,
+					effects: effects.slice(0, index),
+					context
+				})
+			};
+		if (step.effect === 'palette-fit' && step.curves === null)
+			return {
+				...step,
+				curves: processor.analyzePaletteFit({
+					version: 1,
+					source: image,
+					effects: effects.slice(0, index),
+					look: step.look,
+					space: step.space,
+					context
+				})
+			};
+		return step;
+	});
 }
 
 test('indexColours lists distinct colours in first-seen order, ignoring alpha', () => {
@@ -180,6 +202,16 @@ test('compileEffects asks for a palette fit recipe instead of analysing colours'
 					context
 				}),
 			(error) => error instanceof DitheretteError && error.path === 'effects.1.recipe'
+		);
+		assert.throws(
+			() =>
+				compileEffects(processor, {
+					version: 1,
+					colours,
+					effects: CHAINS['curve fit'],
+					context
+				}),
+			(error) => error instanceof DitheretteError && error.path === 'effects.0.curves'
 		);
 	}));
 

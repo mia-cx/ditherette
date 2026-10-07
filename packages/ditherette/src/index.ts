@@ -19,6 +19,7 @@ export { isEffect } from './validation-effects.js';
 export type { ErrorCode } from './errors.js';
 export type {
 	AlphaPolicy,
+	AnalyzePaletteFitRequest,
 	AnalyzeRecolourRequest,
 	ApplyEffectsRequest,
 	BrightnessContrastEffect,
@@ -32,6 +33,7 @@ export type {
 	EffectChannel,
 	EffectContext,
 	EffectMaskRequest,
+	FitLook,
 	ExposureEffect,
 	HueSaturationEffect,
 	LevelsEffect,
@@ -47,6 +49,8 @@ export type {
 	IndexedImage,
 	Matching,
 	PaletteEntry,
+	PaletteFitEffect,
+	PaletteFitSpace,
 	QuantizeRequest,
 	WorkingSpace,
 	Field,

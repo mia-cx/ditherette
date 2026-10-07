@@ -398,6 +398,46 @@ export interface AnalyzeRecolourRequest {
 	readonly onProgress?: (progress: Progress) => void;
 }
 
+/** The analysis preset a palette-fit step uses. Only `'fitted'` exists. */
+export type FitLook = 'fitted';
+
+/**
+ * The space a palette-fit step analyses and edits in: one of the lab/lch model pairs.
+ * Analysed curves use `oklab`/`oklch` or `cielab`/`cielch` channels. The step's own field —
+ * it is not read from the context.
+ */
+export type PaletteFitSpace = 'oklab' | 'cielab';
+
+/**
+ * Fits colour to what the palette can represent through an analysed list of curves — the same
+ * treatment `analyzePaletteFit` derives, visible and editable. With `curves: null` it analyses
+ * the image reaching it against the context palette; a list applies exactly like a `curves`
+ * step. `strength` blends from the input (0) to the full treatment (1).
+ */
+export interface PaletteFitEffect extends StepEnvelope {
+	readonly effect: 'palette-fit';
+	readonly look: FitLook;
+	readonly space: PaletteFitSpace;
+	readonly strength: number;
+	readonly curves: readonly Curve[] | null;
+}
+
+/**
+ * Analyse the image a palette-fit step would receive: `source` after `effects`.
+ * `look` and `space` are the step's own; the context supplies only the palette.
+ */
+export interface AnalyzePaletteFitRequest {
+	readonly version: 1;
+	readonly source: Rgba8Image;
+	/** Steps before the palette-fit step; pass `[]` when there are none. */
+	readonly effects: readonly Effect[];
+	readonly look: FitLook;
+	readonly space: PaletteFitSpace;
+	/** The palette the fit should reach. Required. */
+	readonly context: { readonly palette: readonly PaletteEntry[] };
+	readonly onProgress?: (progress: Progress) => void;
+}
+
 /**
  * One step of an ordered effect chain. Steps run in array order on unrounded colour;
  * repeated effects keep their own arguments. A disabled step is validated but skipped.
@@ -409,7 +449,8 @@ export type Effect =
 	| ExposureEffect
 	| WhiteBalanceEffect
 	| HueSaturationEffect
-	| RecolourEffect;
+	| RecolourEffect
+	| PaletteFitEffect;
 
 /** Shared inputs some effects read. Ordinary effects need neither. */
 export interface EffectContext {
@@ -475,6 +516,11 @@ export interface Ditherette {
 	effectMask(request: EffectMaskRequest): Rgba8Image;
 	/** Derive a fresh, editable recolouring recipe. Repeated inputs reuse the processor's cached analysis. */
 	analyzeRecolour(request: AnalyzeRecolourRequest): RecolourRecipe;
+	/**
+	 * Derive a palette-fit step's curve list from the image reaching the step. Repeated inputs
+	 * reuse the processor's cached analysis. `look` and `space` are the step's own.
+	 */
+	analyzePaletteFit(request: AnalyzePaletteFitRequest): Curve[];
 	/** Return the source itself at unchanged dimensions; otherwise return independent JS-owned RGBA8. */
 	resize(request: ResizeRequest): Rgba8Image;
 	/** Match source pixels to the supplied palette without resizing or dithering. */
