@@ -71,5 +71,5 @@ export const NUMBER_FIELDS: {
 		}
 	],
 	recolour: [{ key: 'strength', label: 'Strength', ...PERCENT, min: 0 }],
-	'palette-fit': [{ key: 'strength', label: 'Strength', ...PERCENT, min: 0 }]
+	'palette-fit': [{ key: 'strength', label: 'Strength', ...PERCENT, min: 0, max: 300 }]
 };
