@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,7 +30,7 @@ export function validateChangeset(content, path = 'changeset.md') {
 	const { frontmatter, body } = parseChangeset(content, path);
 	const declarations = [...frontmatter.matchAll(DECLARATION)];
 	assert.ok(declarations.length > 0, `${path}: declare a patch, minor, or major bump`);
-	for (const [_, name] of declarations) {
+	for (const [, name] of declarations) {
 		assert.ok(
 			RELEASE_PACKAGES.has(name),
 			`${path}: '${name}' is not a released package; use ${[...RELEASE_PACKAGES].join(' or ')}`
@@ -90,8 +90,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 	}
 	let labels = [];
 	if (process.env.GITHUB_EVENT_PATH) {
-		labels = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')).pull_request?.labels
-			?.map((label) => label.name);
+		labels =
+			JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')).pull_request?.labels?.map(
+				(label) => label.name
+			) ?? [];
 	}
 	try {
 		checkChangesets({ files, changesets, labels });
