@@ -136,7 +136,7 @@ jobs:
     name: Publish ditherette
     needs: [version, checks]
     if: >-
-      needs.version.outputs.npm == 'true' &&
+      !cancelled() && needs.version.outputs.npm == 'true' &&
       (needs.checks.result == 'success' || needs.checks.result == 'skipped')
     uses: ./.github/workflows/package-publish.yml
     with:
@@ -147,11 +147,10 @@ jobs:
 
   website:
     name: Deploy the website
-    needs: [version, checks, npm]
+    needs: [version, checks]
     if: >-
       !cancelled() && needs.version.outputs.web == 'true' &&
-      (needs.checks.result == 'success' || needs.checks.result == 'skipped') &&
-      (needs.npm.result == 'success' || needs.npm.result == 'skipped')
+      (needs.checks.result == 'success' || needs.checks.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -177,7 +176,7 @@ jobs:
       - name: Require the deploy credential
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo '::error::Configure CLOUDFLARE_API_TOKEN with D1 and Pages write access so the release can deploy.'
+            echo '::error::Configure CLOUDFLARE_API_TOKEN with Workers Scripts and D1 edit access so the release can deploy.'
             exit 1
           fi
       - name: Install the wasm toolchain
