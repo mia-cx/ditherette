@@ -161,6 +161,8 @@ jobs:
           rustup show
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates/ditherette-wasm
       - run: pnpm package:build
       - name: Check and test the website
         run: |
@@ -187,6 +189,8 @@ jobs:
           rustup show
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates/ditherette-wasm
       - name: Native scalar and threaded tests
         run: |
           cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml
