@@ -32,7 +32,7 @@
 		"package:check": "pnpm --filter ditherette check",
 		"changeset": "changeset",
 		"release:version": "changeset version && node scripts/release-version.mjs && pnpm install --lockfile-only --ignore-scripts",
-		"test:release": "node --test scripts/release-*.test.mjs packages/ditherette/scripts/release.test.mjs",
+		"test:release": "node --test scripts/release-*.test.mjs scripts/check-changesets.test.mjs scripts/changelog-section.test.mjs packages/ditherette/scripts/release.test.mjs",
 		"bench:prepare": "node scripts/prepare-benchmarks.mjs",
 		"bench:resize:wasm": "crates/ditherette-bench/target/prepared/ditherette-bench-lease --quiet -- crates/ditherette-bench/target/prepared/ditherette-bench wasm-resize",
 		"bench:color:wasm": "crates/ditherette-bench/target/prepared/ditherette-bench-lease --quiet -- crates/ditherette-bench/target/prepared/ditherette-bench wasm-resize run color",

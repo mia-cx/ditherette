@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
 	isReleaseMerge,
 	releasePlan,
+	releasePullHead,
+	releaseValidated,
 	requireCurrentVersion,
 	versionIncreased
 } from './release-plan.mjs';
@@ -100,4 +102,27 @@ test('publication reruns accept only identical archives and fail on registry err
 		}),
 		/network down/
 	);
+});
+
+test('releasePullHead finds the merged release PR head', () => {
+	const pr = { ...merged, head: { ...merged.head, sha: 'b'.repeat(40) } };
+	assert.equal(releasePullHead([pr], context), 'b'.repeat(40));
+	assert.equal(releasePullHead([], context), null);
+	assert.equal(releasePullHead([{ ...pr, head: { ...pr.head, ref: 'feature' } }], context), null);
+});
+
+test('releaseValidated requires a successful Release validation run', () => {
+	const run = (over) => ({
+		name: 'Release validation',
+		app: { slug: 'github-actions' },
+		status: 'completed',
+		conclusion: 'success',
+		...over
+	});
+	assert.equal(releaseValidated([run()]), true);
+	assert.equal(releaseValidated([run({ conclusion: 'failure' })]), false);
+	assert.equal(releaseValidated([run({ status: 'in_progress', conclusion: null })]), false);
+	assert.equal(releaseValidated([run({ name: 'Build and test' })]), false);
+	assert.equal(releaseValidated([run({ app: { slug: 'lookalike-app' } })]), false);
+	assert.equal(releaseValidated([]), false);
 });

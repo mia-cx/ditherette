@@ -59,21 +59,70 @@ export function releasePlan(pullRequests, context, versions, pending = []) {
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 const manifestAt = (revision, path) => JSON.parse(git('show', `${revision}:${path}`));
 
+/** The head commit of the merged release pull request, whose tree must equal the merge's. */
+export function releasePullHead(pullRequests, context) {
+	const pr = pullRequests.find(
+		(pr) =>
+			typeof pr.merged_at === 'string' &&
+			pr.merge_commit_sha === context.sha &&
+			pr.base?.ref === 'main' &&
+			pr.base?.repo?.full_name === context.repository &&
+			pr.head?.ref === 'changeset-release/main' &&
+			pr.head?.repo?.full_name === context.repository
+	);
+	return pr?.head?.sha ?? null;
+}
+
+/** The release PR is validated only when its head passed the approval-gated suite. */
+export function releaseValidated(checkRuns) {
+	return checkRuns.some(
+		(run) =>
+			run.name === 'Release validation' &&
+			run.app?.slug === 'github-actions' &&
+			run.status === 'completed' &&
+			run.conclusion === 'success'
+	);
+}
+
 /** Refuse reruns after another release changed either target version. */
 export function requireCurrentVersion(released, current) {
 	assert.equal(released, current, 'A newer release exists on main. Do not replay this release.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	const {
-		GITHUB_SHA: sha,
-		GITHUB_REPOSITORY: repository,
-		GITHUB_EVENT_NAME: event,
-		GITHUB_REF: ref
-	} = process.env;
+	// DITHERETTE_RELEASE_SHA names the release merge; GITHUB_SHA names the runner's commit.
+	// DITHERETTE_RELEASE_RETRY replays a verified release merge from any event; the merge
+	// check below still fails closed for commits that are not release merges.
+	const sha = process.env.DITHERETTE_RELEASE_SHA ?? process.env.GITHUB_SHA;
+	const repository = process.env.GITHUB_REPOSITORY;
+	const retry = process.env.DITHERETTE_RELEASE_RETRY === 'true';
+	const event = retry ? 'push' : process.env.GITHUB_EVENT_NAME;
+	const ref = retry ? 'refs/heads/main' : process.env.GITHUB_REF;
 	assert.match(sha ?? '', /^[a-f0-9]{40}$/);
 	const mode = process.argv[2];
-	if (mode === 'current') {
+	if (mode === 'validated') {
+		const pullRequests = JSON.parse(readFileSync(0, 'utf8')).flat();
+		const head = releasePullHead(pullRequests, { sha, repository });
+		let validated = false;
+		if (head) {
+			const { check_runs: checkRuns } = JSON.parse(
+				execFileSync(
+					'gh',
+					[
+						'api',
+						`repos/${repository}/commits/${head}/check-runs?check_name=Release%20validation&per_page=100`
+					],
+					{ encoding: 'utf8' }
+				)
+			);
+			validated =
+				releaseValidated(checkRuns) &&
+				git('rev-parse', `${sha}^{tree}`) === git('rev-parse', `${head}^{tree}`);
+		}
+		console.log(`validated=${validated}`);
+		if (process.env.GITHUB_OUTPUT)
+			appendFileSync(process.env.GITHUB_OUTPUT, `validated=${validated}\n`);
+	} else if (mode === 'current') {
 		const path = releasePackages[process.argv[3]];
 		assert.ok(path, 'Expected npm or web release target.');
 		git('fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main');

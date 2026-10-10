@@ -1,0 +1,242 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  changes:
+    # Every check a change could need gates on these three outputs, so a docs-only edit skips
+    # the heavy jobs while required checks still report. Push, dispatch, and unreachable-base
+    # diffs validate everything rather than guess.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      engine: ${{ steps.changes.outputs.engine }}
+      web: ${{ steps.changes.outputs.web }}
+      tooling: ${{ steps.changes.outputs.tooling }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Detect changed areas
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "$EVENT" != pull_request ] && [ "$EVENT" != push ]; then
+            echo 'engine=true' >> "$GITHUB_OUTPUT"
+            echo 'web=true' >> "$GITHUB_OUTPUT"
+            echo 'tooling=true' >> "$GITHUB_OUTPUT"
+            echo "$EVENT runs validate everything"
+            exit
+          fi
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo 'engine=true' >> "$GITHUB_OUTPUT"
+            echo 'web=true' >> "$GITHUB_OUTPUT"
+            echo 'tooling=true' >> "$GITHUB_OUTPUT"
+            echo 'No reachable base commit; assuming every area changed'
+            exit
+          fi
+          if [ "$EVENT" = pull_request ]; then
+            base="$(git merge-base "$BASE_SHA" HEAD)"
+          else
+            base="$BASE_SHA"
+          fi
+          # The crate, package, and build tooling the engine checks cover.
+          cat > "$RUNNER_TEMP/engine-paths" <<'EOF'
+          ^crates/
+          ^packages/
+          ^tools/
+          ^Cargo\.(toml|lock)$
+          ^rust-toolchain\.toml$
+          ^pnpm-(lock|workspace)\.yaml$
+          ^package\.json$
+          EOF
+          # Everything the web checks cover: the engine inputs plus the website itself.
+          cat > "$RUNNER_TEMP/web-paths" <<'EOF'
+          ^src/
+          ^static/
+          ^e2e/
+          ^(svelte\.config|vite\.config|vitest\.config)\.(ts|js|mts)$
+          ^tsconfig\.json$
+          ^\.?(eslint|prettier)[^/]*$
+          ^wrangler\.jsonc$
+          ^migrations/
+          ^playwright\.config\.
+          EOF
+          # Inputs of `pnpm test:release`: the scripts, their assertions, changeset state,
+          # manifests, and changelogs.
+          cat > "$RUNNER_TEMP/tooling-paths" <<'EOF'
+          ^\.github/
+          ^\.changeset/
+          ^scripts/release-[^/]*
+          ^packages/ditherette/scripts/release[^/]*
+          ^[^/]*package\.json$
+          ^packages/ditherette/package\.json$
+          ^[^/]*CHANGELOG\.md$
+          ^packages/ditherette/CHANGELOG\.md$
+          ^pnpm-lock\.yaml$
+          EOF
+          changed="$(git diff --name-only "$base" HEAD)"
+          engine=false
+          web=false
+          tooling=false
+          if printf '%s\n' "$changed" | grep -E -q -f "$RUNNER_TEMP/engine-paths"; then
+            engine=true
+            web=true
+          elif printf '%s\n' "$changed" | grep -E -q -f "$RUNNER_TEMP/web-paths"; then
+            web=true
+          fi
+          if printf '%s\n' "$changed" | grep -E -q -f "$RUNNER_TEMP/tooling-paths"; then
+            tooling=true
+          fi
+          echo "engine=$engine" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "tooling=$tooling" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$changed" | head -20
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  changeset:
+    name: Changeset
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Require a changeset for user-facing changes
+        run: node scripts/check-changesets.mjs "${{ github.event.pull_request.base.sha }}"
+
+  web:
+    name: Web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install the wasm toolchain
+        run: |
+          rustup show
+          rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates/ditherette-wasm
+      - run: pnpm package:build
+      - name: Check and test the website
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm check
+          pnpm exec vitest run
+
+  engine:
+    name: Engine
+    needs: changes
+    if: needs.changes.outputs.engine == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install the wasm toolchain
+        run: |
+          rustup show
+          rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates/ditherette-wasm
+      - name: Native scalar and threaded tests
+        run: |
+          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml
+          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml --features threads
+      - name: Package interface, staging, glue, and private tests
+        run: |
+          pnpm --filter ditherette test:interface
+          pnpm --filter ditherette test:staging
+          pnpm --filter ditherette-wasm test:glue:built
+          pnpm --filter ditherette-wasm test:private
+
+  release-tooling:
+    name: Release tooling
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:release
+
+  result:
+    name: CI result
+    if: always()
+    needs: [lint, changeset, web, engine, release-tooling]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report the aggregate result
+        env:
+          LINT: ${{ needs.lint.result }}
+          CHANGESET: ${{ needs.changeset.result }}
+          WEB: ${{ needs.web.result }}
+          ENGINE: ${{ needs.engine.result }}
+          TOOLING: ${{ needs.release-tooling.result }}
+        run: |
+          echo "lint=$LINT changeset=$CHANGESET web=$WEB engine=$ENGINE tooling=$TOOLING"
+          for result in "$LINT" "$CHANGESET" "$WEB" "$ENGINE" "$TOOLING"; do
+            if [ "$result" = failure ] || [ "$result" = cancelled ]; then
+              echo '::error::A required check failed or was cancelled.'
+              exit 1
+            fi
+          done
