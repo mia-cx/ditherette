@@ -159,13 +159,16 @@ test('release workflow validates the tested tarball before protected provenance 
 		'shell: bash',
 		'--frozen-lockfile',
 		'release.mjs prepare',
-		'test:conformance',
 		'publish-check',
 		'release-plan.mjs',
 		'release-registry.mjs',
-		'npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts'
+		'npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts',
+		'ditherette@',
+		'changelog-section.mjs'
 	])
 		assert.ok(workflow.includes(required), required);
 	assert.ok(workflow.indexOf('publish-check') < workflow.indexOf('npm publish target/release'));
+	// Conformance runs once, gated on the release PR; publishing trusts that suite.
+	assert.ok(!workflow.includes('test:conformance'), 'publish must not rerun conformance');
 	assert.ok(!/workflow_dispatch|NODE_AUTH_TOKEN|NPM_TOKEN|secrets\./.test(workflow));
 });
