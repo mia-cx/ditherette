@@ -46,11 +46,24 @@ jobs:
           cargo fetch --locked --manifest-path tools/spec-freeze/syntax/Cargo.toml
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: pnpm install --frozen-lockfile
+      - name: Verify the merged release authorizes publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DITHERETTE_RELEASE_SHA: ${{ inputs.sha }}
+          DITHERETTE_RELEASE_RETRY: 'true'
+        run: |
+          plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$DITHERETTE_RELEASE_SHA/pulls" --paginate --slurp | node scripts/release-plan.mjs)"
+          printf '%s\n' "$plan"
+          test "$(printf '%s\n' "$plan" | grep '^release=')" = release=true
+          test "$(printf '%s\n' "$plan" | grep '^npm=')" = npm=true
+          echo 'DITHERETTE_RELEASE_MERGE=true' >> "$GITHUB_ENV"
       - name: Prepare the exact release tarball
         run: |
           mkdir -p target
           node packages/ditherette/scripts/release.mjs prepare "$GITHUB_WORKSPACE/target/release" | tee target/release-build.log
       - name: Verify source, artifact, sizes, and recorded release holds
+        env:
+          DITHERETTE_RELEASE_SHA: ${{ inputs.sha }}
         run: |
           node scripts/release-plan.mjs current npm
           node packages/ditherette/scripts/release.mjs publish-check "$GITHUB_WORKSPACE/target/release"

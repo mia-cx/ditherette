@@ -61,12 +61,11 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_SHA: ${{ steps.target.outputs.sha }}
+          DITHERETTE_RELEASE_SHA: ${{ steps.target.outputs.sha }}
           # A retry replays the release merge; the plan still requires it to be one.
-          GITHUB_EVENT_NAME: ${{ inputs.retry_release_commit != '' && 'push' || github.event_name }}
-          GITHUB_REF: ${{ inputs.retry_release_commit != '' && 'refs/heads/main' || github.ref }}
+          DITHERETTE_RELEASE_RETRY: ${{ inputs.retry_release_commit != '' && 'true' || '' }}
         run: |
-          plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --paginate --slurp | tee "$RUNNER_TEMP/pulls.json" | node scripts/release-plan.mjs)"
+          plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$DITHERETTE_RELEASE_SHA/pulls" --paginate --slurp | tee "$RUNNER_TEMP/pulls.json" | node scripts/release-plan.mjs)"
           printf '%s\n' "$plan"
           if [ -n "${{ inputs.retry_release_commit }}" ]; then
             test "$(printf '%s\n' "$plan" | grep '^release=')" = release=true
@@ -75,7 +74,7 @@ jobs:
         id: validate
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_SHA: ${{ steps.target.outputs.sha }}
+          DITHERETTE_RELEASE_SHA: ${{ steps.target.outputs.sha }}
         if: steps.plan.outputs.release == 'true'
         run: node scripts/release-plan.mjs validated < "$RUNNER_TEMP/pulls.json"
 
@@ -186,7 +185,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Reject superseded website releases
         env:
-          GITHUB_SHA: ${{ needs.version.outputs.sha }}
+          DITHERETTE_RELEASE_SHA: ${{ needs.version.outputs.sha }}
         run: node scripts/release-plan.mjs current web
       - name: Build the website
         run: pnpm build
