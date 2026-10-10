@@ -45,6 +45,10 @@ jobs:
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
           cargo fetch --locked --manifest-path tools/spec-freeze/syntax/Cargo.toml
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: |
+            crates/ditherette-wasm
+            tools/spec-freeze/syntax
       - run: pnpm install --frozen-lockfile
       - name: Verify the merged release authorizes publication
         env:
