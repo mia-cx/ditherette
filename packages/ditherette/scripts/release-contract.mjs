@@ -125,8 +125,6 @@ export function requirePublication(policy, findings, environment, version, revis
 		'latest',
 		'Release candidates require separate qualification.'
 	);
-	assert.equal(environment.GITHUB_EVENT_NAME, 'push');
-	assert.equal(environment.GITHUB_REF, 'refs/heads/main');
 	assert.equal(
 		environment.DITHERETTE_RELEASE_MERGE,
 		'true',
@@ -134,7 +132,9 @@ export function requirePublication(policy, findings, environment, version, revis
 	);
 	assert.equal(environment.GITHUB_ACTIONS, 'true');
 	assert.equal(environment.GITHUB_REPOSITORY, 'mia-cx/ditherette');
-	assert.equal(environment.GITHUB_SHA, revision, 'Publish only the tested source revision.');
+	// DITHERETTE_RELEASE_SHA names the release merge; GITHUB_SHA names the runner's commit.
+	const releaseSha = environment.DITHERETTE_RELEASE_SHA ?? environment.GITHUB_SHA;
+	assert.equal(releaseSha, revision, 'Publish only the tested source revision.');
 	assert.deepEqual(findings, [], 'Package size review is required.');
 	assert.deepEqual(policy.holds, [], 'Recorded release holds must be resolved before publishing.');
 }

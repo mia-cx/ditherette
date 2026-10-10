@@ -86,12 +86,14 @@ export function requireCurrentVersion(released, current) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	const {
-		GITHUB_SHA: sha,
-		GITHUB_REPOSITORY: repository,
-		GITHUB_EVENT_NAME: event,
-		GITHUB_REF: ref
-	} = process.env;
+	// DITHERETTE_RELEASE_SHA names the release merge; GITHUB_SHA names the runner's commit.
+	// DITHERETTE_RELEASE_RETRY replays a verified release merge from any event; the merge
+	// check below still fails closed for commits that are not release merges.
+	const sha = process.env.DITHERETTE_RELEASE_SHA ?? process.env.GITHUB_SHA;
+	const repository = process.env.GITHUB_REPOSITORY;
+	const retry = process.env.DITHERETTE_RELEASE_RETRY === 'true';
+	const event = retry ? 'push' : process.env.GITHUB_EVENT_NAME;
+	const ref = retry ? 'refs/heads/main' : process.env.GITHUB_REF;
 	assert.match(sha ?? '', /^[a-f0-9]{40}$/);
 	const mode = process.argv[2];
 	if (mode === 'validated') {

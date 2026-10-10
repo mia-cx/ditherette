@@ -135,16 +135,29 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 	);
 	assert.throws(() => requirePublication(policy, ['size growth'], environment, '0.1.0', 'source'));
 	for (const change of [
-		{ GITHUB_REF: 'refs/tags/v0.1.0' },
-		{ GITHUB_EVENT_NAME: 'pull_request' },
 		{ DITHERETTE_RELEASE_MERGE: undefined },
 		{ GITHUB_REPOSITORY: 'other/repo' },
 		{ GITHUB_ACTIONS: undefined },
-		{ GITHUB_SHA: 'different' }
+		{ GITHUB_SHA: 'different' },
+		{ DITHERETTE_RELEASE_SHA: 'different' }
 	])
 		assert.throws(() =>
 			requirePublication(policy, [], { ...environment, ...change }, '0.1.0', 'source')
 		);
+	// The event and ref no longer matter: a dispatch retry publishes the named merge.
+	requirePublication(
+		policy,
+		[],
+		{
+			...environment,
+			GITHUB_EVENT_NAME: 'workflow_dispatch',
+			GITHUB_REF: 'refs/heads/main',
+			GITHUB_SHA: 'runner-head',
+			DITHERETTE_RELEASE_SHA: 'source'
+		},
+		'0.1.0',
+		'source'
+	);
 });
 
 test('release workflow validates the tested tarball before protected provenance publication', async () => {
