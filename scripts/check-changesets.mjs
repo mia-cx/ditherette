@@ -43,7 +43,8 @@ export function validateChangeset(content, path = 'changeset.md') {
 export function changedChangesets(files) {
 	return files.filter(
 		(file) =>
-			/^\.changeset\/[^/]+\.md$/.test(file) && !['README.md', 'config.json'].includes(basename(file))
+			/^\.changeset\/[^/]+\.md$/.test(file) &&
+			!['README.md', 'config.json'].includes(basename(file))
 	);
 }
 
@@ -78,15 +79,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 	const git = (...args) =>
 		execFileSync('git', args, { cwd: resolve(process.argv[1], '../..'), encoding: 'utf8' });
 	const mergeBase = git('merge-base', base, 'HEAD').trim();
-	const diff = (...args) => git('diff', '--name-only', ...args).split('\n').filter(Boolean);
+	const diff = (...args) =>
+		git('diff', '--name-only', ...args)
+			.split('\n')
+			.filter(Boolean);
 	const files = diff(`${mergeBase}...HEAD`);
 	const changesets = {};
 	for (const file of diff('--diff-filter=AMR', `${mergeBase}...HEAD`)) {
 		if (changedChangesets([file]).length)
-			changesets[file] = readFileSync(
-				resolve(process.argv[1], '../../', file),
-				'utf8'
-			);
+			changesets[file] = readFileSync(resolve(process.argv[1], '../../', file), 'utf8');
 	}
 	let labels = [];
 	if (process.env.GITHUB_EVENT_PATH) {
