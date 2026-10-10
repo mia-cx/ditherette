@@ -115,10 +115,17 @@ test('releasePullHead finds the merged release PR head', () => {
 });
 
 test('releaseValidated requires a successful Release validation run', () => {
-	const run = (over) => ({ name: 'Release validation', status: 'completed', conclusion: 'success', ...over });
+	const run = (over) => ({
+		name: 'Release validation',
+		app: { slug: 'github-actions' },
+		status: 'completed',
+		conclusion: 'success',
+		...over
+	});
 	assert.equal(releaseValidated([run()]), true);
 	assert.equal(releaseValidated([run({ conclusion: 'failure' })]), false);
 	assert.equal(releaseValidated([run({ status: 'in_progress', conclusion: null })]), false);
 	assert.equal(releaseValidated([run({ name: 'Build and test' })]), false);
+	assert.equal(releaseValidated([run({ app: { slug: 'lookalike-app' } })]), false);
 	assert.equal(releaseValidated([]), false);
 });
