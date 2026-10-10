@@ -76,7 +76,11 @@ export function releasePullHead(pullRequests, context) {
 /** The release PR is validated only when its head passed the approval-gated suite. */
 export function releaseValidated(checkRuns) {
 	return checkRuns.some(
-		(run) => run.name === 'Release validation' && run.status === 'completed' && run.conclusion === 'success'
+		(run) =>
+			run.name === 'Release validation' &&
+			run.app?.slug === 'github-actions' &&
+			run.status === 'completed' &&
+			run.conclusion === 'success'
 	);
 }
 
@@ -102,9 +106,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 		let validated = false;
 		if (head) {
 			const { check_runs: checkRuns } = JSON.parse(
-				execFileSync('gh', ['api', `repos/${repository}/commits/${head}/check-runs`], {
-					encoding: 'utf8'
-				})
+				execFileSync(
+					'gh',
+					[
+						'api',
+						`repos/${repository}/commits/${head}/check-runs?check_name=Release%20validation&per_page=100`
+					],
+					{ encoding: 'utf8' }
+				)
 			);
 			validated =
 				releaseValidated(checkRuns) &&
