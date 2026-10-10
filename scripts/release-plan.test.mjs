@@ -108,10 +108,7 @@ test('releasePullHead finds the merged release PR head', () => {
 	const pr = { ...merged, head: { ...merged.head, sha: 'b'.repeat(40) } };
 	assert.equal(releasePullHead([pr], context), 'b'.repeat(40));
 	assert.equal(releasePullHead([], context), null);
-	assert.equal(
-		releasePullHead([{ ...pr, head: { ...pr.head, ref: 'feature' } }], context),
-		null
-	);
+	assert.equal(releasePullHead([{ ...pr, head: { ...pr.head, ref: 'feature' } }], context), null);
 });
 
 test('releaseValidated requires a successful Release validation run', () => {

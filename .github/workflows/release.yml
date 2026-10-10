@@ -184,8 +184,7 @@ jobs:
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: |
-            crates/ditherette-wasm
+          workspaces: crates/ditherette-wasm
       - name: Reject superseded website releases
         env:
           DITHERETTE_RELEASE_SHA: ${{ needs.version.outputs.sha }}
