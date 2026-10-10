@@ -78,8 +78,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 	const git = (...args) =>
 		execFileSync('git', args, { cwd: resolve(process.argv[1], '../..'), encoding: 'utf8' });
 	const mergeBase = git('merge-base', base, 'HEAD').trim();
+<<<<<<< HEAD
 	const diff = (range) =>
 		git('diff', '--name-only', range).split('\n').filter(Boolean);
+=======
+	const diff = (...args) => git('diff', '--name-only', ...args).split('\n').filter(Boolean);
+>>>>>>> 13a097af (fix(ci): pass the diff range through the changeset filter)
 	const files = diff(`${mergeBase}...HEAD`);
 	const changesets = {};
 	for (const file of diff('--diff-filter=AMR', `${mergeBase}...HEAD`)) {
