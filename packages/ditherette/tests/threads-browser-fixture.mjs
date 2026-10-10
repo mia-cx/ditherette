@@ -101,8 +101,9 @@ export async function threadedHostCheck({ operation, input }) {
 			const url = input instanceof Request ? input.url : String(input);
 			if (url.includes('/wasm/scalar/')) {
 				const { held } = await navigator.locks.query();
-				globalThis.scalarFetches.push(held.filter(({ name }) =>
-					name.startsWith('ditherette-test-')).map(({ name }) => name));
+				globalThis.scalarFetches.push(
+					held.filter(({ name }) => name.startsWith('ditherette-test-')).map(({ name }) => name)
+				);
 			}
 			return fetch(input, init);
 		};
@@ -114,8 +115,12 @@ export async function threadedHostCheck({ operation, input }) {
 				globalThis.partialOutcome = { kind: 'scalar' };
 			},
 			(error) => {
-				globalThis.partialOutcome = { kind: 'error', structured: error instanceof DitheretteError,
-					code: error.code, path: error.path };
+				globalThis.partialOutcome = {
+					kind: 'error',
+					structured: error instanceof DitheretteError,
+					code: error.code,
+					path: error.path
+				};
 			}
 		);
 		return;

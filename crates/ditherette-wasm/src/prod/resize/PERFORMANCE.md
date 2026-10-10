@@ -12,7 +12,7 @@ local perf-loop history.
   match that path; the one-shot `resize_*_rgba8_into` subjects remain for
   staged exports. The app does not repeatedly resize with the same dimensions.
 - **Use manifest profiles as source of truth.** Run `ditherette-bench run
-  nearest`, `run area`, or `run bilinear`; do not hand-roll scale/fixture flags
+nearest`, `run area`, or `run bilinear`; do not hand-roll scale/fixture flags
   for acceptance.
 - **Correctness comes first.** Nearest and exact integer area stay byte-exact.
   Fractional area and production bilinear use bounded RGBA color-distance checks

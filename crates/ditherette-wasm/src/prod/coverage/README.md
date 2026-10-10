@@ -28,12 +28,12 @@ DITHERETTE_BENCH_QUIET=1 cargo run --release --locked \
   --preheat-time 0ms --process-priority normal --correctness exact --baseline none
 ```
 
-| Resize | Median | Coverage-owned peak capacity |
-| --- | ---: | ---: |
-| 800×800 → 400×400, bilinear | 5.55 ms | 12.28 MiB |
-| 800×800 → 400×400, Lanczos3 scale-aware | 33.97 ms | 12.38 MiB |
-| 800×800 → 1600×1600, bilinear | 57.26 ms | 49.04 MiB |
-| 800×800 → 1600×1600, Lanczos3 scale-aware | 215.36 ms | 49.23 MiB |
+| Resize                                    |    Median | Coverage-owned peak capacity |
+| ----------------------------------------- | --------: | ---------------------------: |
+| 800×800 → 400×400, bilinear               |   5.55 ms |                    12.28 MiB |
+| 800×800 → 400×400, Lanczos3 scale-aware   |  33.97 ms |                    12.38 MiB |
+| 800×800 → 1600×1600, bilinear             |  57.26 ms |                    49.04 MiB |
+| 800×800 → 1600×1600, Lanczos3 scale-aware | 215.36 ms |                    49.23 MiB |
 
 The registered production subjects have exact reference subjects, and the
 integration matrix separately checks every output byte. Per-axis preparation is

@@ -24,20 +24,20 @@ Cold means the first processing call on a fresh processor, not a fresh browser e
 Warm recompute primes the same source at width +1, +2 or +3 before measuring the requested dimensions. Final results are not cached.
 Historical JS retains its within-call RGB cache; optional website cross-call caches stay disabled.
 
-| Browser | Scale | Wasm cold before | Wasm cold after | Wasm warm before | Wasm warm after | JS cold | JS warm |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 10% | 180.5 | 34.0 | 11.7 | 11.5 | 13.0 | 12.2 |
-| Chromium | 25% | 174.1 | 44.5 | 32.0 | 24.2 | 32.7 | 33.5 |
-| Chromium | 50% | 237.2 | 66.7 | 96.5 | 61.1 | 92.8 | 90.0 |
-| Chromium | 100% | 482.3 | 179.6 | 334.9 | 173.5 | 219.1 | 224.8 |
-| Firefox | 10% | 1208 | 45 | 56 | 44 | 14 | 12 |
-| Firefox | 25% | 1350 | 136 | 205 | 134 | 37 | 38 |
-| Firefox | 50% | 1768 | 356 | 628 | 348 | 101 | 100 |
-| Firefox | 100% | 3208 | 928 | 2107 | 918 | 268 | 281 |
-| WebKit | 10% | 176 | 31 | 13 | 11 | 12 | 16 |
-| WebKit | 25% | 210 | 40 | 33 | 25 | 33 | 28 |
-| WebKit | 50% | 268 | 83 | 100 | 62 | 70 | 73 |
-| WebKit | 100% | 513 | 193 | 321 | 154 | 177 | 179 |
+| Browser  | Scale | Wasm cold before | Wasm cold after | Wasm warm before | Wasm warm after | JS cold | JS warm |
+| -------- | ----: | ---------------: | --------------: | ---------------: | --------------: | ------: | ------: |
+| Chromium |   10% |            180.5 |            34.0 |             11.7 |            11.5 |    13.0 |    12.2 |
+| Chromium |   25% |            174.1 |            44.5 |             32.0 |            24.2 |    32.7 |    33.5 |
+| Chromium |   50% |            237.2 |            66.7 |             96.5 |            61.1 |    92.8 |    90.0 |
+| Chromium |  100% |            482.3 |           179.6 |            334.9 |           173.5 |   219.1 |   224.8 |
+| Firefox  |   10% |             1208 |              45 |               56 |              44 |      14 |      12 |
+| Firefox  |   25% |             1350 |             136 |              205 |             134 |      37 |      38 |
+| Firefox  |   50% |             1768 |             356 |              628 |             348 |     101 |     100 |
+| Firefox  |  100% |             3208 |             928 |             2107 |             918 |     268 |     281 |
+| WebKit   |   10% |              176 |              31 |               13 |              11 |      12 |      16 |
+| WebKit   |   25% |              210 |              40 |               33 |              25 |      33 |      28 |
+| WebKit   |   50% |              268 |              83 |              100 |              62 |      70 |      73 |
+| WebKit   |  100% |              513 |             193 |              321 |             154 |     177 |     179 |
 
 JS columns are contemporaneous controls from the candidate run. Raw evidence also retains the fresh baseline's JS timings.
 Browser versions are Chromium 147.0.7727.15, Firefox 148.0.2 and Linux WebKit 26.4.

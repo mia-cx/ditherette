@@ -95,16 +95,16 @@ The native paired collector enforces five samples before its time target can sto
 Other measurement commands retain their existing stopping policy. Both fresh artifacts must
 include this collector correction; historical reports keep their original collector identity.
 
-| Scope | Timed work | Untimed work |
-|---|---|---|
-| Resize kernel | Actual resize export, including internal plans, scratch, and mip preparation | Caller-owned RGBA8 input/output storage |
-| Forward conversion | Frozen image export or production packed conversion into coordinates | Output storage and production Converter construction |
-| Source construction | Actual per-pixel source conversion helper, including its Converter construction | Output storage |
-| Inverse / wide reconstruction | f32 inverse image export or f64 reconstruction with fixed out-of-gamut offsets | Frozen forward fixture conversion and output storage |
-| Scores | Actual scalar metric over cyclic coordinate pairs | Frozen pair conversion and score storage |
-| Threshold / placement | Complete field or adaptive mask batch | Output storage |
-| Perturb kernel | Full field, placement, conversion, and RGBA8 reconstruction loop | Validation, contract mapping, and output storage |
-| Complete indexed call | Quantize, diffusion, or Yliluoma validation, preparation, scratch, result allocation, and destruction | Borrowed input, contract mapping, verification serialization |
+| Scope                         | Timed work                                                                                            | Untimed work                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Resize kernel                 | Actual resize export, including internal plans, scratch, and mip preparation                          | Caller-owned RGBA8 input/output storage                      |
+| Forward conversion            | Frozen image export or production packed conversion into coordinates                                  | Output storage and production Converter construction         |
+| Source construction           | Actual per-pixel source conversion helper, including its Converter construction                       | Output storage                                               |
+| Inverse / wide reconstruction | f32 inverse image export or f64 reconstruction with fixed out-of-gamut offsets                        | Frozen forward fixture conversion and output storage         |
+| Scores                        | Actual scalar metric over cyclic coordinate pairs                                                     | Frozen pair conversion and score storage                     |
+| Threshold / placement         | Complete field or adaptive mask batch                                                                 | Output storage                                               |
+| Perturb kernel                | Full field, placement, conversion, and RGBA8 reconstruction loop                                      | Validation, contract mapping, and output storage             |
+| Complete indexed call         | Quantize, diffusion, or Yliluoma validation, preparation, scratch, result allocation, and destruction | Borrowed input, contract mapping, verification serialization |
 
 The seven score families use their declared coordinate fixtures. All 15 matching policies
 also have complete quantize cases; palette preparation and prepared matching remain included

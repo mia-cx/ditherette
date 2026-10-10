@@ -138,13 +138,20 @@ await runBrowserTransport({
 
 function sweepRunConfigs(options) {
 	const configs = [];
-	const scalarSubjects = options.subjects.filter((subject) => isScalarSubject(subjectConfig(subject)));
+	const scalarSubjects = options.subjects.filter((subject) =>
+		isScalarSubject(subjectConfig(subject))
+	);
 	const candidateSubjects = options.subjects.filter((subject) => !scalarSubjects.includes(subject));
 	const periodicScalarSubjects = options.periodicScalarRemeasurement
-		? scalarSubjects.filter((scalar) => candidateSubjects.some((candidate) =>
-			isMatchingScalarSubject(subjectConfig(scalar), subjectConfig(candidate))))
+		? scalarSubjects.filter((scalar) =>
+				candidateSubjects.some((candidate) =>
+					isMatchingScalarSubject(subjectConfig(scalar), subjectConfig(candidate))
+				)
+			)
 		: [];
-	const onceSubjects = scalarSubjects.filter((subject) => !periodicScalarSubjects.includes(subject));
+	const onceSubjects = scalarSubjects.filter(
+		(subject) => !periodicScalarSubjects.includes(subject)
+	);
 
 	for (const scale of options.scales) {
 		if (onceSubjects.length > 0) {
@@ -916,7 +923,10 @@ function candidateComparisons(results) {
 
 function comparisonCaseId(result) {
 	if (!result.subject.startsWith('wasm:')) return result.id;
-	return result.id.replace(/-workers-\d+-band-(?:even-\d+|even|\d+)(?=-(?:decoded-rgba|browser-decode)$)/, '');
+	return result.id.replace(
+		/-workers-\d+-band-(?:even-\d+|even|\d+)(?=-(?:decoded-rgba|browser-decode)$)/,
+		''
+	);
 }
 
 function isScalarResult(result) {
@@ -1038,14 +1048,6 @@ function resizeSupportPolicyForVariant(variant) {
 	}
 }
 
-function formatResultTable(run) {
-	return [
-		renderPerfStart(run),
-		...run.results.flatMap(renderMeasurementResult),
-		renderSummary(run)
-	].join('\n');
-}
-
 function scaleLabel(scale) {
 	if (typeof scale === 'number') return `${scale}x`;
 	if (Math.abs(scale.x - scale.y) < Number.EPSILON) return `${scale.x}x`;
@@ -1121,23 +1123,6 @@ function renderSummary(run) {
 		spec: '—'
 	}));
 	return `${heading('Summary')}\n${table(rows)}`;
-}
-
-function baselineResultsByCase(results) {
-	const baselines = new Map();
-	for (const result of results) {
-		const key = `${result.fixture.name}:${result.id}`;
-		if (!baselines.has(key)) baselines.set(key, result);
-	}
-	return baselines;
-}
-
-function formatDurationDelta(nanoseconds, baselineNanoseconds) {
-	const duration = formatDuration(nanoseconds);
-	if (!baselineNanoseconds) return duration;
-
-	const speedFactor = baselineNanoseconds / nanoseconds;
-	return `${duration} (${formatSignificant(speedFactor)}×)`;
 }
 
 function heading(text) {
@@ -1261,12 +1246,18 @@ async function resolveOptions(rawArgs) {
 }
 
 function threadCountsFromConfig(config) {
-	const values = config.thread_counts ?? config.threadCounts ?? config.thread_count ?? config.threadCount ?? [2];
+	const values = config.thread_counts ??
+		config.threadCounts ??
+		config.thread_count ??
+		config.threadCount ?? [2];
 	return numberArray(values).map((value) => positiveInteger(value, 'thread_counts', 2));
 }
 
 function rowBandHeightsFromConfig(config) {
-	const values = config.row_band_heights ?? config.rowBandHeights ?? config.row_band_height ?? config.rowBandHeight ?? [32];
+	const values = config.row_band_heights ??
+		config.rowBandHeights ??
+		config.row_band_height ??
+		config.rowBandHeight ?? [32];
 	return arrayValue(values).map((value) => {
 		if (String(value) === 'even') return 'even';
 		return positiveInteger(value, 'row_band_heights', 32);

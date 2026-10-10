@@ -37,24 +37,24 @@ This snapshot comes from the live PR state after S16 delivery. All 16 PRs are op
 The linked PR descriptions contain each slice's validation evidence. Worktrees have the branch suffix under `.worktrees/`, without `impl/`.
 Use [the test-count audit](test-count-audit.md) for native totals. Original issue prerequisites remain the dependency authority.
 
-| Slice / issue | PR | Branch | Immediate PR base | Delivered head |
-| --- | --- | --- | --- | --- |
-| S01 / [#42](https://github.com/mia-cx/ditherette/issues/42) | [#75](https://github.com/mia-cx/ditherette/pull/75) | `impl/v1-s01-anchor` | `main` | `a213effed4b426c5c432c9ccc7062b7016dd5c1b` |
-| S02 / [#43](https://github.com/mia-cx/ditherette/issues/43) | [#88](https://github.com/mia-cx/ditherette/pull/88) | `impl/v1-s02-builds` | `impl/v1-s01-anchor` | `bc110d91d441ec3069d128e3cc7d39b3b439a1f4` |
-| S03 / [#44](https://github.com/mia-cx/ditherette/issues/44) | [#89](https://github.com/mia-cx/ditherette/pull/89) | `impl/v1-s03-contracts` | `impl/v1-s01-anchor` | `fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06` |
-| S04 / [#45](https://github.com/mia-cx/ditherette/issues/45) | [#90](https://github.com/mia-cx/ditherette/pull/90) | `impl/v1-s04-bench-lock` | `impl/v1-s01-anchor` | `b5ed4d250cbdc804f18bbadb24df4463db1b6434` |
-| S05 / [#46](https://github.com/mia-cx/ditherette/issues/46) | [#96](https://github.com/mia-cx/ditherette/pull/96) | `impl/v1-s05-verification` | `impl/v1-s05-base` | `8c05906cb9cfe0a991b351f5260a319b91f76ab4` |
-| S06 / [#47](https://github.com/mia-cx/ditherette/issues/47) | [#102](https://github.com/mia-cx/ditherette/pull/102) | `impl/v1-s06-paired-bench` | `impl/v1-s05-verification` | `a65f53e24b880932021b39e601b5682b1111bc54` |
-| S07 / [#48](https://github.com/mia-cx/ditherette/issues/48) | [#91](https://github.com/mia-cx/ditherette/pull/91) | `impl/v1-s07-color-basic` | `impl/v1-s03-contracts` | `7ef52bd2bcaea2774a400875e5c395526bc9b4b9` |
-| S08 / [#49](https://github.com/mia-cx/ditherette/issues/49) | [#92](https://github.com/mia-cx/ditherette/pull/92) | `impl/v1-s08-color-perceptual` | `impl/v1-s03-contracts` | `d5e2d9761481f7a6b74fb37c7c2f7841570bead1` |
-| S09 / [#50](https://github.com/mia-cx/ditherette/issues/50) | [#94](https://github.com/mia-cx/ditherette/pull/94) | `impl/v1-s09-palette` | `impl/v1-s03-contracts` | `d8bcdcdbe8f874eaee65447a640b97483c9cb775` |
-| S10 / [#51](https://github.com/mia-cx/ditherette/issues/51) | [#97](https://github.com/mia-cx/ditherette/pull/97) | `impl/v1-s10-quantize` | `impl/v1-s10-base` | `47712a500c4079293a06fae4a07ae105a643af8f` |
-| S11 / [#52](https://github.com/mia-cx/ditherette/issues/52) | [#93](https://github.com/mia-cx/ditherette/pull/93) | `impl/v1-s11-resize` | `impl/v1-s03-contracts` | `bb9421cbecdeadb3c70c78d1e7412f982be7053f` |
-| S12 / [#53](https://github.com/mia-cx/ditherette/issues/53) | [#95](https://github.com/mia-cx/ditherette/pull/95) | `impl/v1-s12-placement` | `impl/v1-s12-base` | `01df66826e532d8fb3b522a1564f1121c96f4d1f` |
-| S13 / [#54](https://github.com/mia-cx/ditherette/issues/54) | [#98](https://github.com/mia-cx/ditherette/pull/98) | `impl/v1-s13-perturb` | `impl/v1-s13-base` | `2a2b0f2de2592cba424c5823f40e3604f1b2a6b7` |
-| S14 / [#55](https://github.com/mia-cx/ditherette/issues/55) | [#99](https://github.com/mia-cx/ditherette/pull/99) | `impl/v1-s14-blue-noise` | `impl/v1-s13-base` | `769050190114ca584669703be2be0042c035aa9a` |
-| S15 / [#56](https://github.com/mia-cx/ditherette/issues/56) | [#101](https://github.com/mia-cx/ditherette/pull/101) | `impl/v1-s15-diffusion` | `impl/v1-s15-base` | `cfec5d9b7ab9c1d7c81c1e6a40f7476f75be9788` |
-| S16 / [#57](https://github.com/mia-cx/ditherette/issues/57) | [#100](https://github.com/mia-cx/ditherette/pull/100) | `impl/v1-s16-yliluoma` | `impl/v1-s15-base` | `d58355e617bf17fa3481f0f165dd4646e856ce7f` |
+| Slice / issue                                               | PR                                                    | Branch                         | Immediate PR base          | Delivered head                             |
+| ----------------------------------------------------------- | ----------------------------------------------------- | ------------------------------ | -------------------------- | ------------------------------------------ |
+| S01 / [#42](https://github.com/mia-cx/ditherette/issues/42) | [#75](https://github.com/mia-cx/ditherette/pull/75)   | `impl/v1-s01-anchor`           | `main`                     | `a213effed4b426c5c432c9ccc7062b7016dd5c1b` |
+| S02 / [#43](https://github.com/mia-cx/ditherette/issues/43) | [#88](https://github.com/mia-cx/ditherette/pull/88)   | `impl/v1-s02-builds`           | `impl/v1-s01-anchor`       | `bc110d91d441ec3069d128e3cc7d39b3b439a1f4` |
+| S03 / [#44](https://github.com/mia-cx/ditherette/issues/44) | [#89](https://github.com/mia-cx/ditherette/pull/89)   | `impl/v1-s03-contracts`        | `impl/v1-s01-anchor`       | `fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06` |
+| S04 / [#45](https://github.com/mia-cx/ditherette/issues/45) | [#90](https://github.com/mia-cx/ditherette/pull/90)   | `impl/v1-s04-bench-lock`       | `impl/v1-s01-anchor`       | `b5ed4d250cbdc804f18bbadb24df4463db1b6434` |
+| S05 / [#46](https://github.com/mia-cx/ditherette/issues/46) | [#96](https://github.com/mia-cx/ditherette/pull/96)   | `impl/v1-s05-verification`     | `impl/v1-s05-base`         | `8c05906cb9cfe0a991b351f5260a319b91f76ab4` |
+| S06 / [#47](https://github.com/mia-cx/ditherette/issues/47) | [#102](https://github.com/mia-cx/ditherette/pull/102) | `impl/v1-s06-paired-bench`     | `impl/v1-s05-verification` | `a65f53e24b880932021b39e601b5682b1111bc54` |
+| S07 / [#48](https://github.com/mia-cx/ditherette/issues/48) | [#91](https://github.com/mia-cx/ditherette/pull/91)   | `impl/v1-s07-color-basic`      | `impl/v1-s03-contracts`    | `7ef52bd2bcaea2774a400875e5c395526bc9b4b9` |
+| S08 / [#49](https://github.com/mia-cx/ditherette/issues/49) | [#92](https://github.com/mia-cx/ditherette/pull/92)   | `impl/v1-s08-color-perceptual` | `impl/v1-s03-contracts`    | `d5e2d9761481f7a6b74fb37c7c2f7841570bead1` |
+| S09 / [#50](https://github.com/mia-cx/ditherette/issues/50) | [#94](https://github.com/mia-cx/ditherette/pull/94)   | `impl/v1-s09-palette`          | `impl/v1-s03-contracts`    | `d8bcdcdbe8f874eaee65447a640b97483c9cb775` |
+| S10 / [#51](https://github.com/mia-cx/ditherette/issues/51) | [#97](https://github.com/mia-cx/ditherette/pull/97)   | `impl/v1-s10-quantize`         | `impl/v1-s10-base`         | `47712a500c4079293a06fae4a07ae105a643af8f` |
+| S11 / [#52](https://github.com/mia-cx/ditherette/issues/52) | [#93](https://github.com/mia-cx/ditherette/pull/93)   | `impl/v1-s11-resize`           | `impl/v1-s03-contracts`    | `bb9421cbecdeadb3c70c78d1e7412f982be7053f` |
+| S12 / [#53](https://github.com/mia-cx/ditherette/issues/53) | [#95](https://github.com/mia-cx/ditherette/pull/95)   | `impl/v1-s12-placement`        | `impl/v1-s12-base`         | `01df66826e532d8fb3b522a1564f1121c96f4d1f` |
+| S13 / [#54](https://github.com/mia-cx/ditherette/issues/54) | [#98](https://github.com/mia-cx/ditherette/pull/98)   | `impl/v1-s13-perturb`          | `impl/v1-s13-base`         | `2a2b0f2de2592cba424c5823f40e3604f1b2a6b7` |
+| S14 / [#55](https://github.com/mia-cx/ditherette/issues/55) | [#99](https://github.com/mia-cx/ditherette/pull/99)   | `impl/v1-s14-blue-noise`       | `impl/v1-s13-base`         | `769050190114ca584669703be2be0042c035aa9a` |
+| S15 / [#56](https://github.com/mia-cx/ditherette/issues/56) | [#101](https://github.com/mia-cx/ditherette/pull/101) | `impl/v1-s15-diffusion`        | `impl/v1-s15-base`         | `cfec5d9b7ab9c1d7c81c1e6a40f7476f75be9788` |
+| S16 / [#57](https://github.com/mia-cx/ditherette/issues/57) | [#100](https://github.com/mia-cx/ditherette/pull/100) | `impl/v1-s16-yliluoma`         | `impl/v1-s15-base`         | `d58355e617bf17fa3481f0f165dd4646e856ce7f` |
 
 ### S06 measurement evidence
 
@@ -97,7 +97,6 @@ Native benchmark binaries and benches compile. No S17 measurements ran.
 The required rebase preserved the complete tree and all seven slice prerequisite heads in ancestry.
 Subtask commits were replayed; [the S17 task plan](../../../.plans/58-reference-processor.md) records their source provenance and exact post-rebase checks.
 The coordinator alone updates the visible root `slices.md` and the current tracked integration copy.
-
 
 ## S18 reference freeze
 
@@ -189,10 +188,10 @@ Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd
 S21 targets `fix/v1-restore-landed`. S22 stacks on S21 to reuse its validated public integration.
 PR filing follows completed measurements; neither slice grants release-performance readiness.
 
-| Slice | Branch/worktree suffix | Current task |
-| --- | --- | --- |
-| S21 / #62 | `v1-s21-area-bilinear` | File validated, measured public integration PR |
-| S22 / #63 | `v1-s22-convolution` | Stack validated, measured public integration on S21 |
+| Slice     | Branch/worktree suffix | Current task                                        |
+| --------- | ---------------------- | --------------------------------------------------- |
+| S21 / #62 | `v1-s21-area-bilinear` | File validated, measured public integration PR      |
+| S22 / #63 | `v1-s22-convolution`   | Stack validated, measured public integration on S21 |
 
 Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
 Existing optimized kernels and shared helpers stay canonical production. Removed replacements remain recoverable in historical commits.
@@ -215,15 +214,15 @@ All 448 inherited commits were replayed onto main. Two `.gitignore` conflicts pr
 
 Checks run in the isolated worktree at the rebased code checkpoint:
 
-| Command | Result |
-| --- | --- |
-| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` | Passed, 100 native tests; no doctests. |
-| `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` | Passed. |
-| `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` | Passed. |
-| `git diff --check origin/main...HEAD` | Passed. |
-| `pnpm install --frozen-lockfile` | Existing setup failure under pnpm 11.13.0: `ERR_PNPM_IGNORED_BUILDS`. The inherited `onlyBuiltDependencies` configuration does not satisfy pnpm 11's `allowBuilds` policy. Dependencies were installed; generated manifest placeholders were removed. |
-| `pnpm exec vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | Blocked by pnpm's automatic reinstall and the same build-policy failure. |
-| `./node_modules/.bin/vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | Passed, 16 files and 120 tests. |
+| Command                                                                                                   | Result                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`                                   | Passed, 100 native tests; no doctests.                                                                                                                                                                                                                |
+| `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`  | Passed.                                                                                                                                                                                                                                               |
+| `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check`                                     | Passed.                                                                                                                                                                                                                                               |
+| `git diff --check origin/main...HEAD`                                                                     | Passed.                                                                                                                                                                                                                                               |
+| `pnpm install --frozen-lockfile`                                                                          | Existing setup failure under pnpm 11.13.0: `ERR_PNPM_IGNORED_BUILDS`. The inherited `onlyBuiltDependencies` configuration does not satisfy pnpm 11's `allowBuilds` policy. Dependencies were installed; generated manifest placeholders were removed. |
+| `pnpm exec vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts`           | Blocked by pnpm's automatic reinstall and the same build-policy failure.                                                                                                                                                                              |
+| `./node_modules/.bin/vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | Passed, 16 files and 120 tests.                                                                                                                                                                                                                       |
 
 Tool versions: Rust/Cargo 1.97.0, Node 24.19.0, pnpm 11.13.0.
 

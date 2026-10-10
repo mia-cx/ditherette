@@ -478,6 +478,7 @@ test('grading arguments are validated with indexed paths', () =>
 			'effects.1.curves.0.y.model'
 		);
 		fails(
+			// eslint-disable-next-line no-sparse-arrays
 			withCurve({ ...gridCurve, grid: { ...gridCurve.grid, rows: [0, , 1] } }),
 			'effects.1.curves.0.grid.rows.1'
 		);

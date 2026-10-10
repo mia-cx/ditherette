@@ -10,13 +10,13 @@ The concrete callable type lives in `bench_subjects::reference`, outside spec.
 adapter validates the requested operation, calls `spec::pipeline::execute`, and
 returns S05's `VerificationOutput`. It introduces no duplicate processing schema.
 
-| Registered subject | Concrete request | Output |
-|---|---|---|
-| `spec:resize:request:v1` | `Request::Resize` | RGBA8 |
-| `spec:perturb:request:v1` | `Request::Perturb` | RGBA8 |
-| `spec:quantize:request:v1` | `Request::Quantize` | Indexed8 |
+| Registered subject                    | Concrete request             | Output   |
+| ------------------------------------- | ---------------------------- | -------- |
+| `spec:resize:request:v1`              | `Request::Resize`            | RGBA8    |
+| `spec:perturb:request:v1`             | `Request::Perturb`           | RGBA8    |
+| `spec:quantize:request:v1`            | `Request::Quantize`          | Indexed8 |
 | `spec:dither-and-quantize:request:v1` | `Request::DitherAndQuantize` | Indexed8 |
-| `spec:process:request:v1` | `Request::Process` | Indexed8 |
+| `spec:process:request:v1`             | `Request::Process`           | Indexed8 |
 
 Every supported mode remains a typed request parameter. This includes resize
 anchors/support, matching metrics, alpha policies, fields/seeds, working spaces,

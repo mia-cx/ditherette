@@ -9,16 +9,16 @@ Trilinear uses its exact production implementation, with one shared storage-roun
 
 ## Functions
 
-| Private export | Contract |
-|---|---|
-| `privateInitialize(limit: number): number` | Return zero or a failure status; preflight before priming fixed boundary storage |
-| `privateResize(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, algorithm: number, anchor: number, support: number, sink: object): number` | Borrow both JS handles; write `sink.value` only after complete durable result construction |
-| `privateResizeNearestSparse(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, anchor: number, sink: object): number` | Scalar nearest resize that gathers only Rust-selected source pixels directly into the JS result |
+| Private export                                                                                                                                                                      | Contract                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `privateInitialize(limit: number): number`                                                                                                                                          | Return zero or a failure status; preflight before priming fixed boundary storage                            |
+| `privateResize(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, algorithm: number, anchor: number, support: number, sink: object): number`                        | Borrow both JS handles; write `sink.value` only after complete durable result construction                  |
+| `privateResizeNearestSparse(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, anchor: number, sink: object): number`                                               | Scalar nearest resize that gathers only Rust-selected source pixels directly into the JS result             |
 | `privateQuantize(input: Uint8Array, width: number, height: number, palette: number[], matching: number, alphaMode: number, threshold: number, matte: number, sink: object): number` | Borrow input, compact palette, and sink; publish complete JS-owned indexed output after every copy succeeds |
-| `privateThreadCount(availableParallelism: number): number` | Threaded builds only: default worker pool size, `clamp(cpus / 2, 1, 8)` |
-| `privateDispose(): number` | Idempotently release processor ownership; reject active-call recursion |
-| `privateErrorPath(): number` | Read immediately after a failure status |
-| `privateMemoryOverhead(): number` | Private fixture/accounting observation, excluded from the public wrapper |
+| `privateThreadCount(availableParallelism: number): number`                                                                                                                          | Threaded builds only: default worker pool size, `clamp(cpus / 2, 1, 8)`                                     |
+| `privateDispose(): number`                                                                                                                                                          | Idempotently release processor ownership; reject active-call recursion                                      |
+| `privateErrorPath(): number`                                                                                                                                                        | Read immediately after a failure status                                                                     |
+| `privateMemoryOverhead(): number`                                                                                                                                                   | Private fixture/accounting observation, excluded from the public wrapper                                    |
 
 All incoming numbers use f64 before validation, avoiding generated integer truncation.
 Algorithm tags are `0` nearest, `1` area, `2` bilinear, `3` bicubic, `4` Lanczos2, `5` Lanczos3, and `6` trilinear.
@@ -49,15 +49,15 @@ Status zero means success. Statuses one through thirteen follow the copied error
 invalid-request, invalid-image, invalid-palette, invalid-settings, unsupported-operation, capability, initialization,
 memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runtime.
 
-| Path ID       | Public path                                        |
-| ------------- | -------------------------------------------------- |
-| 0             | instance                                           |
-| 1             | memoryLimitBytes                                   |
-| 2, 3, 4, 5    | source.width, source.height, source.data, source   |
-| 6, 7, 8       | output.width, output.height, output                |
-| 9, 10, 11, 12 | output.resize.anchor, wasm, control, output.resize |
-| 13, 14, 15, 16 | palette, alpha, alpha.threshold, matching |
-| 38 | onProgress |
+| Path ID        | Public path                                        |
+| -------------- | -------------------------------------------------- |
+| 0              | instance                                           |
+| 1              | memoryLimitBytes                                   |
+| 2, 3, 4, 5     | source.width, source.height, source.data, source   |
+| 6, 7, 8        | output.width, output.height, output                |
+| 9, 10, 11, 12  | output.resize.anchor, wasm, control, output.resize |
+| 13, 14, 15, 16 | palette, alpha, alpha.threshold, matching          |
+| 38             | onProgress                                         |
 
 ## Direct quantization
 
