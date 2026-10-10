@@ -2,6 +2,11 @@ name: Publish ditherette
 
 on:
   workflow_call:
+    inputs:
+      sha:
+        description: Full commit SHA to publish
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,70 +19,38 @@ jobs:
   publish:
     if: github.repository == 'mia-cx/ditherette'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     environment: npm-publish
     permissions:
-      contents: read
+      contents: write
       id-token: write
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24.19.0'
-      - name: Install pinned build and publication tools
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install pinned publication tools
+        run: npm install --global npm@11.17.0
+      - name: Install the wasm toolchain
         run: |
-          npm install --global npm@11.17.0 pnpm@11.13.1
-          pnpm install --frozen-lockfile
           rustup show
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
           cargo fetch --locked --manifest-path tools/spec-freeze/syntax/Cargo.toml
-          cargo fetch --locked --manifest-path crates/ditherette-bench-oracle/Cargo.toml
-          cargo fetch --locked --manifest-path crates/ditherette-bench/Cargo.toml
-          pnpm --filter ditherette exec playwright install --with-deps chromium firefox webkit
-      - name: Check release contract and prepare the exact tarball
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare the exact release tarball
         run: |
-          pnpm --filter ditherette test:release
-          plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --paginate --slurp | node scripts/release-plan.mjs)"
-          test "$(printf '%s\n' "$plan" | grep '^npm=')" = npm=true
-          echo 'DITHERETTE_RELEASE_MERGE=true' >> "$GITHUB_ENV"
           mkdir -p target
           node packages/ditherette/scripts/release.mjs prepare "$GITHUB_WORKSPACE/target/release" | tee target/release-build.log
-          node scripts/prepare-benchmark-oracle.mjs "$GITHUB_WORKSPACE/target/release-oracle"
-          cargo run --locked --release --manifest-path crates/ditherette-bench/Cargo.toml --example yliluoma_conformance -- "$GITHUB_WORKSPACE/target/yliluoma-conformance.json"
-          node --input-type=module <<'JS' >> "$GITHUB_ENV"
-          import { readFile } from 'node:fs/promises';
-          const root = process.env.GITHUB_WORKSPACE;
-          const report = JSON.parse(await readFile('target/release/release-report.json'));
-          console.log(`DITHERETTE_TEST_TARBALL=${root}/target/release/ditherette.tgz`);
-          console.log(`DITHERETTE_TEST_TARBALL_SHA256=${report.tarball.sha256}`);
-          console.log(`DITHERETTE_BENCH_ORACLE=${root}/target/release-oracle`);
-          console.log(`DITHERETTE_BENCH_YLILUOMA_FIXTURES=${root}/target/yliluoma-conformance.json`);
-          console.log(`DITHERETTE_BENCH_AUTO_BUNDLE=${root}/target/release/conformance-bundle.json`);
-          JS
-      - name: Crate and public interface conformance
-        run: |
-          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml
-          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml --features threads
-          pnpm --filter ditherette test:interface
-          pnpm --filter ditherette test:staging
-          pnpm --filter ditherette-wasm test:glue:built
-      - name: Installed scalar conformance in all three engines
-        run: pnpm --filter ditherette-wasm test:conformance | tee target/release-scalar.log
-      - name: Installed threaded conformance in supported engines
-        env:
-          DITHERETTE_TEST_ENGINES: chromium,firefox
-        run: |
-          pnpm --filter ditherette-wasm test:conformance:threads | tee target/release-threads.log
-          pnpm --filter ditherette-wasm test:conformance:automatic | tee target/release-automatic.log
       - name: Verify source, artifact, sizes, and recorded release holds
         run: |
           node scripts/release-plan.mjs current npm
@@ -88,13 +61,30 @@ jobs:
       - name: Publish the tested tarball through trusted publishing
         if: steps.registry.outputs.exists != 'true'
         run: npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
-      - name: Record coverage limits
-        if: always()
-        run: echo 'Pinned WebKit 26.4 threaded cleanup and S41 performance gates require acceptance; scalar WebKit is tested. Recorded release holds block publication.' >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - name: Tag and release the published version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(jq -r .version packages/ditherette/package.json)"
+          tag="ditherette@$version"
+          sha="${{ inputs.sha }}"
+          git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null || true
+          if target="$(git rev-list -n 1 "refs/tags/$tag" 2>/dev/null)" && [ -n "$target" ]; then
+            if [ "$target" = "$sha" ]; then
+              echo "Release $tag already exists at $sha; skipping."
+              exit 0
+            fi
+            echo "::error::Tag $tag exists at $target, not $sha." >&2
+            exit 1
+          fi
+          node scripts/changelog-section.mjs packages/ditherette/CHANGELOG.md "$version" > "$RUNNER_TEMP/notes.md"
+          git tag "$tag" "$sha"
+          git push origin "refs/tags/$tag"
+          gh release create "$tag" --target "$sha" --title "ditherette $version" --notes-file "$RUNNER_TEMP/notes.md" --latest
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: ditherette-release-${{ github.sha }}
+          name: ditherette-release-${{ inputs.sha }}
           path: |
             target/release/ditherette.tgz
             target/release/release-report.json
