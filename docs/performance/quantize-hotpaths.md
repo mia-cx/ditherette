@@ -17,10 +17,10 @@ Public-call timing includes the ordinary package boundary. End-to-end timing als
 PNG decoding stays outside both timers. Each value below is a three-sample median in milliseconds.
 
 | Browser, full size | Cold before | Cold after | Warm before | Warm after | JS cold | JS warm |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 123.2 | 89.4 | 107.7 | 82.7 | 146.7 | 151.0 |
-| Firefox | 127 | 100 | 120 | 86 | 197 | 196 |
-| WebKit | 144 | 105 | 119 | 83 | 132 | 136 |
+| ------------------ | ----------: | ---------: | ----------: | ---------: | ------: | ------: |
+| Chromium           |       123.2 |       89.4 |       107.7 |       82.7 |   146.7 |   151.0 |
+| Firefox            |         127 |        100 |         120 |         86 |     197 |     196 |
+| WebKit             |         144 |        105 |         119 |         83 |     132 |     136 |
 
 Warm public processing improves 23%, 28% and 30% respectively in the final comparison.
 The initial independent comparison measured 112.8 to 77.8, 113 to 90, and 126 to 85 ms.
@@ -29,15 +29,15 @@ JS columns are contemporaneous controls from the selected candidate run, not his
 
 The wider controls use 650 x 1042 output. These are warm public-call medians, before to after.
 
-| Control | Chromium | Firefox | WebKit |
-| --- | ---: | ---: | ---: |
-| Celeste, sRGB | 19.3 to 17.2 | 23 to 23 | 22 to 19 |
-| Deterministic high-entropy input | 69.6 to 68.7 | 71 to 72 | 79 to 76 |
-| Oklab | 22.3 to 19.0 | 26 to 23 | 24 to 22 |
-| Matte, all alpha bytes | 38.3 to 35.7 | 39 to 41 | 38 to 40 |
-| Premultiplied, all alpha bytes | 35.2 to 34.3 | 37 to 37 | 37 to 42 |
-| Bayer 4 | 51.2 to 48.8 | 53 to 51 | 54 to 52 |
-| Floyd-Steinberg | 235.9 to 237.1 | 215 to 213 | 293 to 292 |
+| Control                          |       Chromium |    Firefox |     WebKit |
+| -------------------------------- | -------------: | ---------: | ---------: |
+| Celeste, sRGB                    |   19.3 to 17.2 |   23 to 23 |   22 to 19 |
+| Deterministic high-entropy input |   69.6 to 68.7 |   71 to 72 |   79 to 76 |
+| Oklab                            |   22.3 to 19.0 |   26 to 23 |   24 to 22 |
+| Matte, all alpha bytes           |   38.3 to 35.7 |   39 to 41 |   38 to 40 |
+| Premultiplied, all alpha bytes   |   35.2 to 34.3 |   37 to 37 |   37 to 42 |
+| Bayer 4                          |   51.2 to 48.8 |   53 to 51 |   54 to 52 |
+| Floyd-Steinberg                  | 235.9 to 237.1 | 215 to 213 | 293 to 292 |
 
 These bounded browser trials are diagnostic evidence, not release confidence gates.
 The unchanged WebKit premultiplied control is 13.5% slower in this small sample; no improvement is claimed there.
@@ -77,24 +77,24 @@ Native promotion remains held; the inconclusive case is not relabeled as passing
 
 The separate spec-versus-production run times the actual frozen implementation, not an old production revision.
 
-| Matching mode | Spec time / production time |
-| --- | ---: |
-| sRGB Euclidean | 2.18x |
-| Linear RGB Euclidean | 3.21x |
-| Oklab Euclidean | 2.55x |
-| CIELAB Euclidean | 2.40x |
-| YCbCr Euclidean | 2.19x |
-| sRGB Compuphase | 4.36x |
-| sRGB Rec601 | 1.83x |
-| sRGB Rec709 | 1.77x |
-| OKLCH Euclidean | 2.22x |
-| OKLCH circular hue | 1.30x |
-| OKLCH hue arc | 1.53x |
-| CIELAB CIEDE2000 | 1.00x |
-| CIELCH Euclidean | 2.04x |
-| CIELCH circular hue | 1.31x |
-| CIELCH hue arc | 1.49x |
-| One-pixel sRGB | 0.36x |
+| Matching mode        | Spec time / production time |
+| -------------------- | --------------------------: |
+| sRGB Euclidean       |                       2.18x |
+| Linear RGB Euclidean |                       3.21x |
+| Oklab Euclidean      |                       2.55x |
+| CIELAB Euclidean     |                       2.40x |
+| YCbCr Euclidean      |                       2.19x |
+| sRGB Compuphase      |                       4.36x |
+| sRGB Rec601          |                       1.83x |
+| sRGB Rec709          |                       1.77x |
+| OKLCH Euclidean      |                       2.22x |
+| OKLCH circular hue   |                       1.30x |
+| OKLCH hue arc        |                       1.53x |
+| CIELAB CIEDE2000     |                       1.00x |
+| CIELCH Euclidean     |                       2.04x |
+| CIELCH circular hue  |                       1.31x |
+| CIELCH hue arc       |                       1.49x |
+| One-pixel sRGB       |                       0.36x |
 
 All full-image spec comparisons pass the existing timing gate. The tiny-call setup regression remains visible.
 These native ratios describe the entire production implementation, not the incremental alpha change.

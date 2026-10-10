@@ -8,12 +8,12 @@ This is implementation evidence, not publication or rollout approval.
 
 Dependency base `5fccb9e6a51c6de49fd0051b204fb16bfde75e22` contains these unmerged heads:
 
-| Slice | PR | Head |
-| --- | --- | --- |
-| S35 | [126](https://github.com/mia-cx/ditherette/pull/126) | `6bbe113b99a08f2a11ade6296ddf7f25e32e041b` |
-| S36 | [127](https://github.com/mia-cx/ditherette/pull/127) | `b542bd94a5dbc724de73815ae0008a22985147fd` |
-| S37 | [128](https://github.com/mia-cx/ditherette/pull/128) | `91b114ba610588c504a7551e8123d72e36eb9e66` |
-| S39 | [125](https://github.com/mia-cx/ditherette/pull/125) | `5938b248506ae14d24471498c3a90bb42ed3c32a` |
+| Slice | PR                                                   | Head                                       |
+| ----- | ---------------------------------------------------- | ------------------------------------------ |
+| S35   | [126](https://github.com/mia-cx/ditherette/pull/126) | `6bbe113b99a08f2a11ade6296ddf7f25e32e041b` |
+| S36   | [127](https://github.com/mia-cx/ditherette/pull/127) | `b542bd94a5dbc724de73815ae0008a22985147fd` |
+| S37   | [128](https://github.com/mia-cx/ditherette/pull/128) | `91b114ba610588c504a7551e8123d72e36eb9e66` |
+| S39   | [125](https://github.com/mia-cx/ditherette/pull/125) | `5938b248506ae14d24471498c3a90bb42ed3c32a` |
 
 Conformance implementation checkpoint `b6e78a63` adds tests and CI only.
 The ordinary package comes from source `dc81818a7ea244ccfcda1c2d88b9df3592fd8dd1`.
@@ -24,16 +24,16 @@ The previously passing full trusted guard covers the unchanged frozen checkpoint
 
 ## Local results
 
-| Checks | Result |
-| --- | --- |
-| Native release, scalar / threaded | 424 / 425 pass |
-| Public interface and types | 42 tests and TypeScript checks pass |
-| Generated factories / private ownership / staging / engine selection | 4 / 17 / 2 / 1 pass |
-| Broad scalar package, all three engines | Pass |
-| Main-JS preferred fallback and required capability errors, isolated and non-isolated | Pass in all three engines |
-| New scalar boundaries and repeated memory | Pass in all three engines |
-| Actual nested workers, independent pools, partial-start cleanup, host termination | 12 test records pass in Chromium/Firefox |
-| Website cancellation, stale results, and faithful fallback | 68 server and six Chromium tests pass |
+| Checks                                                                               | Result                                   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------- |
+| Native release, scalar / threaded                                                    | 424 / 425 pass                           |
+| Public interface and types                                                           | 42 tests and TypeScript checks pass      |
+| Generated factories / private ownership / staging / engine selection                 | 4 / 17 / 2 / 1 pass                      |
+| Broad scalar package, all three engines                                              | Pass                                     |
+| Main-JS preferred fallback and required capability errors, isolated and non-isolated | Pass in all three engines                |
+| New scalar boundaries and repeated memory                                            | Pass in all three engines                |
+| Actual nested workers, independent pools, partial-start cleanup, host termination    | 12 test records pass in Chromium/Firefox |
+| Website cancellation, stale results, and faithful fallback                           | 68 server and six Chromium tests pass    |
 
 The broad fixture retains 54 convolution cases, 27 trilinear cases, 15 matching tags,
 110 field vectors, 1,650 separable compositions, 360 diffusion vectors, and 423 Process compositions per engine.

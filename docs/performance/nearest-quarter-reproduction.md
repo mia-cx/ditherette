@@ -9,10 +9,10 @@ Use the full commit IDs below, not mutable branch tips, when reproducing these b
 The `evidence/nearest-quarter-accepted`, `evidence/nearest-quarter-global`, and
 `evidence/nearest-quarter-selected` branches keep their Git objects reachable.
 
-| Trial | Source commit | Measured and rebuilt scalar Wasm SHA-256 |
-|---|---|---|
-| Accepted | [29cfdb8cc6c4e6ed5a17647bd299591a346a6bf1](https://github.com/mia-cx/ditherette/commit/29cfdb8cc6c4e6ed5a17647bd299591a346a6bf1) | `6df1333251b763fe60cd955f20749ba888340ff7aee898540b7df4c3d6eff9ce` |
-| Global cutoff | [520f2008d852eee6e06d8314393272f1cb8b6602](https://github.com/mia-cx/ditherette/commit/520f2008d852eee6e06d8314393272f1cb8b6602) | `3aa32efcc784f4025b08d0fc096da84126c121504aaac65e851e704bed7522b3` |
+| Trial           | Source commit                                                                                                                    | Measured and rebuilt scalar Wasm SHA-256                           |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Accepted        | [29cfdb8cc6c4e6ed5a17647bd299591a346a6bf1](https://github.com/mia-cx/ditherette/commit/29cfdb8cc6c4e6ed5a17647bd299591a346a6bf1) | `6df1333251b763fe60cd955f20749ba888340ff7aee898540b7df4c3d6eff9ce` |
+| Global cutoff   | [520f2008d852eee6e06d8314393272f1cb8b6602](https://github.com/mia-cx/ditherette/commit/520f2008d852eee6e06d8314393272f1cb8b6602) | `3aa32efcc784f4025b08d0fc096da84126c121504aaac65e851e704bed7522b3` |
 | Selected policy | [b72238d414395c4d1df06d70bbfeb78b7d9c415b](https://github.com/mia-cx/ditherette/commit/b72238d414395c4d1df06d70bbfeb78b7d9c415b) | `1e3646b8e49e1aac8f39d41d4e6e38b2259a1cf92dbdc872fb59028ee33edf99` |
 
 The retained package files match their archived manifests. The coordinator independently rehashed all three retained Wasm binaries.

@@ -51,7 +51,8 @@ export function validateProcess(value: unknown) {
 		);
 		if (version !== 1 && version !== 2)
 			throw new DitheretteError('invalid-request', 'recipe.version', 'Unsupported recipe version.');
-		const effects = version === 2 ? validateEffects(field(recipe, 'effects'), 'effects') : undefined;
+		const effects =
+			version === 2 ? validateEffects(field(recipe, 'effects'), 'effects') : undefined;
 		const resized = validateResize({
 			version: 1,
 			source: field(request, 'source'),

@@ -15,11 +15,11 @@ The existing input scratch buffer owns the snapshot. No second full-source alloc
 
 For nearest resize plus sRGB quantization at 650 × 1042, repeated end-to-end medians fall:
 
-| Engine | Previous | Selected | Speedup | Historical JS |
-| --- | ---: | ---: | ---: | ---: |
-| Chromium | 234.6 ms | 11.3 ms | 20.8× | 45.6 ms |
-| Firefox | 1132 ms | 15 ms | 75.5× | 38 ms |
-| WebKit | 229 ms | 8 ms | 28.6× | 36 ms |
+| Engine   | Previous | Selected | Speedup | Historical JS |
+| -------- | -------: | -------: | ------: | ------------: |
+| Chromium | 234.6 ms |  11.3 ms |   20.8× |       45.6 ms |
+| Firefox  |  1132 ms |    15 ms |   75.5× |         38 ms |
+| WebKit   |   229 ms |     8 ms |   28.6× |         36 ms |
 
 Public-call medians for that repeat fall from 211.9/1109/210 ms to 6.6/10/5 ms respectively.
 Candidate adapter medians are 0 ms at the browsers' timer precision.
@@ -55,23 +55,23 @@ These are bounded diagnostic measurements, not replacements for the existing rel
 All times below are end-to-end milliseconds from `source-reuse-02`.
 The repeated columns compare identical requests. Changed columns compare the three new output widths.
 
-| Engine | Recipe | Repeat before | Repeat after | Changed before | Changed after | Changed JS |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Chromium | nearest + sRGB | 234.6 | 11.3 | 421.2 | 197.4 | 35.8 |
-| Chromium | scale-aware Lanczos3 + sRGB | 231.7 | 10.6 | 670.6 | 452.6 | 294.7 |
-| Chromium | nearest + Oklab | 236.2 | 10.5 | 448.7 | 227.8 | 35.1 |
-| Chromium | nearest + Floyd–Steinberg | 234.7 | 10.6 | 481.1 | 253.5 | 112.1 |
-| Chromium | nearest resize only | 229.6 | 7.7 | 248.2 | 22.5 | 4.5 |
-| Firefox | nearest + sRGB | 1132 | 15 | 2437 | 1344 | 40 |
-| Firefox | scale-aware Lanczos3 + sRGB | 1111 | 16 | 4595 | 3494 | 283 |
-| Firefox | nearest + Oklab | 1103 | 16 | 2582 | 1481 | 47 |
-| Firefox | nearest + Floyd–Steinberg | 1108 | 16 | 2888 | 1774 | 178 |
-| Firefox | nearest resize only | 1265 | 12 | 1174 | 84 | 6 |
-| WebKit | nearest + sRGB | 229 | 8 | 484 | 254 | 33 |
-| WebKit | scale-aware Lanczos3 + sRGB | 235 | 11 | 718 | 497 | 219 |
-| WebKit | nearest + Oklab | 233 | 10 | 494 | 269 | 55 |
-| WebKit | nearest + Floyd–Steinberg | 231 | 10 | 525 | 306 | 135 |
-| WebKit | nearest resize only | 234 | 7 | 250 | 23 | 4 |
+| Engine   | Recipe                      | Repeat before | Repeat after | Changed before | Changed after | Changed JS |
+| -------- | --------------------------- | ------------: | -----------: | -------------: | ------------: | ---------: |
+| Chromium | nearest + sRGB              |         234.6 |         11.3 |          421.2 |         197.4 |       35.8 |
+| Chromium | scale-aware Lanczos3 + sRGB |         231.7 |         10.6 |          670.6 |         452.6 |      294.7 |
+| Chromium | nearest + Oklab             |         236.2 |         10.5 |          448.7 |         227.8 |       35.1 |
+| Chromium | nearest + Floyd–Steinberg   |         234.7 |         10.6 |          481.1 |         253.5 |      112.1 |
+| Chromium | nearest resize only         |         229.6 |          7.7 |          248.2 |          22.5 |        4.5 |
+| Firefox  | nearest + sRGB              |          1132 |           15 |           2437 |          1344 |         40 |
+| Firefox  | scale-aware Lanczos3 + sRGB |          1111 |           16 |           4595 |          3494 |        283 |
+| Firefox  | nearest + Oklab             |          1103 |           16 |           2582 |          1481 |         47 |
+| Firefox  | nearest + Floyd–Steinberg   |          1108 |           16 |           2888 |          1774 |        178 |
+| Firefox  | nearest resize only         |          1265 |           12 |           1174 |            84 |          6 |
+| WebKit   | nearest + sRGB              |           229 |            8 |            484 |           254 |         33 |
+| WebKit   | scale-aware Lanczos3 + sRGB |           235 |           11 |            718 |           497 |        219 |
+| WebKit   | nearest + Oklab             |           233 |           10 |            494 |           269 |         55 |
+| WebKit   | nearest + Floyd–Steinberg   |           231 |           10 |            525 |           306 |        135 |
+| WebKit   | nearest resize only         |           234 |            7 |            250 |            23 |          4 |
 
 ## Remaining work
 

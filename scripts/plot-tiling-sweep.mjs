@@ -60,7 +60,7 @@ function summarizeSweep(sweep) {
 				bestSpeedup: scalarMedian / best.statsNs.median,
 				bestBands: best.resolved?.bandCount ?? 1,
 				bestWorkers: best.resolved?.workerCount ?? 1,
-				bestMode: best.mode,
+				bestMode: best.mode
 			};
 		})
 		.sort((a, b) => a.scale - b.scale);
@@ -78,7 +78,12 @@ function renderSvg(sweep, rows) {
 	const x = (value) => margin.left + ((value - xMin) / (xMax - xMin)) * plotWidth;
 	const y = (value) => margin.top + plotHeight - (value / yMax) * plotHeight;
 	const line = (selector) =>
-		rows.map((row, index) => `${index === 0 ? 'M' : 'L'}${x(row.scale).toFixed(1)} ${y(selector(row)).toFixed(1)}`).join(' ');
+		rows
+			.map(
+				(row, index) =>
+					`${index === 0 ? 'M' : 'L'}${x(row.scale).toFixed(1)} ${y(selector(row)).toFixed(1)}`
+			)
+			.join(' ');
 	const xTicks = [0.0625, 0.1, 0.25, 0.5, 0.8, 0.95, 1, 1.05, 1.2, 1.5, 2].filter(
 		(tick) => tick >= xMin && tick <= xMax
 	);

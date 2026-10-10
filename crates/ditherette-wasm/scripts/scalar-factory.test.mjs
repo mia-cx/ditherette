@@ -119,16 +119,29 @@ export class wbg_rayon_PoolBuilder {
 export { initSync, __wbg_init as default };`;
 	const output = scalarFactory(threaded, undefined, true);
 	assert.doesNotMatch(output, /workerHelpers/);
-	const { createThreadedBindings } = await import(`data:text/javascript,${encodeURIComponent(output)}`);
+	const { createThreadedBindings } = await import(
+		`data:text/javascript,${encodeURIComponent(output)}`
+	);
 	const calls = [];
 	const first = createThreadedBindings(async (...args) => calls.push(['first', ...args]));
 	const second = createThreadedBindings(async (...args) => calls.push(['second', ...args]));
 	await first.initThreadPool(1);
 	await second.initThreadPool(2);
-	assert.deepEqual(calls, [['first', 1], ['second', 2]]);
+	assert.deepEqual(calls, [
+		['first', 1],
+		['second', 2]
+	]);
 	const borrowed = new first.wbg_rayon_PoolBuilder();
 	first.abandonThreadPool(borrowed);
-	assert.equal(borrowed.registered, false, 'Abandonment unregisters without consuming borrowed Rust.');
+	assert.equal(
+		borrowed.registered,
+		false,
+		'Abandonment unregisters without consuming borrowed Rust.'
+	);
 	assert.throws(() => scalarFactory(glue, undefined, true), /worker import changed/);
-	assert.throws(() => scalarFactory(threaded.replace('startWorkers as start', 'other as start'), undefined, true), /Unsupported/);
+	assert.throws(
+		() =>
+			scalarFactory(threaded.replace('startWorkers as start', 'other as start'), undefined, true),
+		/Unsupported/
+	);
 });

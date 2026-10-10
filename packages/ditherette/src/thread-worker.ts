@@ -1,7 +1,9 @@
 import { createThreadedBindings } from './wasm/threads/ditherette_wasm.factory.js';
 
 // Each dedicated worker owns its glue/TLS state and shares only its processor's memory.
-const bindings = createThreadedBindings(async () => { throw new Error('Nested pool initialization is unavailable.'); });
+const bindings = createThreadedBindings(async () => {
+	throw new Error('Nested pool initialization is unavailable.');
+});
 type Command =
 	| { type: 'ditherette-worker-init'; module: WebAssembly.Module; memory: WebAssembly.Memory }
 	| { type: 'ditherette-worker-start'; receiver: number };

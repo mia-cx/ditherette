@@ -81,7 +81,6 @@ export async function collectInitializations({
 	let output;
 	let measuredElapsed = 0;
 	for (let index = 0; index < measurement.samples; index += 1) {
-		output = undefined;
 		const timed = await one();
 		output = timed.output;
 		samples.push(timed.elapsed * 1e6);
@@ -109,7 +108,7 @@ export async function collectCalls({
 }) {
 	const warmupOutputs = retainedOutputSlots(1, outputBytes, retainedOutputLimit);
 	let warmupIterations = 0;
-	let warmupElapsed = 0;
+	let warmupElapsed;
 	let warmupCallElapsed = 0;
 	const warmupStart = now();
 	do {

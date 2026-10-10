@@ -50,18 +50,18 @@ Mia authorized end-to-end implementation after reviewing this PRD and its slices
 
 Read the relevant resolved decision before implementing a slice. These issue resolutions are the authority; old spec prose and historical optimization proposals may be stale.
 
-| Topic | Authoritative decision |
-|---|---|
-| Processing ownership | [Choose the Rust/Wasm boundary and correctness model](https://github.com/mia-cx/ditherette/issues/23) |
-| Completion scope | [Define what production-complete means for ditherette-wasm](https://github.com/mia-cx/ditherette/issues/34) |
-| Public contract and addenda | [Choose the stable process API and settings contract](https://github.com/mia-cx/ditherette/issues/35) |
-| Package/build/publishing | [Choose npm package layout and toolchain ownership](https://github.com/mia-cx/ditherette/issues/36) |
-| Color representation | [Choose intermediate color precision and memory layout](https://github.com/mia-cx/ditherette/issues/25) |
-| Semantic architecture | [Choose production quantization and dithering architecture](https://github.com/mia-cx/ditherette/issues/40) |
-| Cache and memory | [Choose cache ownership and memory-budget policy](https://github.com/mia-cx/ditherette/issues/37) |
-| Progress/cancellation | [Choose cancellation and responsiveness guarantees](https://github.com/mia-cx/ditherette/issues/24) |
-| Release validation | [Set Rust/Wasm production release gates](https://github.com/mia-cx/ditherette/issues/38) |
-| Website adoption | [Choose rollout, fallback, and TypeScript retirement policy](https://github.com/mia-cx/ditherette/issues/39) |
+| Topic                       | Authoritative decision                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Processing ownership        | [Choose the Rust/Wasm boundary and correctness model](https://github.com/mia-cx/ditherette/issues/23)        |
+| Completion scope            | [Define what production-complete means for ditherette-wasm](https://github.com/mia-cx/ditherette/issues/34)  |
+| Public contract and addenda | [Choose the stable process API and settings contract](https://github.com/mia-cx/ditherette/issues/35)        |
+| Package/build/publishing    | [Choose npm package layout and toolchain ownership](https://github.com/mia-cx/ditherette/issues/36)          |
+| Color representation        | [Choose intermediate color precision and memory layout](https://github.com/mia-cx/ditherette/issues/25)      |
+| Semantic architecture       | [Choose production quantization and dithering architecture](https://github.com/mia-cx/ditherette/issues/40)  |
+| Cache and memory            | [Choose cache ownership and memory-budget policy](https://github.com/mia-cx/ditherette/issues/37)            |
+| Progress/cancellation       | [Choose cancellation and responsiveness guarantees](https://github.com/mia-cx/ditherette/issues/24)          |
+| Release validation          | [Set Rust/Wasm production release gates](https://github.com/mia-cx/ditherette/issues/38)                     |
+| Website adoption            | [Choose rollout, fallback, and TypeScript retirement policy](https://github.com/mia-cx/ditherette/issues/39) |
 
 The [completed Wayfinder map](https://github.com/mia-cx/ditherette/issues/33) remains closed. After sign-off, file a separate implementation PRD and attach these slices as its native sub-issues.
 
@@ -86,15 +86,15 @@ The RGBA8 boundary in separable composition includes its rounding and clipping. 
 
 ### Included algorithms
 
-| Family | Required coverage |
-|---|---|
-| Resize | Nearest, area, bilinear, Catmull-Rom bicubic, Lanczos2/3, trilinear; specified support policies and anchors |
-| Working spaces | sRGB, linear sRGB, Oklab, OKLCH, D65 CIELAB, CIELCH, full-range BT.601 YCbCr |
-| Matching | Euclidean, circular hue, CIEDE2000, CompuPhase, Rec.601, Rec.709 in their valid tagged combinations |
-| Separable fields | Bayer 2/4/8/16, deterministic random, blue noise |
-| Diffusion | Floyd-Steinberg, Sierra, Sierra Lite, Atkinson |
-| Mixing | Existing two-color ordered Yliluoma recipe with adaptive placement |
-| Placement | Everywhere and palette-independent adaptive placement with the agreed eight-neighbor calculation |
+| Family           | Required coverage                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| Resize           | Nearest, area, bilinear, Catmull-Rom bicubic, Lanczos2/3, trilinear; specified support policies and anchors |
+| Working spaces   | sRGB, linear sRGB, Oklab, OKLCH, D65 CIELAB, CIELCH, full-range BT.601 YCbCr                                |
+| Matching         | Euclidean, circular hue, CIEDE2000, CompuPhase, Rec.601, Rec.709 in their valid tagged combinations         |
+| Separable fields | Bayer 2/4/8/16, deterministic random, blue noise                                                            |
+| Diffusion        | Floyd-Steinberg, Sierra, Sierra Lite, Atkinson                                                              |
+| Mixing           | Existing two-color ordered Yliluoma recipe with adaptive placement                                          |
+| Placement        | Everywhere and palette-independent adaptive placement with the agreed eight-neighbor calculation            |
 
 All public processing modes have a scalar implementation. Seeds, worker counts, and tile sizes never change exact results. Diffusion stays scalar and uses three-row production error scratch.
 
@@ -237,14 +237,14 @@ Code readiness, package publication, website rollout, and TypeScript retirement 
 
 After sign-off, create one new parent PRD and 45 native sub-issues.
 
-| Field | Parent | Slices |
-|---|---|---|
-| Issue type | Existing `📝 prd` | Existing `📋 task` |
-| Milestone | Existing `v1` | Existing `v1` |
-| Assignee | `mia-riezebos` | `mia-riezebos` |
-| Execution label | None required | Proposed `implementation:afk` |
-| Readiness label | None required | Proposed `implementation:available`, only after verified delivery |
-| Project | Unassigned | Unassigned |
+| Field           | Parent            | Slices                                                            |
+| --------------- | ----------------- | ----------------------------------------------------------------- |
+| Issue type      | Existing `📝 prd` | Existing `📋 task`                                                |
+| Milestone       | Existing `v1`     | Existing `v1`                                                     |
+| Assignee        | `mia-riezebos`    | `mia-riezebos`                                                    |
+| Execution label | None required     | Proposed `implementation:afk`                                     |
+| Readiness label | None required     | Proposed `implementation:available`, only after verified delivery |
+| Project         | Unassigned        | Unassigned                                                        |
 
 The current GitHub token cannot read Projects. Project assignment is unnecessary for the dependency graph, so no permission change is requested.
 

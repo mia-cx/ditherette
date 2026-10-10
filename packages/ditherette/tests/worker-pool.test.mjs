@@ -12,20 +12,27 @@ function setup(t, failure) {
 			workers.push(this);
 		}
 		postMessage(message) {
-			if (message.type === 'ditherette-worker-init') queueMicrotask(() => {
-				if (failure === 'error') {
-					const error = new Event('error', { cancelable: true });
-					this.dispatchEvent(error);
-					events.push(error.defaultPrevented ? 'handled-error' : 'unhandled-error');
-					return;
-				}
-				this.dispatchEvent(new MessageEvent('message', { data: {
-					type: failure === 'ready' ? 'ditherette-worker-error' : 'ditherette-worker-ready'
-				} }));
-			});
+			if (message.type === 'ditherette-worker-init')
+				queueMicrotask(() => {
+					if (failure === 'error') {
+						const error = new Event('error', { cancelable: true });
+						this.dispatchEvent(error);
+						events.push(error.defaultPrevented ? 'handled-error' : 'unhandled-error');
+						return;
+					}
+					this.dispatchEvent(
+						new MessageEvent('message', {
+							data: {
+								type: failure === 'ready' ? 'ditherette-worker-error' : 'ditherette-worker-ready'
+							}
+						})
+					);
+				});
 			else if (failure === 'dispatch') throw new Error('dispatch');
 		}
-		terminate() { events.push('terminate'); }
+		terminate() {
+			events.push('terminate');
+		}
 	}
 	const previous = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
 	Object.defineProperty(globalThis, 'Worker', { configurable: true, value: Worker });
@@ -36,10 +43,21 @@ function setup(t, failure) {
 	const builder = {
 		numThreads: () => 2,
 		receiver: () => 123,
-		build() { events.push('build'); if (failure === 'build') throw new Error('build'); },
-		free() { events.push('free'); }
+		build() {
+			events.push('build');
+			if (failure === 'build') throw new Error('build');
+		},
+		free() {
+			events.push('free');
+		}
 	};
-	return { events, builder, abandon() { events.push('abandon'); } };
+	return {
+		events,
+		builder,
+		abandon() {
+			events.push('abandon');
+		}
+	};
 }
 
 test('pool frees the borrowed receiver only after successful priming and releases each worker once', async (t) => {
@@ -60,7 +78,11 @@ for (const failure of ['constructor', 'ready', 'error', 'dispatch', 'build']) {
 		const count = failure === 'constructor' ? 1 : 2;
 		assert.equal(events.filter((event) => event === 'terminate').length, count);
 		assert.equal(events.at(-1), failure === 'dispatch' || failure === 'build' ? 'abandon' : 'free');
-		assert.equal(events.includes('unhandled-error'), false, 'Caught worker errors must not propagate to the host.');
+		assert.equal(
+			events.includes('unhandled-error'),
+			false,
+			'Caught worker errors must not propagate to the host.'
+		);
 		const before = [...events];
 		pool.dispose();
 		assert.deepEqual(events, before);

@@ -4,7 +4,9 @@ import test from 'node:test';
 
 const distribution = new URL('../dist/scalar/', import.meta.url);
 const glueUrl = new URL('ditherette_wasm.js', distribution);
-const compiled = await WebAssembly.compile(await readFile(new URL('ditherette_wasm_bg.wasm', distribution)));
+const compiled = await WebAssembly.compile(
+	await readFile(new URL('ditherette_wasm_bg.wasm', distribution))
+);
 let instanceId = 0;
 // 2×1→3×2 owns 32 pixel bytes, three Wasm usize x offsets, and two u32 y coordinates.
 let resizeCapacity = 32 + 3 * 4 + 2 * 4;
@@ -15,7 +17,8 @@ async function fresh(limit) {
 	const bindings = await import(`${glueUrl.href}?fixture=${instanceId++}`);
 	const raw = await bindings.default({ module_or_path: compiled });
 	const overhead = bindings.privateMemoryOverhead();
-	if (limit !== null) assert.equal(bindings.privateInitialize(limit ?? overhead + resizeCapacity), 0);
+	if (limit !== null)
+		assert.equal(bindings.privateInitialize(limit ?? overhead + resizeCapacity), 0);
 	return { bindings, raw, overhead };
 }
 
@@ -31,7 +34,8 @@ function invoke(bindings, input, ...shape) {
 	return sink.value;
 }
 // Exercise the full Wasm path for copy failures and owned-buffer budget checks.
-const resize = (bindings, input = source()) => invoke(bindings, input, 2, 1, 3, 2, 4, { onProgress() {} });
+const resize = (bindings, input = source()) =>
+	invoke(bindings, input, 2, 1, 3, 2, 4, { onProgress() {} });
 
 // Determine the compiled preparation record using a nonidentity resize.
 // The coordinate-map and source/output capacity formula above stays independent.
@@ -42,8 +46,10 @@ while (low < high) {
 	const limit = Math.floor((low + high) / 2);
 	const { bindings } = await fresh(limit);
 	const result = resize(bindings);
-	if (typeof result === 'number') { assert.equal(result, 8); low = limit + 1; }
-	else high = limit;
+	if (typeof result === 'number') {
+		assert.equal(result, 8);
+		low = limit + 1;
+	} else high = limit;
 	bindings.privateDispose();
 }
 const resizeRecordBytes = low - fixedOverhead - resizeCapacity;
@@ -56,8 +62,11 @@ function withCopyFailure(raw, phase, run) {
 		if (intoWasm === (phase === 'input')) throw new RangeError(`fixture ${phase} copy failure`);
 		return Reflect.apply(original, this, args);
 	};
-	try { return run(); }
-	finally { Uint8Array.prototype.set = original; }
+	try {
+		return run();
+	} finally {
+		Uint8Array.prototype.set = original;
+	}
 }
 
 test('generated private input ABI borrows externref and catches both borrowed-slice helpers', async () => {
@@ -66,23 +75,46 @@ test('generated private input ABI borrows externref and catches both borrowed-sl
 	const sparseBody = glue.match(/export function privateResizeNearestSparse\([^]*?\n}/)?.[0];
 	assert.ok(body, 'privateResize export');
 	assert.ok(sparseBody, 'privateResizeNearestSparse export');
-	assert.doesNotMatch(body, /__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/);
-	assert.doesNotMatch(sparseBody, /__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/);
+	assert.doesNotMatch(
+		body,
+		/__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/
+	);
+	assert.doesNotMatch(
+		sparseBody,
+		/__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/
+	);
 	assert.match(body, /wasm\.privateResize\(input,/);
 	assert.match(sparseBody, /wasm\.privateResizeNearestSparse\(input,/);
-	for (const name of ['snapshotInput', 'gatherInput', 'completeResult', 'completeSparseResult', 'inputLength']) {
-		assert.match(glue, new RegExp(`handleError\\(function[^]*?\\b${name}\\(`), `${name} uses catch glue`);
+	for (const name of [
+		'snapshotInput',
+		'gatherInput',
+		'completeResult',
+		'completeSparseResult',
+		'inputLength'
+	]) {
+		assert.match(
+			glue,
+			new RegExp(`handleError\\(function[^]*?\\b${name}\\(`),
+			`${name} uses catch glue`
+		);
 	}
 });
 
 test('narrow sparse nearest export matches the generic private ABI and observes mutations', async () => {
 	const { bindings } = await fresh(1 << 20);
 	const input = Uint8Array.from({ length: 43 * 37 * 4 }, (_, i) => (i * 73 + 11) & 255);
-	for (const [width, height, anchor] of [[21, 18, 0], [7, 5, 4], [1, 1, 8]]) {
+	for (const [width, height, anchor] of [
+		[21, 18, 0],
+		[7, 5, 4],
+		[1, 1, 8]
+	]) {
 		const generic = {};
 		const narrow = {};
 		assert.equal(bindings.privateResize(input, 43, 37, width, height, 0, anchor, 0, generic), 0);
-		assert.equal(bindings.privateResizeNearestSparse(input, 43, 37, width, height, anchor, narrow), 0);
+		assert.equal(
+			bindings.privateResizeNearestSparse(input, 43, 37, width, height, anchor, narrow),
+			0
+		);
 		assert.deepEqual(narrow.value, generic.value);
 	}
 	input[0] = 199;
@@ -94,23 +126,47 @@ test('narrow sparse nearest export matches the generic private ABI and observes 
 
 test('sparse nearest gathers exact Rust-selected pixels from aligned and unaligned views', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
-	for (const [width, height, outWidth, outHeight] of [[40, 32, 20, 16], [41, 33, 20, 16], [40, 32, 10, 8], [43, 37, 7, 5], [2, 128, 4, 2], [64, 64, 1, 17], [64, 64, 17, 1], [64, 64, 1, 1], [8, 6, 12, 9], [7, 5, 19, 13], [2, 8, 12, 2], [8, 2, 2, 12]]) {
+	for (const [width, height, outWidth, outHeight] of [
+		[40, 32, 20, 16],
+		[41, 33, 20, 16],
+		[40, 32, 10, 8],
+		[43, 37, 7, 5],
+		[2, 128, 4, 2],
+		[64, 64, 1, 17],
+		[64, 64, 17, 1],
+		[64, 64, 1, 1],
+		[8, 6, 12, 9],
+		[7, 5, 19, 13],
+		[2, 8, 12, 2],
+		[8, 2, 2, 12]
+	]) {
 		for (const offset of [0, 1, 4]) {
-			const backing = Uint8Array.from({ length: width * height * 4 + 8 }, (_, i) => (i * 73 + Math.floor(i / 251)) & 255);
+			const backing = Uint8Array.from(
+				{ length: width * height * 4 + 8 },
+				(_, i) => (i * 73 + Math.floor(i / 251)) & 255
+			);
 			const input = backing.subarray(offset, offset + width * height * 4);
 			const originalBytes = backing.slice();
 			Object.defineProperty(input, 'length', { value: 123 });
 			for (let anchor = 0; anchor < 9; anchor++) {
-				const axis = (coordinate, source, output, alignment) => alignment === 0
-					? Math.floor(coordinate * source / output)
-					: alignment === 1 ? Math.floor((coordinate + 0.5) * source / output)
-						: Math.floor(((coordinate + 1) * source - 1) / output);
+				const axis = (coordinate, source, output, alignment) =>
+					alignment === 0
+						? Math.floor((coordinate * source) / output)
+						: alignment === 1
+							? Math.floor(((coordinate + 0.5) * source) / output)
+							: Math.floor(((coordinate + 1) * source - 1) / output);
 				const expected = [];
-				for (let y = 0; y < outHeight; y++) for (let x = 0; x < outWidth; x++) {
-					const start = (axis(y, height, outHeight, Math.floor(anchor / 3)) * width + axis(x, width, outWidth, anchor % 3)) * 4;
-					expected.push(...input.subarray(start, start + 4));
-				}
-				const result = withCopyFailure(raw, 'input', () => invoke(bindings, input, width, height, outWidth, outHeight, anchor));
+				for (let y = 0; y < outHeight; y++)
+					for (let x = 0; x < outWidth; x++) {
+						const start =
+							(axis(y, height, outHeight, Math.floor(anchor / 3)) * width +
+								axis(x, width, outWidth, anchor % 3)) *
+							4;
+						expected.push(...input.subarray(start, start + 4));
+					}
+				const result = withCopyFailure(raw, 'input', () =>
+					invoke(bindings, input, width, height, outWidth, outHeight, anchor)
+				);
 				assert.deepEqual([...result.data], expected);
 				assert.notEqual(result.data.buffer, raw.memory.buffer);
 			}
@@ -145,16 +201,23 @@ test('sparse nearest observes mutations across full-source transitions and durab
 test('nearest upscale uses direct JS output while progress keeps Wasm copies', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
 	const input = new Uint8Array(8 * 6 * 4).fill(47);
-	const run = sink => bindings.privateResize(input, 8, 6, 12, 9, 0, 4, 0, sink);
+	const run = (sink) => bindings.privateResize(input, 8, 6, 12, 9, 0, 4, 0, sink);
 	const direct = {};
 	const original = Uint8Array.prototype.set;
-	Uint8Array.prototype.set = function () { throw new Error('direct output needs no bulk copy'); };
-	try { assert.equal(run(direct), 0); }
-	finally { Uint8Array.prototype.set = original; }
+	Uint8Array.prototype.set = function () {
+		throw new Error('direct output needs no bulk copy');
+	};
+	try {
+		assert.equal(run(direct), 0);
+	} finally {
+		Uint8Array.prototype.set = original;
+	}
 	assert.notEqual(direct.value.data.buffer, raw.memory.buffer);
 	assert.notEqual(direct.value.data.buffer, input.buffer);
 	const gather = DataView.prototype.getUint32;
-	DataView.prototype.getUint32 = function () { throw new Error('fixture offset read failed'); };
+	DataView.prototype.getUint32 = function () {
+		throw new Error('fixture offset read failed');
+	};
 	try {
 		const failed = {};
 		assert.equal(run(failed), 9);
@@ -162,38 +225,44 @@ test('nearest upscale uses direct JS output while progress keeps Wasm copies', a
 		const progress = { onProgress() {} };
 		assert.equal(run(progress), 0, 'callback path executes inside Wasm without gathering');
 		assert.deepEqual(progress.value.data, direct.value.data);
-	} finally { DataView.prototype.getUint32 = gather; }
+	} finally {
+		DataView.prototype.getUint32 = gather;
+	}
 	input.fill(99);
 	const recovered = {};
 	assert.equal(run(recovered), 0);
-	assert.ok(recovered.value.data.every(value => value === 99));
+	assert.ok(recovered.value.data.every((value) => value === 99));
 	bindings.privateDispose();
-	assert.ok(direct.value.data.every(value => value === 47));
+	assert.ok(direct.value.data.every((value) => value === 47));
 });
 
 test('direct sparse output allocates once without a Wasm output or bulk copy and catches allocation failure', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
 	const input = new Uint8Array(64 * 64 * 4).fill(47);
-	const invoke = sink => bindings.privateResize(input, 64, 64, 4, 4, 0, 4, 0, sink);
+	const invoke = (sink) => bindings.privateResize(input, 64, 64, 4, 4, 0, 4, 0, sink);
 	const Original = Uint8Array;
 	const set = Original.prototype.set;
 	let allocations = 0;
 	let fail = false;
-	globalThis.Uint8Array = new Proxy(Original, { construct(target, args, newTarget) {
-		if (typeof args[0] === 'number') {
-			assert.equal(args[0], 64, 'allocate only the exact final RGBA output');
-			allocations++;
-			if (fail) throw new RangeError('fixture output allocation failed');
+	globalThis.Uint8Array = new Proxy(Original, {
+		construct(target, args, newTarget) {
+			if (typeof args[0] === 'number') {
+				assert.equal(args[0], 64, 'allocate only the exact final RGBA output');
+				allocations++;
+				if (fail) throw new RangeError('fixture output allocation failed');
+			}
+			return Reflect.construct(target, args, newTarget);
 		}
-		return Reflect.construct(target, args, newTarget);
-	} });
-	Original.prototype.set = function () { throw new Error('direct sparse output needs no bulk copy'); };
+	});
+	Original.prototype.set = function () {
+		throw new Error('direct sparse output needs no bulk copy');
+	};
 	const sink = {};
 	try {
 		assert.equal(invoke(sink), 0);
 		assert.equal(allocations, 1);
 		assert.notEqual(sink.value.data.buffer, raw.memory.buffer);
-		assert.ok(sink.value.data.every(value => value === 47));
+		assert.ok(sink.value.data.every((value) => value === 47));
 		fail = true;
 		const failed = {};
 		assert.equal(invoke(failed), 9);
@@ -208,15 +277,18 @@ test('direct sparse output allocates once without a Wasm output or bulk copy and
 	input.fill(99);
 	assert.equal(invoke({}), 0);
 	bindings.privateDispose();
-	assert.ok(sink.value.data.every(value => value === 47));
+	assert.ok(sink.value.data.every((value) => value === 47));
 });
 
 test('sparse gather catches detached storage, thrown imports, and callback failures without leaking handles', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
 	let input = new Uint8Array(64 * 64 * 4).fill(71);
-	const run = sink => bindings.privateResize(input, 64, 64, 4, 4, 0, 4, 0, sink);
-	const table = Object.values(raw).find(value => value instanceof WebAssembly.Table);
-	const live = () => Array.from({ length: table.length }, (_, index) => table.get(index)).filter(value => value !== null).length;
+	const run = (sink) => bindings.privateResize(input, 64, 64, 4, 4, 0, 4, 0, sink);
+	const table = Object.values(raw).find((value) => value instanceof WebAssembly.Table);
+	const live = () =>
+		Array.from({ length: table.length }, (_, index) => table.get(index)).filter(
+			(value) => value !== null
+		).length;
 	assert.equal(run({}), 0);
 	const capacity = table.length;
 	const initialLive = live();
@@ -224,28 +296,37 @@ test('sparse gather catches detached storage, thrown imports, and callback failu
 	const original = DataView.prototype.getUint32;
 	for (let i = 0; i < 32; i++) {
 		const failed = {};
-		DataView.prototype.getUint32 = function () { throw new RangeError('fixture gather failure'); };
-		try { assert.equal(run(failed), 9); }
-		finally { DataView.prototype.getUint32 = original; }
+		DataView.prototype.getUint32 = function () {
+			throw new RangeError('fixture gather failure');
+		};
+		try {
+			assert.equal(run(failed), 9);
+		} finally {
+			DataView.prototype.getUint32 = original;
+		}
 		assert.equal(bindings.privateErrorPath(), 4);
 		assert.equal(failed.value, undefined);
-		const callback = { onProgress(event) {
-			assert.equal(bindings.privateDispose(), 11);
-			assert.equal(run({}), 11);
-			if (event.stage === 'complete') throw new Error('fixture completion failure');
-		} };
+		const callback = {
+			onProgress(event) {
+				assert.equal(bindings.privateDispose(), 11);
+				assert.equal(run({}), 11);
+				if (event.stage === 'complete') throw new Error('fixture completion failure');
+			}
+		};
 		assert.equal(run(callback), 12);
 		assert.equal(callback.value, undefined);
 		const recovered = {};
 		assert.equal(run(recovered), 0);
-		assert.ok(recovered.value.data.every(value => value === 71));
+		assert.ok(recovered.value.data.every((value) => value === 71));
 	}
 	assert.equal(table.length, capacity);
 	assert.equal(live(), initialLive);
 	assert.equal(raw.memory.buffer.byteLength, pages);
-	const detachedDuringPrepare = { onProgress(event) {
-		if (event.stage === 'prepare') structuredClone(input.buffer, { transfer: [input.buffer] });
-	} };
+	const detachedDuringPrepare = {
+		onProgress(event) {
+			if (event.stage === 'prepare') structuredClone(input.buffer, { transfer: [input.buffer] });
+		}
+	};
 	assert.equal(run(detachedDuringPrepare), 9);
 	assert.equal(bindings.privateErrorPath(), 4);
 	assert.equal(detachedDuringPrepare.value, undefined);
@@ -276,7 +357,9 @@ test('exact capacity, one-under preflight, and tiny initialization have stable e
 		assert.equal(resize(short.bindings), 8);
 		assert.equal(short.bindings.privateErrorPath(), 1);
 		assert.equal(copies, 1); // Hash the owned snapshot before remaining execution preflight.
-	} finally { Uint8Array.prototype.set = original; }
+	} finally {
+		Uint8Array.prototype.set = original;
+	}
 	assert.equal(invoke(short.bindings, source(), 2, 1, 1, 1, 4).data.length, 4);
 });
 
@@ -286,8 +369,14 @@ test('offset and spoofed-length inputs preserve bytes; results survive reuse, gr
 	const offset = backing.subarray(2, 10);
 	Object.defineProperty(offset, 'length', { value: 123 });
 	const first = resize(bindings, offset);
-	assert.deepEqual([...first.data], [10,20,30,0,40,50,60,255,40,50,60,255,10,20,30,0,40,50,60,255,40,50,60,255]);
-	assert.deepEqual([...backing], [99,98,10,20,30,0,40,50,60,255,97,96]);
+	assert.deepEqual(
+		[...first.data],
+		[
+			10, 20, 30, 0, 40, 50, 60, 255, 40, 50, 60, 255, 10, 20, 30, 0, 40, 50, 60, 255, 40, 50, 60,
+			255
+		]
+	);
+	assert.deepEqual([...backing], [99, 98, 10, 20, 30, 0, 40, 50, 60, 255, 97, 96]);
 	assert.notEqual(first.data.buffer, raw.memory.buffer);
 	resize(bindings, new Uint8Array(8).fill(77));
 	raw.memory.grow(1);
@@ -322,8 +411,14 @@ test('invalid dimensions, detached storage, and non-byte arrays fail without poi
 
 test('caught copy failures and recursive calls recover without mutable glue borrows', async () => {
 	const { bindings, raw } = await fresh();
-	for (const [phase, path] of [['input', 4], ['result', 8]]) {
-		assert.equal(withCopyFailure(raw, phase, () => resize(bindings)), 9);
+	for (const [phase, path] of [
+		['input', 4],
+		['result', 8]
+	]) {
+		assert.equal(
+			withCopyFailure(raw, phase, () => resize(bindings)),
+			9
+		);
 		assert.equal(bindings.privateErrorPath(), path);
 		assert.equal(resize(bindings).data.length, 24);
 	}
@@ -344,26 +439,37 @@ test('caught copy failures and recursive calls recover without mutable glue borr
 		}
 		return Reflect.apply(original, this, args);
 	};
-	try { assert.equal(resize(bindings, new Uint8Array(8).fill(17)).data.length, 24); }
-	finally { Uint8Array.prototype.set = original; }
+	try {
+		assert.equal(resize(bindings, new Uint8Array(8).fill(17)).data.length, 24);
+	} finally {
+		Uint8Array.prototype.set = original;
+	}
 	assert.equal(recursed, true);
 	assert.equal(resize(bindings).data.length, 24);
 });
 
 test('repeated success and caught failures keep externref capacity and live handles bounded', async () => {
 	const { bindings, raw } = await fresh();
-	const table = Object.values(raw).find(value => value instanceof WebAssembly.Table);
+	const table = Object.values(raw).find((value) => value instanceof WebAssembly.Table);
 	assert.ok(table);
-	const live = () => Array.from({ length: table.length }, (_, index) => table.get(index))
-		.filter(value => value !== null).length;
+	const live = () =>
+		Array.from({ length: table.length }, (_, index) => table.get(index)).filter(
+			(value) => value !== null
+		).length;
 	const capacity = table.length;
 	const initialLive = live();
 	resize(bindings);
 	const pages = raw.memory.buffer.byteLength;
 	for (let call = 0; call < 512; call++) {
 		assert.equal(resize(bindings).data.length, 24);
-		assert.equal(withCopyFailure(raw, 'input', () => resize(bindings, new Uint8Array(8).fill(17))), 9);
-		assert.equal(withCopyFailure(raw, 'result', () => resize(bindings)), 9);
+		assert.equal(
+			withCopyFailure(raw, 'input', () => resize(bindings, new Uint8Array(8).fill(17))),
+			9
+		);
+		assert.equal(
+			withCopyFailure(raw, 'result', () => resize(bindings)),
+			9
+		);
 	}
 	assert.equal(table.length, capacity);
 	assert.equal(live(), initialLive);
@@ -374,20 +480,25 @@ test('caught void progress rejects reentry and completion failure without retain
 	const { bindings, raw } = await fresh(4 << 20);
 	const input = source();
 	let failStage;
-	const sink = { value: undefined, onProgress(event) {
-		assert.equal(bindings.privateDispose(), 11);
-		assert.equal(bindings.privateResize(input, 2, 1, 3, 2, 0, 4, 0, {}), 11);
-		if (event.stage === 'complete') assert.equal(sink.value.data.length, 24);
-		if (event.stage === failStage) throw new Error('fixture progress failure');
-	} };
+	const sink = {
+		value: undefined,
+		onProgress(event) {
+			assert.equal(bindings.privateDispose(), 11);
+			assert.equal(bindings.privateResize(input, 2, 1, 3, 2, 0, 4, 0, {}), 11);
+			if (event.stage === 'complete') assert.equal(sink.value.data.length, 24);
+			if (event.stage === failStage) throw new Error('fixture progress failure');
+		}
+	};
 	const call = () => {
 		sink.value = undefined;
 		return bindings.privateResize(input, 2, 1, 3, 2, 0, 4, 0, sink);
 	};
 	assert.equal(call(), 0);
-	const table = Object.values(raw).find(value => value instanceof WebAssembly.Table);
-	const live = () => Array.from({ length: table.length }, (_, index) => table.get(index))
-		.filter(value => value !== null).length;
+	const table = Object.values(raw).find((value) => value instanceof WebAssembly.Table);
+	const live = () =>
+		Array.from({ length: table.length }, (_, index) => table.get(index)).filter(
+			(value) => value !== null
+		).length;
 	const capacity = table.length;
 	const initialLive = live();
 	const pages = raw.memory.buffer.byteLength;
@@ -413,7 +524,17 @@ test('caught void progress rejects reentry and completion failure without retain
 test('convolution ABI preserves landed output for every policy and anchor and rejects invalid discriminators', async () => {
 	const { bindings } = await fresh(10_000_000);
 	const input = new Uint8Array(Array.from({ length: 7 * 5 * 4 }, (_, i) => (i * 73) % 256));
-	const anchors = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+	const anchors = [
+		'top-left',
+		'top',
+		'top-right',
+		'left',
+		'center',
+		'right',
+		'bottom-left',
+		'bottom',
+		'bottom-right'
+	];
 	for (const [mode, algorithm] of ['bicubic', 'lanczos2', 'lanczos3'].entries()) {
 		for (const [support, name] of ['fixed', 'scale-aware'].entries()) {
 			for (const [anchor, label] of anchors.entries()) {
@@ -425,9 +546,29 @@ test('convolution ABI preserves landed output for every policy and anchor and re
 		}
 	}
 	for (const algorithm of [0, 1, 2, 3, 4, 5, 6]) {
-		for (const support of [-1, 0.5, 2, NaN, Infinity, ...(algorithm < 3 || algorithm === 6 ? [1] : [])]) {
+		for (const support of [
+			-1,
+			0.5,
+			2,
+			NaN,
+			Infinity,
+			...(algorithm < 3 || algorithm === 6 ? [1] : [])
+		]) {
 			const sink = {};
-			assert.equal(bindings.privateResize(source(), 2, 1, 1, 1, algorithm, algorithm === 1 ? 0 : 4, support, sink), 4);
+			assert.equal(
+				bindings.privateResize(
+					source(),
+					2,
+					1,
+					1,
+					1,
+					algorithm,
+					algorithm === 1 ? 0 : 4,
+					support,
+					sink
+				),
+				4
+			);
 			assert.equal(bindings.privateErrorPath(), 12);
 			assert.equal(sink.value, undefined);
 		}
@@ -445,21 +586,46 @@ test('convolution ABI preserves landed output for every policy and anchor and re
 
 test('severe fixed Lanczos shrink gathers exact support without a full source copy', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
-	const anchors = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+	const anchors = [
+		'top-left',
+		'top',
+		'top-right',
+		'left',
+		'center',
+		'right',
+		'bottom-left',
+		'bottom',
+		'bottom-right'
+	];
 	for (const offset of [0, 1, 4]) {
-		const backing = Uint8Array.from({ length: 65 * 49 * 4 + 4 }, (_, i) => (i * 73 + Math.floor(i / 251)) & 255);
+		const backing = Uint8Array.from(
+			{ length: 65 * 49 * 4 + 4 },
+			(_, i) => (i * 73 + Math.floor(i / 251)) & 255
+		);
 		const input = backing.subarray(offset, offset + 65 * 49 * 4);
-		for (const [name, algorithm] of [['lanczos2', 4], ['lanczos3', 5]]) {
+		for (const [name, algorithm] of [
+			['lanczos2', 4],
+			['lanczos3', 5]
+		]) {
 			for (const [anchor, label] of anchors.entries()) {
 				const expected = bindings.resizeRgba8(input, 65, 49, 4, 3, name, label, 'fixed', false);
 				for (let repeat = 0; repeat < 2; repeat++) {
 					const sink = {};
-					assert.equal(withCopyFailure(raw, 'input', () => bindings.privateResize(input, 65, 49, 4, 3, algorithm, anchor, 0, sink)), 0);
+					assert.equal(
+						withCopyFailure(raw, 'input', () =>
+							bindings.privateResize(input, 65, 49, 4, 3, algorithm, anchor, 0, sink)
+						),
+						0
+					);
 					assert.deepEqual(sink.value.data, expected);
 				}
 				const dense = { onProgress() {} };
 				assert.equal(bindings.privateResize(input, 65, 49, 4, 3, algorithm, anchor, 0, dense), 0);
-				assert.deepEqual(dense.value.data, expected, 'cached plan retains original coordinates for dense callback calls');
+				assert.deepEqual(
+					dense.value.data,
+					expected,
+					'cached plan retains original coordinates for dense callback calls'
+				);
 			}
 		}
 	}
@@ -487,7 +653,7 @@ test('trilinear exact budget, mip rounding, caught failures, and recovery use th
 	assert.equal(call(), 0);
 	const short = await fresh(initial.overhead + capacity - 1);
 	assert.equal(call(short.bindings), 8);
-	const table = Object.values(raw).find(value => value instanceof WebAssembly.Table);
+	const table = Object.values(raw).find((value) => value instanceof WebAssembly.Table);
 	const length = table.length;
 	const pages = raw.memory.buffer.byteLength;
 	for (let i = 0; i < 32; i++) {

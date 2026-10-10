@@ -306,14 +306,23 @@ Zero strength preserves every source byte. Both placement modes preserve alpha a
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
 Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are preflighted before processing.
 Results remain durable after later calls and disposal. Successful calls may cache deterministic field outputs and prepared palettes.
+
 ## Error diffusion
 
 ```ts
 const indexed = processor.ditherAndQuantize({
-	version: 1, source, palette, alpha, matching,
+	version: 1,
+	source,
+	palette,
+	alpha,
+	matching,
 	dither: {
-		family: 'diffusion', kernel: 'floyd-steinberg', feedback: 'srgb-bytes',
-		strength: 1, serpentine: true, placement: { mode: 'everywhere' }
+		family: 'diffusion',
+		kernel: 'floyd-steinberg',
+		feedback: 'srgb-bytes',
+		strength: 1,
+		serpentine: true,
+		placement: { mode: 'everywhere' }
 	}
 });
 ```
