@@ -4,6 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const workflow = (name) =>
 	readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
@@ -32,6 +33,85 @@ async function fixture(t) {
 	git('commit', '-m', 'fixture');
 	return { root, git };
 }
+
+test('validation fetches a squash-merged PR head and falls back when that ref is unavailable', async (t) => {
+	const { root, git } = await fixture(t);
+	const base = git('rev-parse', 'HEAD');
+	await writeFile(join(root, 'release.txt'), 'release\n');
+	git('add', '.');
+	git('commit', '-m', 'release PR');
+	const head = git('rev-parse', 'HEAD');
+	const sha = git('commit-tree', `${head}^{tree}`, '-p', base, '-m', 'squash release');
+	const origin = join(root, 'temporary/origin.git');
+	execFileSync('git', ['init', '--bare', origin]);
+	git('remote', 'add', 'origin', origin);
+	git('push', 'origin', `${sha}:refs/heads/main`, `${head}:refs/pull/123/head`);
+	const repository = 'mia-cx/ditherette';
+	const pullRequest = {
+		number: 123,
+		merged_at: '2026-10-11T00:00:00Z',
+		merge_commit_sha: sha,
+		base: { ref: 'main', repo: { full_name: repository } },
+		head: { ref: 'changeset-release/main', sha: head, repo: { full_name: repository } }
+	};
+	const bin = join(root, 'temporary/bin');
+	await mkdir(bin);
+	await writeFile(
+		join(bin, 'gh'),
+		'#!/usr/bin/env node\nconsole.log(process.env.RELEASE_RUNS);\n',
+		{
+			mode: 0o755
+		}
+	);
+	const env = {
+		...process.env,
+		PATH: `${bin}:${process.env.PATH}`,
+		GITHUB_REPOSITORY: repository,
+		GITHUB_SHA: sha,
+		DITHERETTE_RELEASE_SHA: sha,
+		RELEASE_RUNS: JSON.stringify({
+			workflow_runs: [
+				{
+					event: 'pull_request',
+					path: '.github/workflows/release-validation.yml',
+					head_sha: head,
+					pull_requests: [{ number: 123 }],
+					status: 'completed',
+					conclusion: 'success'
+				}
+			]
+		})
+	};
+	for (const available of [true, false]) {
+		if (!available) git('push', 'origin', ':refs/pull/123/head');
+		const runner = join(root, `temporary/runner-${available}`);
+		// A full main-only checkout omits the PR commit after a squash and branch deletion.
+		execFileSync('git', [
+			'clone',
+			'--no-local',
+			'--single-branch',
+			'--branch',
+			'main',
+			origin,
+			runner
+		]);
+		assert.notEqual(spawnSync('git', ['cat-file', '-e', head], { cwd: runner }).status, 0);
+		const output = join(runner, 'actions-output');
+		const run = spawnSync(
+			process.execPath,
+			[fileURLToPath(new URL('./release-plan.mjs', import.meta.url)), 'validated'],
+			{
+				cwd: runner,
+				encoding: 'utf8',
+				input: JSON.stringify([pullRequest]),
+				env: { ...env, GITHUB_OUTPUT: output }
+			}
+		);
+		assert.equal(run.status, 0, run.stdout + run.stderr);
+		assert.equal(await readFile(output, 'utf8'), `validated=${available}\n`);
+		if (!available) assert.match(run.stderr, /requiring fresh validation/);
+	}
+});
 
 test('CI result fails when change detection fails or is cancelled and selected tests are skipped', async () => {
 	const source = await workflow('ci');

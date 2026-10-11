@@ -117,9 +117,18 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 					{ encoding: 'utf8' }
 				)
 			);
-			validated =
-				releaseValidated(workflowRuns, pullRequest) &&
-				git('rev-parse', `${sha}^{tree}`) === git('rev-parse', `${head}^{tree}`);
+			if (releaseValidated(workflowRuns, pullRequest)) {
+				try {
+					// Squash merges and branch deletion can leave the PR head out of the checkout.
+					git('fetch', '--no-tags', 'origin', `refs/pull/${pullRequest.number}/head`);
+					validated = git('rev-parse', `${sha}^{tree}`) === git('rev-parse', `${head}^{tree}`);
+				} catch (cause) {
+					console.warn(
+						'Unable to reuse release PR validation; requiring fresh validation.',
+						cause.message
+					);
+				}
+			}
 		}
 		console.log(`validated=${validated}`);
 		if (process.env.GITHUB_OUTPUT)
