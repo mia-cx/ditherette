@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
 	isReleaseMerge,
 	releasePlan,
+	releasePullRequest,
+	releaseValidated,
 	requireCurrentVersion,
 	versionIncreased
 } from './release-plan.mjs';
@@ -16,6 +18,7 @@ const context = {
 	ref: 'refs/heads/main'
 };
 const merged = {
+	number: 123,
 	merged_at: '2026-09-24T00:00:00Z',
 	merge_commit_sha: context.sha,
 	base: { ref: 'main', repo: { full_name: context.repository } },
@@ -99,5 +102,56 @@ test('publication reruns accept only identical archives and fail on registry err
 			throw new Error('network down');
 		}),
 		/network down/
+	);
+});
+
+test('releasePullRequest finds the merged release PR', () => {
+	const pr = { ...merged, head: { ...merged.head, sha: 'b'.repeat(40) } };
+	assert.equal(releasePullRequest([pr], context), pr);
+	assert.equal(releasePullRequest([], context), undefined);
+	assert.equal(
+		releasePullRequest([{ ...pr, head: { ...pr.head, ref: 'feature' } }], context),
+		undefined
+	);
+});
+
+test('releaseValidated requires the exact release PR head and validation workflow', () => {
+	const pr = { ...merged, head: { ...merged.head, sha: 'b'.repeat(40) } };
+	const run = (over) => ({
+		event: 'pull_request',
+		path: '.github/workflows/release-validation.yml',
+		head_sha: pr.head.sha,
+		pull_requests: [{ number: pr.number }],
+		status: 'completed',
+		conclusion: 'success',
+		...over
+	});
+	assert.equal(releaseValidated([run()], pr), true);
+	assert.equal(releaseValidated([run({ conclusion: 'failure' })], pr), false);
+	assert.equal(releaseValidated([run({ status: 'in_progress', conclusion: null })], pr), false);
+	assert.equal(releaseValidated([run({ path: '.github/workflows/ci.yml' })], pr), false);
+	assert.equal(releaseValidated([run({ head_sha: 'c'.repeat(40) })], pr), false);
+	assert.equal(releaseValidated([run({ pull_requests: [{ number: 124 }] })], pr), false);
+	assert.equal(releaseValidated([], pr), false);
+});
+
+test('a dispatch check cannot certify its head when it tested another input SHA', () => {
+	assert.equal(
+		releaseValidated(
+			[
+				{
+					name: 'Release validation',
+					app: { slug: 'github-actions' },
+					status: 'completed',
+					conclusion: 'success',
+					event: 'workflow_dispatch',
+					path: '.github/workflows/release-validation.yml',
+					head_sha: 'b'.repeat(40),
+					pull_requests: [{ number: merged.number }]
+				}
+			],
+			{ ...merged, head: { ...merged.head, sha: 'b'.repeat(40) } }
+		),
+		false
 	);
 });

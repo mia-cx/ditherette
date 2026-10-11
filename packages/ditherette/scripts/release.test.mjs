@@ -135,16 +135,29 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 	);
 	assert.throws(() => requirePublication(policy, ['size growth'], environment, '0.1.0', 'source'));
 	for (const change of [
-		{ GITHUB_REF: 'refs/tags/v0.1.0' },
-		{ GITHUB_EVENT_NAME: 'pull_request' },
 		{ DITHERETTE_RELEASE_MERGE: undefined },
 		{ GITHUB_REPOSITORY: 'other/repo' },
 		{ GITHUB_ACTIONS: undefined },
-		{ GITHUB_SHA: 'different' }
+		{ GITHUB_SHA: 'different' },
+		{ DITHERETTE_RELEASE_SHA: 'different' }
 	])
 		assert.throws(() =>
 			requirePublication(policy, [], { ...environment, ...change }, '0.1.0', 'source')
 		);
+	// The event and ref no longer matter: a dispatch retry publishes the named merge.
+	requirePublication(
+		policy,
+		[],
+		{
+			...environment,
+			GITHUB_EVENT_NAME: 'workflow_dispatch',
+			GITHUB_REF: 'refs/heads/main',
+			GITHUB_SHA: 'runner-head',
+			DITHERETTE_RELEASE_SHA: 'source'
+		},
+		'0.1.0',
+		'source'
+	);
 });
 
 test('release workflow validates the tested tarball before protected provenance publication', async () => {
@@ -159,13 +172,16 @@ test('release workflow validates the tested tarball before protected provenance 
 		'shell: bash',
 		'--frozen-lockfile',
 		'release.mjs prepare',
-		'test:conformance',
 		'publish-check',
 		'release-plan.mjs',
 		'release-registry.mjs',
-		'npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts'
+		'npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts',
+		'ditherette@',
+		'changelog-section.mjs'
 	])
 		assert.ok(workflow.includes(required), required);
 	assert.ok(workflow.indexOf('publish-check') < workflow.indexOf('npm publish target/release'));
+	// Conformance runs once, gated on the release PR; publishing trusts that suite.
+	assert.ok(!workflow.includes('test:conformance'), 'publish must not rerun conformance');
 	assert.ok(!/workflow_dispatch|NODE_AUTH_TOKEN|NPM_TOKEN|secrets\./.test(workflow));
 });
