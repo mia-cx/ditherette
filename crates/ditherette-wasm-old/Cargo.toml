@@ -21,7 +21,7 @@ wasm-bindgen = "0.2"
 wasm-bindgen-test = "0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-brunch = "0.11.1"
+brunch = "0.12.0"
 criterion = { version = "0.7", features = ["html_reports"] }
 fast_image_resize = { version = "6.0.0", features = ["only_u8x4"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }

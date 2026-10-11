@@ -54,9 +54,9 @@ checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
 name = "brunch"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8087ad2af75468f2e03d8c09005a4193734ce5d3b3fbd36ea59dd120e245dae"
+checksum = "4d2142699affcc38463efba6e88cddb65aea755a99b73145b8b1bb14bc4628ae"
 dependencies = [
  "dactyl",
  "unicode-width",
@@ -229,9 +229,9 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
 name = "dactyl"
-version = "0.13.2"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ade8623d8c08069f9532c934feca6c576008e4278ac43fb035412a7721b89f1"
+checksum = "7b00e58b65e45cab8123c5a8fe36ba400980c2e21511b4e5de11fed065207071"
 
 [[package]]
 name = "ditherette-wasm-old"
