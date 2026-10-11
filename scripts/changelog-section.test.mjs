@@ -22,6 +22,17 @@ const changelog = `# ditherette
 test('changelogSection returns the requested version body', () => {
 	assert.equal(changelogSection(changelog, '1.2.3'), '### Patch Changes\n\n- Fixes the thing.');
 	assert.equal(changelogSection(changelog, '1.2.2'), '- Older.');
+	assert.equal(changelogSection(changelog, '1.0.0-rc.1'), '- Prerelease.');
+});
+
+test('changelogSection matches version headings literally', () => {
+	for (const version of ['.*', '[', '1.2.3|1.2.2']) {
+		assert.throws(() => changelogSection(changelog, version), /no section/);
+	}
+	assert.equal(
+		changelogSection('## 1.0.0+build.1\r\n\r\n- Build metadata.\r\n', '1.0.0+build.1'),
+		'- Build metadata.'
+	);
 });
 
 test('changelogSection rejects missing and empty sections', () => {

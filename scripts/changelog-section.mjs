@@ -5,10 +5,13 @@ import { fileURLToPath } from 'node:url';
 
 /** Extract the release-notes body for `version` from a Changesets-format changelog. */
 export function changelogSection(content, version) {
-	const heading = new RegExp(`^## ${version.replaceAll('.', '\\.')}$`, 'm');
-	const start = content.search(heading);
+	const lines = content.split(/\r?\n/);
+	const start = lines.indexOf(`## ${version}`);
 	assert.ok(start !== -1, `CHANGELOG has no section for ${version}.`);
-	const rest = content.slice(start).replace(heading, '').trimStart();
+	const rest = lines
+		.slice(start + 1)
+		.join('\n')
+		.trimStart();
 	const end = rest.search(/^## /m);
 	const section = (end === -1 ? rest : rest.slice(0, end)).trim();
 	assert.notEqual(section.length, 0, `The CHANGELOG section for ${version} is empty.`);
