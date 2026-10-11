@@ -15,7 +15,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ditherette-release
+  # Ordinary pushes must not replace a queued release merge.
+  group: ditherette-release-${{ inputs.retry_release_commit || github.sha }}
   cancel-in-progress: false
 
 jobs:
