@@ -59,9 +59,9 @@ export function releasePlan(pullRequests, context, versions, pending = []) {
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 const manifestAt = (revision, path) => JSON.parse(git('show', `${revision}:${path}`));
 
-/** The head commit of the merged release pull request, whose tree must equal the merge's. */
-export function releasePullHead(pullRequests, context) {
-	const pr = pullRequests.find(
+/** The merged release PR supplies the identity and head whose validation can be reused. */
+export function releasePullRequest(pullRequests, context) {
+	return pullRequests.find(
 		(pr) =>
 			typeof pr.merged_at === 'string' &&
 			pr.merge_commit_sha === context.sha &&
@@ -70,15 +70,16 @@ export function releasePullHead(pullRequests, context) {
 			pr.head?.ref === 'changeset-release/main' &&
 			pr.head?.repo?.full_name === context.repository
 	);
-	return pr?.head?.sha ?? null;
 }
 
-/** The release PR is validated only when its head passed the approval-gated suite. */
-export function releaseValidated(checkRuns) {
-	return checkRuns.some(
+/** Only this PR head's successful validation workflow can authorize reuse of its tested tree. */
+export function releaseValidated(workflowRuns, pullRequest) {
+	return workflowRuns.some(
 		(run) =>
-			run.name === 'Release validation' &&
-			run.app?.slug === 'github-actions' &&
+			run.event === 'pull_request' &&
+			run.path?.split('@')[0] === '.github/workflows/release-validation.yml' &&
+			run.head_sha === pullRequest.head.sha &&
+			run.pull_requests?.some((pr) => pr.number === pullRequest.number) &&
 			run.status === 'completed' &&
 			run.conclusion === 'success'
 	);
@@ -102,21 +103,22 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 	const mode = process.argv[2];
 	if (mode === 'validated') {
 		const pullRequests = JSON.parse(readFileSync(0, 'utf8')).flat();
-		const head = releasePullHead(pullRequests, { sha, repository });
+		const pullRequest = releasePullRequest(pullRequests, { sha, repository });
 		let validated = false;
-		if (head) {
-			const { check_runs: checkRuns } = JSON.parse(
+		if (pullRequest?.head?.sha) {
+			const head = pullRequest.head.sha;
+			const { workflow_runs: workflowRuns } = JSON.parse(
 				execFileSync(
 					'gh',
 					[
 						'api',
-						`repos/${repository}/commits/${head}/check-runs?check_name=Release%20validation&per_page=100`
+						`repos/${repository}/actions/workflows/release-validation.yml/runs?event=pull_request&head_sha=${head}&status=success&per_page=100`
 					],
 					{ encoding: 'utf8' }
 				)
 			);
 			validated =
-				releaseValidated(checkRuns) &&
+				releaseValidated(workflowRuns, pullRequest) &&
 				git('rev-parse', `${sha}^{tree}`) === git('rev-parse', `${head}^{tree}`);
 		}
 		console.log(`validated=${validated}`);

@@ -22,6 +22,9 @@ jobs:
   version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     outputs:
       release: ${{ steps.plan.outputs.release }}
       npm: ${{ steps.plan.outputs.npm }}
@@ -34,13 +37,6 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:release
       - name: Resolve the release commit
         id: target
         env:
@@ -56,7 +52,16 @@ jobs:
           fi
           git cat-file -e "$RETRY_SHA^{commit}"
           git merge-base --is-ancestor "$RETRY_SHA" origin/main
+          # Manifests, dependencies, and pending changesets must come from the retry target.
+          git checkout --detach "$RETRY_SHA"
           echo "sha=$RETRY_SHA" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:release
       - name: Identify merged release and changed versions
         id: plan
         env:
@@ -204,14 +209,18 @@ jobs:
           sha="${{ needs.version.outputs.sha }}"
           git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null || true
           if target="$(git rev-list -n 1 "refs/tags/$tag" 2>/dev/null)" && [ -n "$target" ]; then
-            if [ "$target" = "$sha" ]; then
-              echo "Release $tag already exists at $sha; skipping."
-              exit 0
+            if [ "$target" != "$sha" ]; then
+              echo "::error::Tag $tag exists at $target, not $sha." >&2
+              exit 1
             fi
-            echo "::error::Tag $tag exists at $target, not $sha." >&2
-            exit 1
+          else
+            git tag "$tag" "$sha"
+            git push origin "refs/tags/$tag"
+          fi
+          # A previous attempt may have pushed the tag before release creation failed.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "GitHub release $tag already exists; skipping."
+            exit 0
           fi
           node scripts/changelog-section.mjs CHANGELOG.md "$version" > "$RUNNER_TEMP/notes.md"
-          git tag "$tag" "$sha"
-          git push origin "refs/tags/$tag"
           gh release create "$tag" --target "$sha" --title "ditherette-web $version" --notes-file "$RUNNER_TEMP/notes.md" --latest

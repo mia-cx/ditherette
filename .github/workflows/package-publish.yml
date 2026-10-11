@@ -86,16 +86,20 @@ jobs:
           sha="${{ inputs.sha }}"
           git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null || true
           if target="$(git rev-list -n 1 "refs/tags/$tag" 2>/dev/null)" && [ -n "$target" ]; then
-            if [ "$target" = "$sha" ]; then
-              echo "Release $tag already exists at $sha; skipping."
-              exit 0
+            if [ "$target" != "$sha" ]; then
+              echo "::error::Tag $tag exists at $target, not $sha." >&2
+              exit 1
             fi
-            echo "::error::Tag $tag exists at $target, not $sha." >&2
-            exit 1
+          else
+            git tag "$tag" "$sha"
+            git push origin "refs/tags/$tag"
+          fi
+          # A previous attempt may have pushed the tag before release creation failed.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "GitHub release $tag already exists; skipping."
+            exit 0
           fi
           node scripts/changelog-section.mjs packages/ditherette/CHANGELOG.md "$version" > "$RUNNER_TEMP/notes.md"
-          git tag "$tag" "$sha"
-          git push origin "refs/tags/$tag"
           gh release create "$tag" --target "$sha" --title "ditherette $version" --notes-file "$RUNNER_TEMP/notes.md" --latest
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()

@@ -86,6 +86,7 @@ jobs:
           ^\.github/
           ^\.changeset/
           ^scripts/release-[^/]*
+          ^scripts/(check-changesets|changelog-section)[^/]*
           ^packages/ditherette/scripts/release[^/]*
           ^[^/]*package\.json$
           ^packages/ditherette/package\.json$
@@ -221,20 +222,21 @@ jobs:
   result:
     name: CI result
     if: always()
-    needs: [lint, changeset, web, engine, release-tooling]
+    needs: [changes, lint, changeset, web, engine, release-tooling]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Report the aggregate result
         env:
+          CHANGES: ${{ needs.changes.result }}
           LINT: ${{ needs.lint.result }}
           CHANGESET: ${{ needs.changeset.result }}
           WEB: ${{ needs.web.result }}
           ENGINE: ${{ needs.engine.result }}
           TOOLING: ${{ needs.release-tooling.result }}
         run: |
-          echo "lint=$LINT changeset=$CHANGESET web=$WEB engine=$ENGINE tooling=$TOOLING"
-          for result in "$LINT" "$CHANGESET" "$WEB" "$ENGINE" "$TOOLING"; do
+          echo "changes=$CHANGES lint=$LINT changeset=$CHANGESET web=$WEB engine=$ENGINE tooling=$TOOLING"
+          for result in "$CHANGES" "$LINT" "$CHANGESET" "$WEB" "$ENGINE" "$TOOLING"; do
             if [ "$result" = failure ] || [ "$result" = cancelled ]; then
               echo '::error::A required check failed or was cancelled.'
               exit 1

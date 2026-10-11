@@ -141,5 +141,58 @@ for (const target of ['ditherette-web', 'ditherette']) {
 		assert.match(plan, rc ? /^web=false$/m : /^web=true$/m);
 		assert.match(plan, !rc && target === 'ditherette' ? /^npm=true$/m : /^npm=false$/m);
 		assert.match(plan, /^pending=false$/m);
+
+		// A retry must use the released tree even when the dispatch sees a newer pending note.
+		await writeFile(
+			join(fixture, '.changeset/later.md'),
+			'---\n"ditherette-web": patch\n---\n\nLater work.\n'
+		);
+		run('git', ['add', '.changeset/later.md']);
+		run('git', [
+			'-c',
+			'user.name=Release test',
+			'-c',
+			'user.email=release@example.test',
+			'-c',
+			'commit.gpgsign=false',
+			'commit',
+			'-m',
+			'later changeset'
+		]);
+		const runner = run('git', ['rev-parse', 'HEAD']).trim();
+		run('git', ['update-ref', 'refs/remotes/origin/main', runner]);
+		run('git', ['branch', '-D', 'main']);
+		const workflow = await readFile(join(root, '.github/workflows/release.yml'), 'utf8');
+		const resolveStep = workflow
+			.match(
+				/name: Resolve the release commit\n[\s\S]*? {8}run: \|\n((?: {10}[^\n]*(?:\n|$)|\n)*)/
+			)[1]
+			.replace(/^ {10}/gm, '');
+		const environment = {
+			...process.env,
+			GITHUB_ACTIONS: 'true',
+			GITHUB_SHA: runner,
+			GITHUB_REPOSITORY: repository,
+			GITHUB_EVENT_NAME: 'workflow_dispatch',
+			GITHUB_REF: 'refs/heads/main',
+			GITHUB_OUTPUT: join(fixture, 'outputs'),
+			DITHERETTE_RELEASE_SHA: sha,
+			DITHERETTE_RELEASE_RETRY: 'true',
+			RETRY_SHA: sha
+		};
+		execFileSync('bash', ['-euo', 'pipefail', '-c', resolveStep], {
+			cwd: fixture,
+			env: environment
+		});
+		const retryPlan = execFileSync(process.execPath, [join(root, 'scripts/release-plan.mjs')], {
+			cwd: fixture,
+			encoding: 'utf8',
+			input: JSON.stringify([[pullRequest]]),
+			env: environment
+		});
+		assert.equal(run('git', ['rev-parse', 'HEAD']).trim(), sha);
+		assert.match(retryPlan, rc ? /^release=false$/m : /^release=true$/m);
+		assert.match(retryPlan, rc ? /^web=false$/m : /^web=true$/m);
+		assert.match(retryPlan, /^pending=false$/m);
 	});
 }
