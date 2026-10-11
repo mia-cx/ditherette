@@ -7,3 +7,10 @@ bun.lockb
 
 # Miscellaneous
 /static/
+# Generated and data files — format code and prose, never data
+.github/workflows/pullfrog.yml
+crates/ditherette-wasm/src/spec/
+**/tests/fixtures/
+.plans/
+benchmark-results/
+benchmark-fixtures/

@@ -33,14 +33,14 @@ Warm recomputes the requested size after priming a different size. Palette-edit 
 The image is Celeste at 2600 by 4168; output is 1300 by 2084.
 JS remains unchanged at `a895267baea624a6e89bfcef6c5147f170e8a8f7`.
 
-| Browser | Operation | Previous warm Wasm ms | Selected warm Wasm ms | Selected-run JS ms |
-|---|---|---:|---:|---:|
-| Chromium | Resize | 15.75 | 9.05 | 11.45 |
-| Chromium | Direct process | 37.85 | 32.20 | 70.05 |
-| Firefox | Resize | 20.00 | 9.50 | 11.00 |
-| Firefox | Direct process | 44.00 | 34.00 | 86.50 |
-| WebKit | Resize | 15.00 | 7.50 | 6.00 |
-| WebKit | Direct process | 41.50 | 35.00 | 57.50 |
+| Browser  | Operation      | Previous warm Wasm ms | Selected warm Wasm ms | Selected-run JS ms |
+| -------- | -------------- | --------------------: | --------------------: | -----------------: |
+| Chromium | Resize         |                 15.75 |                  9.05 |              11.45 |
+| Chromium | Direct process |                 37.85 |                 32.20 |              70.05 |
+| Firefox  | Resize         |                 20.00 |                  9.50 |              11.00 |
+| Firefox  | Direct process |                 44.00 |                 34.00 |              86.50 |
+| WebKit   | Resize         |                 15.00 |                  7.50 |               6.00 |
+| WebKit   | Direct process |                 41.50 |                 35.00 |              57.50 |
 
 The 20% JS target remains unmet in several cells. WebKit standalone resize still loses.
 Selected-run cold direct-process times are 37/39.5/51.5 ms versus JS 62.7/84/61.5 ms.

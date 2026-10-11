@@ -25,11 +25,11 @@ No PR is merged, package published, or rollout enabled.
 Celeste nearest resize plus sRGB quantization, output 650 × 1042, scalar execution.
 Values are end-to-end milliseconds, three-sample medians from `cold-combined-01`.
 
-| Engine | Cold before | Cold after | Cold JS | Changed before | Changed after | Changed JS |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 414.7 | 182.1 | 33.6 | 198.0 | 32.5 | 31.8 |
-| Firefox | 2434 | 1345 | 39 | 1357 | 207 | 40 |
-| WebKit | 482 | 210 | 32 | 258 | 33 | 36 |
+| Engine   | Cold before | Cold after | Cold JS | Changed before | Changed after | Changed JS |
+| -------- | ----------: | ---------: | ------: | -------------: | ------------: | ---------: |
+| Chromium |       414.7 |      182.1 |    33.6 |          198.0 |          32.5 |       31.8 |
+| Firefox  |        2434 |       1345 |      39 |           1357 |           207 |         40 |
+| WebKit   |         482 |        210 |      32 |            258 |            33 |         36 |
 
 Identical repeated calls remain 10.6/14/8 ms respectively.
 Changed settings use new output widths, so these calls recompute pixels rather than retrieving identical final output.
@@ -70,11 +70,11 @@ Only one benchmark owns the lease at a time. Agents, builds, and tests stop duri
 This package changes SHA-256 only, before metric specialization and RGB memoization.
 The fresh resize-only comparison isolates most bulk source hashing cost without palette matching.
 
-| Engine | Cold resize before | SHA candidate | Change |
-| --- | ---: | ---: | ---: |
-| Chromium | 245.0 ms | 166.4 ms | 32.1% faster |
-| Firefox | 1180 ms | 1227 ms | 4.0% slower |
-| WebKit | 249 ms | 182 ms | 26.9% faster |
+| Engine   | Cold resize before | SHA candidate |       Change |
+| -------- | -----------------: | ------------: | -----------: |
+| Chromium |           245.0 ms |      166.4 ms | 32.1% faster |
+| Firefox  |            1180 ms |       1227 ms |  4.0% slower |
+| WebKit   |             249 ms |        182 ms | 26.9% faster |
 
 Firefox does not benefit from this SHA implementation. Its observed slowdown stays below the existing 10% regression limit.
 The candidate is selected for the Chromium and WebKit improvements, not claimed as a Firefox hashing optimization.
@@ -91,23 +91,23 @@ The audit verifies actual sample counts, pooled medians, pair ratios, source rev
 There are 192 workers and 3,744 samples across selection, spec comparison, and one bounded selection repeat.
 Every worker is reaped. Every output comparison is exact.
 
-| Matching | Speedup over previous prod | Speedup over spec |
-| --- | ---: | ---: |
-| sRGB Euclidean | 2.20× | 2.12× |
-| Linear RGB Euclidean | 2.22× | 3.10× |
-| Oklab Euclidean | 1.75× | 2.49× |
-| CIELAB Euclidean | 1.73× | 2.41× |
-| YCbCr Euclidean | 2.11× | 2.12× |
-| CompuPhase | 4.18× | 4.24× |
-| Rec. 601 | 1.87× | 1.80× |
-| Rec. 709 | 1.86× | 1.77× |
-| OKLCH Euclidean | 1.57× | 2.18× |
-| OKLCH circular hue | 1.36× | 1.38× |
-| OKLCH hue arc | 1.89× | 1.51× |
-| CIEDE2000 | 0.98× | 1.00× |
-| CIELCH Euclidean | 1.50× | 2.00× |
-| CIELCH circular hue | 1.39× | 1.33× |
-| CIELCH hue arc | 1.88× | 1.43× |
+| Matching             | Speedup over previous prod | Speedup over spec |
+| -------------------- | -------------------------: | ----------------: |
+| sRGB Euclidean       |                      2.20× |             2.12× |
+| Linear RGB Euclidean |                      2.22× |             3.10× |
+| Oklab Euclidean      |                      1.75× |             2.49× |
+| CIELAB Euclidean     |                      1.73× |             2.41× |
+| YCbCr Euclidean      |                      2.11× |             2.12× |
+| CompuPhase           |                      4.18× |             4.24× |
+| Rec. 601             |                      1.87× |             1.80× |
+| Rec. 709             |                      1.86× |             1.77× |
+| OKLCH Euclidean      |                      1.57× |             2.18× |
+| OKLCH circular hue   |                      1.36× |             1.38× |
+| OKLCH hue arc        |                      1.89× |             1.51× |
+| CIEDE2000            |                      0.98× |             1.00× |
+| CIELCH Euclidean     |                      1.50× |             2.00× |
+| CIELCH circular hue  |                      1.39× |             1.33× |
+| CIELCH hue arc       |                      1.88× |             1.43× |
 
 Selection initially has 30 passes and one inconclusive CIELCH Euclidean comparison.
 Its single fresh repeat passes, with candidate/baseline pair ratios 0.6703 and 0.6634; the table uses that repeat.
@@ -122,35 +122,35 @@ Those results are not relabeled as passes. They do not indicate a regression int
 
 Milliseconds from `cold-combined-01`. All recipes output approximately 650 × 1042.
 
-| Engine | Recipe | Previous prod | Selected prod | Historical JS |
-| --- | --- | ---: | ---: | ---: |
-| Chromium | nearest + sRGB | 198.0 | 32.5 | 31.8 |
-| Chromium | scale-aware Lanczos3 | 444.0 | 286.7 | 293.5 |
-| Chromium | Oklab | 223.6 | 35.6 | 33.3 |
-| Chromium | Rec. 709 | 197.1 | 35.9 | 34.5 |
-| Chromium | Bayer 8 | 235.7 | 78.6 | 75.0 |
-| Chromium | Floyd–Steinberg | 253.7 | 252.9 | 112.8 |
-| Chromium | resize-only nearest | 22.5 | 18.1 | 5.2 |
-| Chromium | entropy + sRGB | 216.3 | 81.0 | 154.5 |
-| Chromium | entropy + Oklab | 246.8 | 94.5 | 163.3 |
-| Firefox | nearest + sRGB | 1357 | 207 | 40 |
-| Firefox | scale-aware Lanczos3 | 3523 | 2452 | 290 |
-| Firefox | Oklab | 1473 | 230 | 47 |
-| Firefox | Rec. 709 | 1474 | 218 | 39 |
-| Firefox | Bayer 8 | 1550 | 599 | 104 |
-| Firefox | Floyd–Steinberg | 1779 | 1732 | 173 |
-| Firefox | resize-only nearest | 86 | 86 | 5 |
-| Firefox | entropy + sRGB | 1371 | 756 | 170 |
-| Firefox | entropy + Oklab | 1500 | 891 | 257 |
-| WebKit | nearest + sRGB | 258 | 33 | 36 |
-| WebKit | scale-aware Lanczos3 | 495 | 286 | 214 |
-| WebKit | Oklab | 269 | 36 | 52 |
-| WebKit | Rec. 709 | 256 | 37 | 33 |
-| WebKit | Bayer 8 | 296 | 83 | 93 |
-| WebKit | Floyd–Steinberg | 307 | 303 | 134 |
-| WebKit | resize-only nearest | 24 | 20 | 6 |
-| WebKit | entropy + sRGB | 271 | 91 | 135 |
-| WebKit | entropy + Oklab | 285 | 106 | 340 |
+| Engine   | Recipe               | Previous prod | Selected prod | Historical JS |
+| -------- | -------------------- | ------------: | ------------: | ------------: |
+| Chromium | nearest + sRGB       |         198.0 |          32.5 |          31.8 |
+| Chromium | scale-aware Lanczos3 |         444.0 |         286.7 |         293.5 |
+| Chromium | Oklab                |         223.6 |          35.6 |          33.3 |
+| Chromium | Rec. 709             |         197.1 |          35.9 |          34.5 |
+| Chromium | Bayer 8              |         235.7 |          78.6 |          75.0 |
+| Chromium | Floyd–Steinberg      |         253.7 |         252.9 |         112.8 |
+| Chromium | resize-only nearest  |          22.5 |          18.1 |           5.2 |
+| Chromium | entropy + sRGB       |         216.3 |          81.0 |         154.5 |
+| Chromium | entropy + Oklab      |         246.8 |          94.5 |         163.3 |
+| Firefox  | nearest + sRGB       |          1357 |           207 |            40 |
+| Firefox  | scale-aware Lanczos3 |          3523 |          2452 |           290 |
+| Firefox  | Oklab                |          1473 |           230 |            47 |
+| Firefox  | Rec. 709             |          1474 |           218 |            39 |
+| Firefox  | Bayer 8              |          1550 |           599 |           104 |
+| Firefox  | Floyd–Steinberg      |          1779 |          1732 |           173 |
+| Firefox  | resize-only nearest  |            86 |            86 |             5 |
+| Firefox  | entropy + sRGB       |          1371 |           756 |           170 |
+| Firefox  | entropy + Oklab      |          1500 |           891 |           257 |
+| WebKit   | nearest + sRGB       |           258 |            33 |            36 |
+| WebKit   | scale-aware Lanczos3 |           495 |           286 |           214 |
+| WebKit   | Oklab                |           269 |            36 |            52 |
+| WebKit   | Rec. 709             |           256 |            37 |            33 |
+| WebKit   | Bayer 8              |           296 |            83 |            93 |
+| WebKit   | Floyd–Steinberg      |           307 |           303 |           134 |
+| WebKit   | resize-only nearest  |            24 |            20 |             6 |
+| WebKit   | entropy + sRGB       |           271 |            91 |           135 |
+| WebKit   | entropy + Oklab      |           285 |           106 |           340 |
 
 ## Validation and retained evidence
 

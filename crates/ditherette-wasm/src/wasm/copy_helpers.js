@@ -74,7 +74,11 @@ function gatherRepeatedRows(destination, columnOffsets, rowOffsets, source, sour
 	const columns = new DataView(buffer.call(columnOffsets), offset.call(columnOffsets), columnBytes);
 	const rows = new DataView(buffer.call(rowOffsets), offset.call(rowOffsets), rowBytes);
 	const input = new Uint32Array(buffer.call(source), offset.call(source), sourceLength / 4);
-	const output = new Uint32Array(buffer.call(destination), offset.call(destination), length.call(destination) / 4);
+	const output = new Uint32Array(
+		buffer.call(destination),
+		offset.call(destination),
+		length.call(destination) / 4
+	);
 	const width = columnBytes / 4;
 	let index = 0;
 	let previousRow = -1;
@@ -128,7 +132,16 @@ export function completeResult(source, width, height, sink) {
 }
 
 // Returned bytes are JS-owned. Return only a scalar phase code, never an owned JS handle.
-export function completeSparseResult(columnOffsets, rowOffsets, source, sourceLength, outputLength, width, height, sink) {
+export function completeSparseResult(
+	columnOffsets,
+	rowOffsets,
+	source,
+	sourceLength,
+	outputLength,
+	width,
+	height,
+	sink
+) {
 	let data;
 	try {
 		data = new Uint8Array(outputLength);
@@ -137,7 +150,12 @@ export function completeSparseResult(columnOffsets, rowOffsets, source, sourceLe
 	}
 	try {
 		// Shared source bytes can change concurrently; shared offsets identify threaded Wasm.
-		if (outputLength > sourceLength && offset.call(source) % 4 === 0 && ordinaryBuffer(source) && ordinaryBuffer(rowOffsets)) {
+		if (
+			outputLength > sourceLength &&
+			offset.call(source) % 4 === 0 &&
+			ordinaryBuffer(source) &&
+			ordinaryBuffer(rowOffsets)
+		) {
 			gatherRepeatedRows(data, columnOffsets, rowOffsets, source, sourceLength);
 		} else {
 			gatherInput(data, columnOffsets, rowOffsets, source, sourceLength);

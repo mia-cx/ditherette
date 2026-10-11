@@ -171,27 +171,38 @@ export async function threadedOwnershipDriver({ page, server, input, t, context 
 
 async function startCheckHost(page) {
 	await page.evaluate(() => {
-		globalThis.checkHost = new Worker('/__tests__/thread-processing-host.mjs', { type: 'module', name: 'fixture-host' });
-		let id = 0;
-		globalThis.hostCheck = (command) => new Promise((resolve, reject) => {
-			const request = ++id;
-			const onMessage = ({ data }) => {
-				if (data.id !== request) return;
-				cleanup();
-				if (data.kind === 'error') reject(new Error(`${data.message} (code=${data.code}, path=${data.path})`));
-				else resolve(data.result);
-			};
-			const onError = (event) => { cleanup(); reject(new Error(event.message)); };
-			const timeout = setTimeout(() => { cleanup(); reject(new Error('Thread fixture command timed out.')); }, 20_000);
-			const cleanup = () => {
-				clearTimeout(timeout);
-				checkHost.removeEventListener('message', onMessage);
-				checkHost.removeEventListener('error', onError);
-			};
-			checkHost.addEventListener('message', onMessage);
-			checkHost.addEventListener('error', onError);
-			checkHost.postMessage({ ...command, kind: 'check', id: request });
+		globalThis.checkHost = new Worker('/__tests__/thread-processing-host.mjs', {
+			type: 'module',
+			name: 'fixture-host'
 		});
+		let id = 0;
+		globalThis.hostCheck = (command) =>
+			new Promise((resolve, reject) => {
+				const request = ++id;
+				const onMessage = ({ data }) => {
+					if (data.id !== request) return;
+					cleanup();
+					if (data.kind === 'error')
+						reject(new Error(`${data.message} (code=${data.code}, path=${data.path})`));
+					else resolve(data.result);
+				};
+				const onError = (event) => {
+					cleanup();
+					reject(new Error(event.message));
+				};
+				const timeout = setTimeout(() => {
+					cleanup();
+					reject(new Error('Thread fixture command timed out.'));
+				}, 20_000);
+				const cleanup = () => {
+					clearTimeout(timeout);
+					checkHost.removeEventListener('message', onMessage);
+					checkHost.removeEventListener('error', onError);
+				};
+				checkHost.addEventListener('message', onMessage);
+				checkHost.addEventListener('error', onError);
+				checkHost.postMessage({ ...command, kind: 'check', id: request });
+			});
 	});
 }
 
@@ -204,10 +215,11 @@ export async function threadedFailureDriver({ page, server, input, t, context })
 	await page.goto(server.url);
 	await startCheckHost(page);
 	try {
-		assert.deepEqual(
-			await hostCheck(page, 'initializeMemoryUnavailable', input),
-			{ structured: true, code: 'wasm-memory-unavailable', path: 'wasm' }
-		);
+		assert.deepEqual(await hostCheck(page, 'initializeMemoryUnavailable', input), {
+			structured: true,
+			code: 'wasm-memory-unavailable',
+			path: 'wasm'
+		});
 		await waitForWorkers(page, 0);
 	} finally {
 		await page.evaluate(() => checkHost.terminate());
@@ -241,10 +253,7 @@ export async function threadedFailureDriver({ page, server, input, t, context })
 				'Partial workers are gone before scalar Wasm fetching, and required never falls back.'
 			);
 			if (threads === 'preferred') {
-				assert.deepEqual(
-					result.output,
-					[19, 83, 127, 255]
-				);
+				assert.deepEqual(result.output, [19, 83, 127, 255]);
 			}
 		} finally {
 			await hostCheck(page, 'cleanupPartial');

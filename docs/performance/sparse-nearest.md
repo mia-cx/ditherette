@@ -27,17 +27,17 @@ Browser compilation caches can persist. Warm means recomputing the requested siz
 These are public-call medians, not image decode or canvas presentation timings.
 Raw results also retain dispatch-to-canvas-submission times.
 
-| Browser | Scale | Cold Wasm / JS ms | Warm Wasm / JS ms |
-|---|---:|---:|---:|
-| Chromium | 5% | 6.55 / 10.70 | 1.35 / 7.85 |
-| Chromium | 10% | 9.25 / 14.40 | 3.40 / 11.30 |
-| Chromium | 25% | 18.50 / 28.35 | 11.35 / 27.80 |
-| Firefox | 5% | 3.00 / 9.00 | 1.00 / 6.00 |
-| Firefox | 10% | 6.00 / 14.00 | 3.00 / 12.00 |
-| Firefox | 25% | 16.50 / 34.00 | 12.00 / 32.00 |
-| WebKit | 5% | 9.00 / 11.50 | 2.00 / 7.50 |
-| WebKit | 10% | 11.50 / 17.00 | 4.50 / 10.00 |
-| WebKit | 25% | 23.00 / 33.00 | 13.50 / 26.00 |
+| Browser  | Scale | Cold Wasm / JS ms | Warm Wasm / JS ms |
+| -------- | ----: | ----------------: | ----------------: |
+| Chromium |    5% |      6.55 / 10.70 |       1.35 / 7.85 |
+| Chromium |   10% |      9.25 / 14.40 |      3.40 / 11.30 |
+| Chromium |   25% |     18.50 / 28.35 |     11.35 / 27.80 |
+| Firefox  |    5% |       3.00 / 9.00 |       1.00 / 6.00 |
+| Firefox  |   10% |      6.00 / 14.00 |      3.00 / 12.00 |
+| Firefox  |   25% |     16.50 / 34.00 |     12.00 / 32.00 |
+| WebKit   |    5% |      9.00 / 11.50 |       2.00 / 7.50 |
+| WebKit   |   10% |     11.50 / 17.00 |      4.50 / 10.00 |
+| WebKit   |   25% |     23.00 / 33.00 |     13.50 / 26.00 |
 
 These rows include nearest resize and sRGB palette quantization without dithering.
 All nine meet the 20% lower-time target for both cold and warm calls in this trial.

@@ -20,16 +20,16 @@ The later compatibility edit changes no calculation.
 All cases pass the existing gate and match frozen output byte for byte.
 Each case uses two alternating pairs, 80 samples per worker, 250 ms warmup, and a 1,000 ms measurement budget.
 
-| Case group | Candidate / accepted time |
-|---|---:|
-| 24 retained non-adaptive diffusion controls | 0.978–1.035 |
-| Floyd-Steinberg adaptive radius 1, both feedback modes | 0.441–0.444 |
-| Sierra adaptive radius 2, both feedback modes | 0.582 |
-| Sierra-lite adaptive radius 1, both feedback modes | 0.429–0.439 |
-| Atkinson adaptive radius 2, both feedback modes | 0.558–0.567 |
-| Bayer8/Oklab adaptive field | 0.299 |
-| Random/Oklch adaptive field | 0.203 |
-| Blue-noise/Cielch non-adaptive field control | 1.006 |
+| Case group                                             | Candidate / accepted time |
+| ------------------------------------------------------ | ------------------------: |
+| 24 retained non-adaptive diffusion controls            |               0.978–1.035 |
+| Floyd-Steinberg adaptive radius 1, both feedback modes |               0.441–0.444 |
+| Sierra adaptive radius 2, both feedback modes          |                     0.582 |
+| Sierra-lite adaptive radius 1, both feedback modes     |               0.429–0.439 |
+| Atkinson adaptive radius 2, both feedback modes        |               0.558–0.567 |
+| Bayer8/Oklab adaptive field                            |                     0.299 |
+| Random/Oklch adaptive field                            |                     0.203 |
+| Blue-noise/Cielch non-adaptive field control           |                     1.006 |
 
 These are native complete-call comparisons, not native-versus-browser ratios.
 
@@ -46,11 +46,11 @@ Warm calls recompute the requested dimensions after priming another size.
 Settings-warm calls reuse dimensions after priming a different palette.
 Compilation caches can persist. End-to-end dispatch-to-canvas-submission measurements remain separate in the raw results.
 
-| Browser | Cold target passes / 24 | Warm target passes / 24 | Settings-warm target passes / 24 |
-|---|---:|---:|---:|
-| Chromium | 23 | 23 | 24 |
-| Firefox | 24 | 24 | 24 |
-| WebKit | 16 | 17 | 19 |
+| Browser  | Cold target passes / 24 | Warm target passes / 24 | Settings-warm target passes / 24 |
+| -------- | ----------------------: | ----------------------: | -------------------------------: |
+| Chromium |                      23 |                      23 |                               24 |
+| Firefox  |                      24 |                      24 |                               24 |
+| WebKit   |                      16 |                      17 |                               19 |
 
 The target is 20% less public processing time than JS. Six samples are not a confidence-bound release gate.
 Chromium's remaining warm miss is ordered linear RGB, 178.45 ms versus JS 212.55 ms.
@@ -59,15 +59,15 @@ WebKit retains several diffusion misses, despite improving against the previous 
 A fresh eight-case previous-build comparison confirms those gains.
 
 | WebKit diffusion space | Previous Wasm warm ms | Candidate Wasm warm ms | Candidate-run JS warm ms |
-|---|---:|---:|---:|
-| sRGB | 33.0 | 28.0 | 16.5 |
-| Linear RGB | 64.0 | 52.0 | 46.0 |
-| Oklab | 87.0 | 63.5 | 83.0 |
-| CIELAB | 44.0 | 34.0 | 48.0 |
-| Oklch | 113.0 | 78.0 | 126.5 |
-| Weighted RGB | 53.0 | 41.0 | 51.0 |
-| Weighted RGB 601 | 33.5 | 29.0 | 17.5 |
-| Weighted RGB 709 | 65.0 | 54.5 | 38.5 |
+| ---------------------- | --------------------: | ---------------------: | -----------------------: |
+| sRGB                   |                  33.0 |                   28.0 |                     16.5 |
+| Linear RGB             |                  64.0 |                   52.0 |                     46.0 |
+| Oklab                  |                  87.0 |                   63.5 |                     83.0 |
+| CIELAB                 |                  44.0 |                   34.0 |                     48.0 |
+| Oklch                  |                 113.0 |                   78.0 |                    126.5 |
+| Weighted RGB           |                  53.0 |                   41.0 |                     51.0 |
+| Weighted RGB 601       |                  33.5 |                   29.0 |                     17.5 |
+| Weighted RGB 709       |                  65.0 |                   54.5 |                     38.5 |
 
 All 24 Chromium PNGs match the pre-adaptive baseline exactly.
 All eight WebKit diffusion PNGs match the previous Wasm build exactly.

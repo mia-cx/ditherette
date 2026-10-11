@@ -390,7 +390,8 @@ export function paletteCodes(rawPalette: unknown, path: string): number[] {
 			code = TRANSPARENT_CODE;
 		} else if (kind === 'color')
 			code = rgbCode(field(entry, 'rgb'), 'invalid-palette', `${entryPath}.rgb`);
-		else throw new DitheretteError('invalid-palette', `${entryPath}.kind`, 'Unknown palette entry.');
+		else
+			throw new DitheretteError('invalid-palette', `${entryPath}.kind`, 'Unknown palette entry.');
 		if (index < 256) palette.push(code);
 	}
 	if (count > 256) palette.push(TRANSPARENT_CODE); // Tail marker is never retained as a normalized palette entry.

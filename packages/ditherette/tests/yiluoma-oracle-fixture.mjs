@@ -17,7 +17,9 @@ export async function prepareYliluomaOracle(directory) {
 	const manifest = JSON.parse(await readFile(join(oracle, 'manifest.json'), 'utf8'));
 	const root = fileURLToPath(new URL('../../../', import.meta.url));
 	const digest = (bytes) => [...createHash('sha256').update(bytes).digest()];
-	const checkpoint = JSON.parse(await readFile(join(root, 'tools/spec-freeze/checkpoint.json'), 'utf8'));
+	const checkpoint = JSON.parse(
+		await readFile(join(root, 'tools/spec-freeze/checkpoint.json'), 'utf8')
+	);
 	assert.deepEqual(manifest.frozen, verifyContent(root, checkpoint));
 	assert.equal(manifest.target, 'wasm32-unknown-unknown');
 	assert.deepEqual(manifest.profile, {

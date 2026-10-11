@@ -28,6 +28,12 @@ self.onmessage = async ({ data }) => {
 			self.postMessage({ kind: 'unexpected-result' });
 		}
 	} catch (error) {
-		self.postMessage({ kind: 'error', id: data.id, message: String(error), code: error.code, path: error.path });
+		self.postMessage({
+			kind: 'error',
+			id: data.id,
+			message: String(error),
+			code: error.code,
+			path: error.path
+		});
 	}
 };

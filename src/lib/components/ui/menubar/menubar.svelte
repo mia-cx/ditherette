@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Menubar as MenubarPrimitive } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+	import { Menubar as MenubarPrimitive } from 'bits-ui';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -12,6 +12,6 @@
 <MenubarPrimitive.Root
 	bind:ref
 	data-slot="menubar"
-	class={cn("h-8 gap-0.5 rounded-none border p-1 flex items-center", className)}
+	class={cn('flex h-8 items-center gap-0.5 rounded-none border p-1', className)}
 	{...restProps}
 />

@@ -26,7 +26,9 @@ const roots = {
 };
 const fixtures = {
 	// A local photo can stand in for the committed fixture, e.g. a 24 MP camera JPEG.
-	large: resolve(process.env.DITHERETTE_BENCH_PHOTO ?? resolve(root, 'benchmark-fixtures/Picking_at_thread.jpg')),
+	large: resolve(
+		process.env.DITHERETTE_BENCH_PHOTO ?? resolve(root, 'benchmark-fixtures/Picking_at_thread.jpg')
+	),
 	small: resolve(root, 'benchmark-fixtures/Celeste_Insta_selfie.png')
 };
 for (const path of [...Object.values(roots), ...Object.values(fixtures)]) await stat(path);

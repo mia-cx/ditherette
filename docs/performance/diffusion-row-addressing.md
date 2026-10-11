@@ -23,11 +23,11 @@ Cold means fresh worker and processor; import and initialization are excluded. C
 Warm means recomputing the requested size after priming different dimensions.
 Palette-edit calls prime a rotated palette at the same dimensions.
 
-| Recipe | Previous warm Wasm ms | Candidate warm Wasm ms | Candidate-run JS ms |
-|---|---:|---:|---:|
-| 50% Floyd-Steinberg, sRGB byte feedback | 609.5 | 589.5 | 383.0 |
-| 10% adaptive diffusion, sRGB matching | 28.0 | 28.0 | 17.5 |
-| 10% adaptive diffusion, weighted RGB 601 matching | 28.0 | 27.0 | 18.5 |
+| Recipe                                            | Previous warm Wasm ms | Candidate warm Wasm ms | Candidate-run JS ms |
+| ------------------------------------------------- | --------------------: | ---------------------: | ------------------: |
+| 50% Floyd-Steinberg, sRGB byte feedback           |                 609.5 |                  589.5 |               383.0 |
+| 10% adaptive diffusion, sRGB matching             |                  28.0 |                   28.0 |                17.5 |
+| 10% adaptive diffusion, weighted RGB 601 matching |                  28.0 |                   27.0 |                18.5 |
 
 The larger case improves 3.28%, meeting the declared 3% candidate threshold.
 Its cold time changes from 650 to 631.5 ms; palette-edit time changes from 605 to 583 ms.

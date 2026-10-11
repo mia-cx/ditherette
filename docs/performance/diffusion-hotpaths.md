@@ -11,15 +11,15 @@ Celeste decodes to 2600 × 4168 RGBA8 pixels. These are median warm public proce
 Each cell has three samples. This is candidate screening, not qualification of the wider JS performance target.
 Imports, processor creation and priming are outside the public-call timer. Worker transfer and canvas submission have separate measurements.
 
-| Setting | Before diffusion work | Converter and metric changes | Current candidate | Fresh JS |
-|---|---:|---:|---:|---:|
-| Floyd-Steinberg, 10% | 42.8 ms | 21.7 ms | 19.1 ms | 30.1 ms |
-| Floyd-Steinberg, 50% | 940.6 ms | 398.2 ms | 258.0 ms | 321.7 ms |
-| Sierra, 50% | 1081.5 ms | 535.5 ms | 300.2 ms | 334.2 ms |
-| Sierra-lite, 50% | 905.1 ms | 363.3 ms | 247.0 ms | 353.0 ms |
-| Adaptive sRGB, 10% | 416.6 ms | 22.9 ms | 21.2 ms | 17.6 ms |
-| Adaptive linear RGB, 10% | 861.4 ms | 63.1 ms | 37.0 ms | 42.4 ms |
-| Adaptive Oklch, 10% | 916.7 ms | 136.7 ms | 103.3 ms | 101.3 ms |
+| Setting                  | Before diffusion work | Converter and metric changes | Current candidate | Fresh JS |
+| ------------------------ | --------------------: | ---------------------------: | ----------------: | -------: |
+| Floyd-Steinberg, 10%     |               42.8 ms |                      21.7 ms |           19.1 ms |  30.1 ms |
+| Floyd-Steinberg, 50%     |              940.6 ms |                     398.2 ms |          258.0 ms | 321.7 ms |
+| Sierra, 50%              |             1081.5 ms |                     535.5 ms |          300.2 ms | 334.2 ms |
+| Sierra-lite, 50%         |              905.1 ms |                     363.3 ms |          247.0 ms | 353.0 ms |
+| Adaptive sRGB, 10%       |              416.6 ms |                      22.9 ms |           21.2 ms |  17.6 ms |
+| Adaptive linear RGB, 10% |              861.4 ms |                      63.1 ms |           37.0 ms |  42.4 ms |
+| Adaptive Oklch, 10%      |              916.7 ms |                     136.7 ms |          103.3 ms | 101.3 ms |
 
 The current candidate keeps all 16 compared Wasm PNGs byte-identical to its predecessor.
 The predecessor keeps those same images identical to the accepted package.

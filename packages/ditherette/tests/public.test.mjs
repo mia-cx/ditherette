@@ -62,22 +62,37 @@ test('identity resize returns the input object and aliases its bytes', async () 
 });
 
 test('identity bypass validates requests and preserves lifecycle without entering Wasm', () => {
-	const processor = initializeProcessor({
-		privateInitialize: () => 0,
-		privateDispose: () => 0,
-		privateResize: () => assert.fail('identity must not enter Wasm')
-	}, 1);
+	const processor = initializeProcessor(
+		{
+			privateInitialize: () => 0,
+			privateDispose: () => 0,
+			privateResize: () => assert.fail('identity must not enter Wasm')
+		},
+		1
+	);
 	const value = request(new Uint8Array([9, 17, 31, 47, 127, 9]).subarray(1, 5));
 	value.output.width = 1;
-	for (const algorithm of ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3', 'trilinear']) {
-		value.output.resize = algorithm === 'area' ? { algorithm } : {
-			algorithm, anchor: 'center',
-			...(['bicubic', 'lanczos2', 'lanczos3'].includes(algorithm) ? { support: 'fixed' } : {})
-		};
+	for (const algorithm of [
+		'nearest',
+		'area',
+		'bilinear',
+		'bicubic',
+		'lanczos2',
+		'lanczos3',
+		'trilinear'
+	]) {
+		value.output.resize =
+			algorithm === 'area'
+				? { algorithm }
+				: {
+						algorithm,
+						anchor: 'center',
+						...(['bicubic', 'lanczos2', 'lanczos3'].includes(algorithm) ? { support: 'fixed' } : {})
+					};
 		assert.equal(processor.resize(value), value.source);
 	}
 	const events = [];
-	value.onProgress = event => {
+	value.onProgress = (event) => {
 		events.push(event);
 		assert.throws(() => processor.resize(value), diagnostic('reentrant-call', 'instance'));
 		assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
@@ -87,11 +102,16 @@ test('identity bypass validates requests and preserves lifecycle without enterin
 		{ stage: 'prepare', completed: 0, total: 1 },
 		{ stage: 'complete', completed: 1, total: 1 }
 	]);
-	value.onProgress = () => { throw new Error('callback failed'); };
+	value.onProgress = () => {
+		throw new Error('callback failed');
+	};
 	assert.throws(() => processor.resize(value), diagnostic('callback', 'onProgress'));
 	delete value.onProgress;
 	assert.equal(processor.resize(value), value.source);
-	assert.throws(() => processor.resize({ ...value, version: 0 }), diagnostic('invalid-request', 'version'));
+	assert.throws(
+		() => processor.resize({ ...value, version: 0 }),
+		diagnostic('invalid-request', 'version')
+	);
 	processor.dispose();
 	assert.throws(() => processor.resize(value), diagnostic('disposed', 'instance'));
 });
@@ -397,11 +417,10 @@ test('raw request failures and property-triggered recursion are structured befor
 	structuredClone(detached.source.data.buffer, { transfer: [detached.source.data.buffer] });
 	assert.throws(() => processor.resize(detached), diagnostic('invalid-image', 'source.data'));
 	const callback = request();
-	callback.onProgress = () => { throw new Error('fixture callback failure'); };
-	assert.throws(
-		() => processor.resize(callback),
-		diagnostic('callback', 'onProgress')
-	);
+	callback.onProgress = () => {
+		throw new Error('fixture callback failure');
+	};
+	assert.throws(() => processor.resize(callback), diagnostic('callback', 'onProgress'));
 	assert.equal(processor.resize(request()).data[0], 17);
 	processor.dispose();
 });
@@ -411,21 +430,31 @@ test('validated callbacks are read once and reject reentry while allowing recove
 	const value = request();
 	let reads = 0;
 	const events = [];
-	Object.defineProperty(value, 'onProgress', { enumerable: true, get() {
-		reads++;
-		return (event) => {
-			events.push(event);
-			assert.throws(() => processor.resize(request()), diagnostic('reentrant-call', 'instance'));
-			assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
-		};
-	} });
+	Object.defineProperty(value, 'onProgress', {
+		enumerable: true,
+		get() {
+			reads++;
+			return (event) => {
+				events.push(event);
+				assert.throws(() => processor.resize(request()), diagnostic('reentrant-call', 'instance'));
+				assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
+			};
+		}
+	});
 	assert.equal(processor.resize(value).data.length, 8);
 	assert.equal(reads, 1);
 	assert.equal(events.at(-1).stage, 'complete');
 	assert.deepEqual(events.at(-1), { stage: 'complete', completed: 1, total: 1 });
-	assert.throws(() => processor.resize({ ...request(), onProgress(event) {
-		if (event.stage === 'complete') throw new Error('completion failure');
-	} }), diagnostic('callback', 'onProgress'));
+	assert.throws(
+		() =>
+			processor.resize({
+				...request(),
+				onProgress(event) {
+					if (event.stage === 'complete') throw new Error('completion failure');
+				}
+			}),
+		diagnostic('callback', 'onProgress')
+	);
 	assert.equal(processor.resize(request()).data.length, 8);
 	processor.dispose();
 });
@@ -447,9 +476,17 @@ test('unsupported capabilities and invalid options do not silently select anothe
 });
 
 test('thread selection checks blocking-wait permission without probing disabled calls', async (t) => {
-	for (const [name, value] of [['crossOriginIsolated', true], ['Worker', class {
-		constructor() { assert.fail('Incapable contexts must not create workers.'); }
-	}]]) {
+	for (const [name, value] of [
+		['crossOriginIsolated', true],
+		[
+			'Worker',
+			class {
+				constructor() {
+					assert.fail('Incapable contexts must not create workers.');
+				}
+			}
+		]
+	]) {
 		const previous = Object.getOwnPropertyDescriptor(globalThis, name);
 		Object.defineProperty(globalThis, name, { configurable: true, value });
 		t.after(() => {
@@ -467,7 +504,10 @@ test('thread selection checks blocking-wait permission without probing disabled 
 	const disabled = await createDitherette({ wasm: module, threads: 'disabled' });
 	disabled.dispose();
 	assert.equal(probes, 0);
-	await assert.rejects(createDitherette({ wasm: module, threads: 'required' }), diagnostic('capability', 'threads'));
+	await assert.rejects(
+		createDitherette({ wasm: module, threads: 'required' }),
+		diagnostic('capability', 'threads')
+	);
 	const preferred = await createDitherette({ wasm: module, threads: 'preferred' });
 	assert.equal(preferred.resize(request()).data[0], 17);
 	preferred.dispose();
@@ -519,7 +559,10 @@ test('caught input/result copy failures recover through the public boundary with
 			return Reflect.apply(set, this, args);
 		});
 		for (let attempt = 0; attempt < 16; attempt++) {
-			assert.throws(() => processor.resize(copiedRequest()), diagnostic('wasm-memory-unavailable', path));
+			assert.throws(
+				() => processor.resize(copiedRequest()),
+				diagnostic('wasm-memory-unavailable', path)
+			);
 		}
 		fault.mock.restore();
 		assert.equal(processor.resize(copiedRequest()).data[0], 17);

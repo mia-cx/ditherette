@@ -47,23 +47,23 @@ measured the unchanged Oklab index at 133 ms. The final Oklab median is 136 ms, 
 
 ### Everywhere placement after indexing
 
-| Matching policy | 2x2 | 4x4 | 8x8 | 16x16 |
-| --- | ---: | ---: | ---: | ---: |
-| sRGB Euclidean | 120 ms | 136 ms | 195 ms | 392 ms |
-| Linear RGB Euclidean | 121 ms | 127 ms | 183 ms | 378 ms |
-| Oklab Euclidean | 129 ms | 136 ms | 200 ms | 407 ms |
-| CIELAB Euclidean | 127 ms | 138 ms | 200 ms | 418 ms |
-| YCbCr Euclidean | 123 ms | 137 ms | 189 ms | 400 ms |
-| sRGB CompuPhase | 127 ms | 146 ms | 212 ms | 447 ms |
-| sRGB Rec.601 | 126 ms | 136 ms | 202 ms | 402 ms |
-| sRGB Rec.709 | 130 ms | 137 ms | 201 ms | 406 ms |
-| OKLCH Euclidean | 127 ms | 169 ms | 307 ms | 742 ms |
-| OKLCH circular hue | 321 ms | 380 ms | 540 ms | 866 ms |
-| OKLCH hue arc | 296 ms | 382 ms | 552 ms | 895 ms |
-| CIELAB CIEDE2000 | 1,126 ms | 1,193 ms | 2,285 ms | 6,461 ms |
-| CIELCh Euclidean | 128 ms | 149 ms | 214 ms | 447 ms |
-| CIELCh circular hue | 316 ms | 392 ms | 556 ms | 903 ms |
-| CIELCh hue arc | 299 ms | 381 ms | 529 ms | 841 ms |
+| Matching policy      |      2x2 |      4x4 |      8x8 |    16x16 |
+| -------------------- | -------: | -------: | -------: | -------: |
+| sRGB Euclidean       |   120 ms |   136 ms |   195 ms |   392 ms |
+| Linear RGB Euclidean |   121 ms |   127 ms |   183 ms |   378 ms |
+| Oklab Euclidean      |   129 ms |   136 ms |   200 ms |   407 ms |
+| CIELAB Euclidean     |   127 ms |   138 ms |   200 ms |   418 ms |
+| YCbCr Euclidean      |   123 ms |   137 ms |   189 ms |   400 ms |
+| sRGB CompuPhase      |   127 ms |   146 ms |   212 ms |   447 ms |
+| sRGB Rec.601         |   126 ms |   136 ms |   202 ms |   402 ms |
+| sRGB Rec.709         |   130 ms |   137 ms |   201 ms |   406 ms |
+| OKLCH Euclidean      |   127 ms |   169 ms |   307 ms |   742 ms |
+| OKLCH circular hue   |   321 ms |   380 ms |   540 ms |   866 ms |
+| OKLCH hue arc        |   296 ms |   382 ms |   552 ms |   895 ms |
+| CIELAB CIEDE2000     | 1,126 ms | 1,193 ms | 2,285 ms | 6,461 ms |
+| CIELCh Euclidean     |   128 ms |   149 ms |   214 ms |   447 ms |
+| CIELCh circular hue  |   316 ms |   392 ms |   556 ms |   903 ms |
+| CIELCh hue arc       |   299 ms |   381 ms |   529 ms |   841 ms |
 
 CIEDE2000 is the only 4x4 exception to the 3x Oklab target. Its pair-dependent chroma scaling and
 hue rotation make the safe bounding metric loose. Each surviving candidate also needs square
@@ -72,20 +72,20 @@ roots and trigonometric exact verification. The index still cuts the reported ru
 
 ### Adaptive placement after indexing
 
-| Matching policy | 2x2 | 4x4 | 8x8 | 16x16 |
-| --- | ---: | ---: | ---: | ---: |
-| sRGB Euclidean | 196 ms | 220 ms | 326 ms | 784 ms |
-| Linear RGB Euclidean | 192 ms | 229 ms | 348 ms | 819 ms |
-| Oklab Euclidean | 206 ms | 247 ms | 382 ms | 959 ms |
-| CIELAB Euclidean | 209 ms | 239 ms | 344 ms | 752 ms |
-| YCbCr Euclidean | 195 ms | 226 ms | 341 ms | 863 ms |
-| sRGB CompuPhase | 227 ms | 251 ms | 364 ms | 807 ms |
-| sRGB Rec.601 | 195 ms | 229 ms | 359 ms | 914 ms |
-| sRGB Rec.709 | 199 ms | 225 ms | 370 ms | 940 ms |
-| OKLCH Euclidean | 220 ms | 255 ms | 367 ms | 776 ms |
-| OKLCH circular hue | 725 ms | 843 ms | 1,333 ms | 3,475 ms |
-| OKLCH hue arc | 538 ms | 638 ms | 1,054 ms | 2,758 ms |
-| CIELAB CIEDE2000 | 748 ms | 858 ms | 1,212 ms | 2,488 ms |
-| CIELCh Euclidean | 241 ms | 262 ms | 368 ms | 754 ms |
-| CIELCh circular hue | 752 ms | 853 ms | 1,252 ms | 2,562 ms |
-| CIELCh hue arc | 629 ms | 665 ms | 952 ms | 2,038 ms |
+| Matching policy      |    2x2 |    4x4 |      8x8 |    16x16 |
+| -------------------- | -----: | -----: | -------: | -------: |
+| sRGB Euclidean       | 196 ms | 220 ms |   326 ms |   784 ms |
+| Linear RGB Euclidean | 192 ms | 229 ms |   348 ms |   819 ms |
+| Oklab Euclidean      | 206 ms | 247 ms |   382 ms |   959 ms |
+| CIELAB Euclidean     | 209 ms | 239 ms |   344 ms |   752 ms |
+| YCbCr Euclidean      | 195 ms | 226 ms |   341 ms |   863 ms |
+| sRGB CompuPhase      | 227 ms | 251 ms |   364 ms |   807 ms |
+| sRGB Rec.601         | 195 ms | 229 ms |   359 ms |   914 ms |
+| sRGB Rec.709         | 199 ms | 225 ms |   370 ms |   940 ms |
+| OKLCH Euclidean      | 220 ms | 255 ms |   367 ms |   776 ms |
+| OKLCH circular hue   | 725 ms | 843 ms | 1,333 ms | 3,475 ms |
+| OKLCH hue arc        | 538 ms | 638 ms | 1,054 ms | 2,758 ms |
+| CIELAB CIEDE2000     | 748 ms | 858 ms | 1,212 ms | 2,488 ms |
+| CIELCh Euclidean     | 241 ms | 262 ms |   368 ms |   754 ms |
+| CIELCh circular hue  | 752 ms | 853 ms | 1,252 ms | 2,562 ms |
+| CIELCh hue arc       | 629 ms | 665 ms |   952 ms | 2,038 ms |

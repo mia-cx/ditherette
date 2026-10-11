@@ -35,9 +35,14 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js', threade
 		if (ts.isImportDeclaration(statement)) {
 			if (threaded && statement.moduleSpecifier.text.endsWith('/workerHelpers.no-bundler.js')) {
 				const bindings = statement.importClause?.namedBindings;
-				if (workerImport || !bindings || !ts.isNamedImports(bindings) ||
-					bindings.elements.length !== 1 || statement.importClause.name ||
-					(bindings.elements[0].propertyName ?? bindings.elements[0].name).text !== 'startWorkers')
+				if (
+					workerImport ||
+					!bindings ||
+					!ts.isNamedImports(bindings) ||
+					bindings.elements.length !== 1 ||
+					statement.importClause.name ||
+					(bindings.elements[0].propertyName ?? bindings.elements[0].name).text !== 'startWorkers'
+				)
 					unsupported();
 				workerImport = bindings.elements[0].name.text;
 				continue;
@@ -118,20 +123,48 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js', threade
 		)
 	);
 	if (threaded) {
-		const builder = file.statements.find((statement) =>
-			ts.isClassDeclaration(statement) && statement.name?.text === 'wbg_rayon_PoolBuilder');
-		if (!builder?.members.some((member) => ts.isMethodDeclaration(member) &&
-			member.name.getText(file) === '__destroy_into_raw' && member.parameters.length === 0))
+		const builder = file.statements.find(
+			(statement) =>
+				ts.isClassDeclaration(statement) && statement.name?.text === 'wbg_rayon_PoolBuilder'
+		);
+		if (
+			!builder?.members.some(
+				(member) =>
+					ts.isMethodDeclaration(member) &&
+					member.name.getText(file) === '__destroy_into_raw' &&
+					member.parameters.length === 0
+			)
+		)
 			throw new Error('Generated threaded builder ownership release changed.');
 		// A trapped Rust call can leave its borrow flag set. Release only the JS finalizer;
 		// the failed pool owns the allocation until its discarded shared memory is collected.
-		properties.push(ts.factory.createPropertyAssignment('abandonThreadPool',
-			ts.factory.createArrowFunction(undefined, undefined,
-				[ts.factory.createParameterDeclaration(undefined, undefined, 'builder')], undefined,
-				ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
-				ts.factory.createBlock([ts.factory.createExpressionStatement(
-					ts.factory.createCallExpression(ts.factory.createPropertyAccessExpression(
-						ts.factory.createIdentifier('builder'), '__destroy_into_raw'), undefined, []))], true))));
+		properties.push(
+			ts.factory.createPropertyAssignment(
+				'abandonThreadPool',
+				ts.factory.createArrowFunction(
+					undefined,
+					undefined,
+					[ts.factory.createParameterDeclaration(undefined, undefined, 'builder')],
+					undefined,
+					ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+					ts.factory.createBlock(
+						[
+							ts.factory.createExpressionStatement(
+								ts.factory.createCallExpression(
+									ts.factory.createPropertyAccessExpression(
+										ts.factory.createIdentifier('builder'),
+										'__destroy_into_raw'
+									),
+									undefined,
+									[]
+								)
+							)
+						],
+						true
+					)
+				)
+			)
+		);
 	}
 	body.push(
 		ts.factory.createReturnStatement(
@@ -159,7 +192,10 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js', threade
 /** Generate the factory beside scalar web glue so import.meta URLs and snippet imports stay relative. */
 export async function writeScalarFactory(directory, threaded = false) {
 	const source = await readFile(new URL('ditherette_wasm.js', directory), 'utf8');
-	await writeFile(new URL('ditherette_wasm.factory.js', directory), scalarFactory(source, undefined, threaded));
+	await writeFile(
+		new URL('ditherette_wasm.factory.js', directory),
+		scalarFactory(source, undefined, threaded)
+	);
 	await writeFile(
 		new URL('ditherette_wasm.factory.d.ts', directory),
 		'/** Creates independent glue state; initialization remains explicit. */\n' +

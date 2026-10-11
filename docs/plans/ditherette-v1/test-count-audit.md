@@ -4,21 +4,21 @@ The first native suite was reported as 110 tests instead of 100. Later handoffs 
 This audit counts actual test groups from `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked -- --list`.
 It corrects totals, not execution results. The recorded test runs passed; no test was removed to produce these counts.
 
-| Slice | Validated implementation PR | Native tests |
-| --- | --- | --- |
-| S01 | [75](https://github.com/mia-cx/ditherette/pull/75) | 100 |
-| S02 | [88](https://github.com/mia-cx/ditherette/pull/88) | 100 |
-| S03 | [89](https://github.com/mia-cx/ditherette/pull/89) | 114 |
-| S07 | [91](https://github.com/mia-cx/ditherette/pull/91) | 124 |
-| S08 | [92](https://github.com/mia-cx/ditherette/pull/92) | 124 |
-| S09 | [94](https://github.com/mia-cx/ditherette/pull/94) | 124 |
-| S10 | [97](https://github.com/mia-cx/ditherette/pull/97) | 158 |
-| S11 | [93](https://github.com/mia-cx/ditherette/pull/93) | 126 |
-| S12 | [95](https://github.com/mia-cx/ditherette/pull/95) | 143 |
-| S13 | [98](https://github.com/mia-cx/ditherette/pull/98) | 168 |
-| S14 | [99](https://github.com/mia-cx/ditherette/pull/99) | 159 |
-| S15 | [101](https://github.com/mia-cx/ditherette/pull/101) | 181 |
-| S16 | [100](https://github.com/mia-cx/ditherette/pull/100) | 179 |
+| Slice | Validated implementation PR                          | Native tests |
+| ----- | ---------------------------------------------------- | ------------ |
+| S01   | [75](https://github.com/mia-cx/ditherette/pull/75)   | 100          |
+| S02   | [88](https://github.com/mia-cx/ditherette/pull/88)   | 100          |
+| S03   | [89](https://github.com/mia-cx/ditherette/pull/89)   | 114          |
+| S07   | [91](https://github.com/mia-cx/ditherette/pull/91)   | 124          |
+| S08   | [92](https://github.com/mia-cx/ditherette/pull/92)   | 124          |
+| S09   | [94](https://github.com/mia-cx/ditherette/pull/94)   | 124          |
+| S10   | [97](https://github.com/mia-cx/ditherette/pull/97)   | 158          |
+| S11   | [93](https://github.com/mia-cx/ditherette/pull/93)   | 126          |
+| S12   | [95](https://github.com/mia-cx/ditherette/pull/95)   | 143          |
+| S13   | [98](https://github.com/mia-cx/ditherette/pull/98)   | 168          |
+| S14   | [99](https://github.com/mia-cx/ditherette/pull/99)   | 159          |
+| S15   | [101](https://github.com/mia-cx/ditherette/pull/101) | 181          |
+| S16   | [100](https://github.com/mia-cx/ditherette/pull/100) | 179          |
 
 Each total belongs to the original slice's own dependency tree, not the eventual full join or the later collapse heads.
 This table corrects the original handoff prose. Current collapse validation in each slice plan and the maintained stack ledger supersedes these historical totals.

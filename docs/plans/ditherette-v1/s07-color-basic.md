@@ -14,13 +14,13 @@ The [space references](../../../crates/ditherette-wasm/src/spec/color/) record p
 
 Original validated implementation: `0a1ff0f84d599c4f4dbadf9b43e235262319518f`.
 
-| Command | Result |
-| --- | --- |
-| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_color_basic --test spec_color_spaces` | Ten new and six inherited color tests pass. |
-| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` | Original corrected count: 124 native tests; no doctests. The earlier 134 report overcounted by ten. Current collapse validation is below. |
-| `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` | Passed. |
-| `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` | Passed. |
-| `git diff --check` | Passed. |
+| Command                                                                                                                  | Result                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_color_basic --test spec_color_spaces` | Ten new and six inherited color tests pass.                                                                                               |
+| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`                                                  | Original corrected count: 124 native tests; no doctests. The earlier 134 report overcounted by ten. Current collapse validation is below. |
+| `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`                 | Passed.                                                                                                                                   |
+| `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check`                                                    | Passed.                                                                                                                                   |
+| `git diff --check`                                                                                                       | Passed.                                                                                                                                   |
 
 Tests include primary/neutral vectors, both transfer thresholds, exact byte ties, clipping of out-of-gamut reconstruction, all 256 neutral/single-channel byte values, and 1331 mixed colors. Strided image tests use independent source, alpha, working-color, and destination strides; verify byte-alpha preservation including zero; preserve hidden RGB; and check input/padding integrity.
 

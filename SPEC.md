@@ -374,7 +374,7 @@ Future palette gravity/weighting:
 - Candidate scoring model:
 
 ```ts
-adjustedDistance = rawDistance / sqrt(gravity)
+adjustedDistance = rawDistance / sqrt(gravity);
 ```
 
 - Alternative scoring models may be tested, but must be documented and deterministic.
@@ -905,147 +905,147 @@ type PreviewMode = 'side-by-side' | 'ab-reveal';
 type FitMode = 'stretch' | 'contain' | 'cover';
 
 type CropRect = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
 };
 
 type ResizeMode =
-  | 'nearest'
-  | 'bilinear'
-  | 'bicubic'
-  | 'lanczos2'
-  | 'lanczos3'
-  | 'box'
-  | 'area'
-  | 'trilinear'
-  | 'mitchell-netravali'
-  | 'catmull-rom'
-  | 'hermite'
-  | 'gaussian'
-  | 'multi-step'
-  | 'mipmap-linear';
+	| 'nearest'
+	| 'bilinear'
+	| 'bicubic'
+	| 'lanczos2'
+	| 'lanczos3'
+	| 'box'
+	| 'area'
+	| 'trilinear'
+	| 'mitchell-netravali'
+	| 'catmull-rom'
+	| 'hermite'
+	| 'gaussian'
+	| 'multi-step'
+	| 'mipmap-linear';
 type ColorDistanceMode =
-  | 'srgb'
-  | 'linear-rgb'
-  | 'weighted-rgb'
-  | 'weighted-rgb-rec601'
-  | 'weighted-rgb-rec709'
-  | 'hsl'
-  | 'hsv'
-  | 'xyz'
-  | 'cielab'
-  | 'lab-76'
-  | 'lab-94'
-  | 'delta-e-2000'
-  | 'lchab'
-  | 'oklab'
-  | 'oklch';
+	| 'srgb'
+	| 'linear-rgb'
+	| 'weighted-rgb'
+	| 'weighted-rgb-rec601'
+	| 'weighted-rgb-rec709'
+	| 'hsl'
+	| 'hsv'
+	| 'xyz'
+	| 'cielab'
+	| 'lab-76'
+	| 'lab-94'
+	| 'delta-e-2000'
+	| 'lchab'
+	| 'oklab'
+	| 'oklch';
 
 type DitherAlgorithm =
-  | 'none'
-  | 'floyd-steinberg'
-  | 'false-floyd-steinberg'
-  | 'jarvis-judice-ninke'
-  | 'stucki'
-  | 'atkinson'
-  | 'burkes'
-  | 'sierra'
-  | 'two-row-sierra'
-  | 'sierra-lite'
-  | 'stevenson-arce'
-  | 'bayer-2'
-  | 'bayer-4'
-  | 'bayer-8'
-  | 'bayer-16'
-  | 'clustered-dot'
-  | 'blue-noise'
-  | 'void-and-cluster'
-  | 'random'
-  | 'pattern-hatch';
+	| 'none'
+	| 'floyd-steinberg'
+	| 'false-floyd-steinberg'
+	| 'jarvis-judice-ninke'
+	| 'stucki'
+	| 'atkinson'
+	| 'burkes'
+	| 'sierra'
+	| 'two-row-sierra'
+	| 'sierra-lite'
+	| 'stevenson-arce'
+	| 'bayer-2'
+	| 'bayer-4'
+	| 'bayer-8'
+	| 'bayer-16'
+	| 'clustered-dot'
+	| 'blue-noise'
+	| 'void-and-cluster'
+	| 'random'
+	| 'pattern-hatch';
 
 type PaletteColor = {
-  name: string;
-  /** Present for visible colors. Omitted for transparent entries. */
-  hex?: string;
-  transparent?: boolean;
-  premium?: boolean;
-  source: 'wplace' | 'custom';
-  /** Future advanced control. Defaults to 1.0. */
-  gravity?: number;
+	name: string;
+	/** Present for visible colors. Omitted for transparent entries. */
+	hex?: string;
+	transparent?: boolean;
+	premium?: boolean;
+	source: 'wplace' | 'custom';
+	/** Future advanced control. Defaults to 1.0. */
+	gravity?: number;
 };
 
 type Palette = {
-  /** User-visible, customizable, case-sensitive stable identifier/display name. */
-  name: string;
-  readonly: boolean;
-  colors: PaletteColor[];
+	/** User-visible, customizable, case-sensitive stable identifier/display name. */
+	name: string;
+	readonly: boolean;
+	colors: PaletteColor[];
 };
 
 type AlphaMode = 'preserve' | 'premultiplied' | 'matte';
 
 type ConversionSettings = {
-  width: number;
-  height: number;
-  /** Persistent factor applied to the current source/crop dimensions. */
-  scaleFactor: number;
-  cropRect: CropRect | null;
-  /** Defaults to 'bilinear'. */
-  resizeMode: ResizeMode;
-  paletteName: string;
-  /** Defaults to 'oklab'. */
-  colorDistanceMode: ColorDistanceMode;
-  /** Defaults to 'none'. */
-  ditherAlgorithm: DitherAlgorithm;
-  ditherStrength: number;
-  ditherCoverage: 'full' | 'transitions' | 'edges';
-  ditherCoverageThreshold: number;
-  randomSeed: number;
-  serpentine: boolean;
-  /** Defaults to 'preserve'. */
-  alphaMode: AlphaMode;
-  /** Defaults to 0. */
-  alphaThreshold: number;
-  /** Canonical hex of an enabled visible palette color. */
-  matteColorKey: string;
-  usePaletteDarkestMatte: boolean;
+	width: number;
+	height: number;
+	/** Persistent factor applied to the current source/crop dimensions. */
+	scaleFactor: number;
+	cropRect: CropRect | null;
+	/** Defaults to 'bilinear'. */
+	resizeMode: ResizeMode;
+	paletteName: string;
+	/** Defaults to 'oklab'. */
+	colorDistanceMode: ColorDistanceMode;
+	/** Defaults to 'none'. */
+	ditherAlgorithm: DitherAlgorithm;
+	ditherStrength: number;
+	ditherCoverage: 'full' | 'transitions' | 'edges';
+	ditherCoverageThreshold: number;
+	randomSeed: number;
+	serpentine: boolean;
+	/** Defaults to 'preserve'. */
+	alphaMode: AlphaMode;
+	/** Defaults to 0. */
+	alphaThreshold: number;
+	/** Canonical hex of an enabled visible palette color. */
+	matteColorKey: string;
+	usePaletteDarkestMatte: boolean;
 };
 
 type ProcessingStage = 'decode' | 'resize' | 'prepare-palette' | 'quantize' | 'dither' | 'finalize';
 
 type ProcessingProgress = {
-  jobId: string;
-  stage: ProcessingStage;
-  completed: number;
-  total: number;
-  percent: number;
+	jobId: string;
+	stage: ProcessingStage;
+	completed: number;
+	total: number;
+	percent: number;
 };
 
 type ProcessedImage = {
-  width: number;
-  height: number;
-  /** One enabled-export-palette index per output pixel. Primary export data and full-resolution preview source. */
-  indices: Uint8Array;
-  /** Enabled entries in PNG PLTE order. */
-  palette: PaletteColor[];
-  /** Optional full-resolution or cached display preview buffer generated from indices/palette. */
-  preview?: ImageData | ImageBitmap;
+	width: number;
+	height: number;
+	/** One enabled-export-palette index per output pixel. Primary export data and full-resolution preview source. */
+	indices: Uint8Array;
+	/** Enabled entries in PNG PLTE order. */
+	palette: PaletteColor[];
+	/** Optional full-resolution or cached display preview buffer generated from indices/palette. */
+	preview?: ImageData | ImageBitmap;
 };
 
 type PreviewState = {
-  mode: PreviewMode;
-  revealPercent: number;
-  zoom: number;
-  panX: number;
-  panY: number;
-  /**
-   * Desktop-only preview pane size as a fraction in `0.25..0.80`,
-   * representing the preview pane's share of the resizable
-   * preview/controls split. Ignored on mobile, which uses natural
-   * page scroll without a resize handle.
-   */
-  previewPaneSize: number;
+	mode: PreviewMode;
+	revealPercent: number;
+	zoom: number;
+	panX: number;
+	panY: number;
+	/**
+	 * Desktop-only preview pane size as a fraction in `0.25..0.80`,
+	 * representing the preview pane's share of the resizable
+	 * preview/controls split. Ignored on mobile, which uses natural
+	 * page scroll without a resize handle.
+	 */
+	previewPaneSize: number;
 };
 ```
 
@@ -1053,29 +1053,29 @@ Educational metadata:
 
 ```ts
 type ColorSpaceInfo = {
-  id: ColorDistanceMode;
-  label: string;
-  shortDescription: string;
-  mathSummary: string;
-  visualizer:
-    | 'rgb-cube'
-    | 'hsl-cylinder'
-    | 'hsv-cone'
-    | 'xyz-volume'
-    | 'lab-cloud'
-    | 'lch-cylinder'
-    | 'oklab-gamut'
-    | 'oklch-cylinder';
+	id: ColorDistanceMode;
+	label: string;
+	shortDescription: string;
+	mathSummary: string;
+	visualizer:
+		| 'rgb-cube'
+		| 'hsl-cylinder'
+		| 'hsv-cone'
+		| 'xyz-volume'
+		| 'lab-cloud'
+		| 'lch-cylinder'
+		| 'oklab-gamut'
+		| 'oklch-cylinder';
 };
 
 type DitherInfo = {
-  id: DitherAlgorithm;
-  label: string;
-  family: 'none' | 'error-diffusion' | 'ordered' | 'blue-noise' | 'noise' | 'pattern';
-  shortDescription: string;
-  mathSummary: string;
-  kernel?: number[][];
-  matrix?: number[][];
+	id: DitherAlgorithm;
+	label: string;
+	family: 'none' | 'error-diffusion' | 'ordered' | 'blue-noise' | 'noise' | 'pattern';
+	shortDescription: string;
+	mathSummary: string;
+	kernel?: number[][];
+	matrix?: number[][];
 };
 ```
 
@@ -1184,9 +1184,13 @@ Post-MVP acceleration targets:
 
 ```ts
 type ProcessingBackend = {
-  id: 'worker-typescript' | 'wasm-simd' | 'webgl' | 'webgpu';
-  supports(settings: ConversionSettings): boolean;
-  process(input: ImageData, settings: ConversionSettings, palette: CompiledPalette): Promise<ImageData>;
+	id: 'worker-typescript' | 'wasm-simd' | 'webgl' | 'webgpu';
+	supports(settings: ConversionSettings): boolean;
+	process(
+		input: ImageData,
+		settings: ConversionSettings,
+		palette: CompiledPalette
+	): Promise<ImageData>;
 };
 ```
 

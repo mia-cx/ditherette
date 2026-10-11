@@ -32,8 +32,12 @@ export function reset(transientMismatchAt = 0) {
 
 export async function createDitherette(options) {
 	const id = ++nextId;
-	events.push({ type: 'initialize', id, threads: options.threads,
-		wasm: options.wasm instanceof WebAssembly.Module ? 'compiled' : 'bytes' });
+	events.push({
+		type: 'initialize',
+		id,
+		threads: options.threads,
+		wasm: options.wasm instanceof WebAssembly.Module ? 'compiled' : 'bytes'
+	});
 	if (wasmThreadPolicy !== undefined && options.threads !== wasmThreadPolicy)
 		throw new Error(`Wasm fixture requires ${wasmThreadPolicy} threads; got ${options.threads}.`);
 	if (id === initializationFailure) throw new Error('injected required startup failure');

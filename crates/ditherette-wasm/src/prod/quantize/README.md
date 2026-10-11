@@ -4,10 +4,10 @@ Scalar Wasm, 2026-09-28, release profile `opt-level = "s"`: `process` on a 1500Ã
 image of smooth ramps plus small per-pixel noise (photo-like colour counts), a
 64-colour palette, identity resize, no dithering, and a fresh processor per run.
 
-| Match policy | Before | After |
-| --- | ---: | ---: |
-| `oklab-euclidean` | 93 ms | 100 ms |
-| `cielab-euclidean` | 90 ms | 92 ms |
+| Match policy       |  Before |  After |
+| ------------------ | ------: | -----: |
+| `oklab-euclidean`  |   93 ms | 100 ms |
+| `cielab-euclidean` |   90 ms |  92 ms |
 | `cielab-ciede2000` | 3266 ms | 690 ms |
 
 The CIEDE2000 matcher retains the bounded exact-RGB memo used by other metrics.

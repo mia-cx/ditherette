@@ -26,18 +26,18 @@ The restacked baseline at `a53aef27` passed 102 native tests, two Node Wasm stor
 
 Validated on 2026-09-12 from `a53aef27` with the pnpm pin correction. A fresh isolated `@pnpm/exe@11.13.1` installation supplied pnpm, with Node 24.19.0 on PATH. No global installation or settings changed.
 
-| Command | Result |
-| --- | --- |
-| `pnpm install --frozen-lockfile` | Passed for all three workspaces; lockfiles unchanged. |
-| `pnpm package:build` | Scalar and threaded Wasm builds, TypeScript output, and package staging passed. |
-| `pnpm package:check` | Package/Cargo version alignment and TypeScript checks passed. |
-| `pnpm --filter ditherette-wasm check` | Rustfmt and Wasm-target compilation passed. |
-| `cargo check --locked --manifest-path crates/ditherette-wasm/Cargo.toml` | Native compilation passed. |
-| `pnpm wasm:test:native` | 102 native tests passed. |
-| `pnpm wasm:test` | Two Node Wasm storage-overflow tests passed; other binaries contain no Wasm tests. |
-| `pnpm exec vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | 120 tests across 16 files passed. |
-| `node --test scripts/benchmark-wasm-resize.test.mjs` | 15 deterministic tests passed. |
-| `git diff --check` and generated-output ignore checks | Passed. |
+| Command                                                                                         | Result                                                                             |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`                                                                | Passed for all three workspaces; lockfiles unchanged.                              |
+| `pnpm package:build`                                                                            | Scalar and threaded Wasm builds, TypeScript output, and package staging passed.    |
+| `pnpm package:check`                                                                            | Package/Cargo version alignment and TypeScript checks passed.                      |
+| `pnpm --filter ditherette-wasm check`                                                           | Rustfmt and Wasm-target compilation passed.                                        |
+| `cargo check --locked --manifest-path crates/ditherette-wasm/Cargo.toml`                        | Native compilation passed.                                                         |
+| `pnpm wasm:test:native`                                                                         | 102 native tests passed.                                                           |
+| `pnpm wasm:test`                                                                                | Two Node Wasm storage-overflow tests passed; other binaries contain no Wasm tests. |
+| `pnpm exec vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | 120 tests across 16 files passed.                                                  |
+| `node --test scripts/benchmark-wasm-resize.test.mjs`                                            | 15 deterministic tests passed.                                                     |
+| `git diff --check` and generated-output ignore checks                                           | Passed.                                                                            |
 
 Rust 1.97.0, nightly-2024-08-02, wasm-pack 0.15.0, and `opt-level = "s"` remain unchanged. No standalone benchmark timing workload or publication ran. Native benchmark-export smoke tests are not performance evidence.
 
@@ -45,19 +45,19 @@ Rust 1.97.0, nightly-2024-08-02, wasm-pack 0.15.0, and `opt-level = "s"` remain 
 
 Validated implementation checkpoint: `1cbe499`. All commands ran in the isolated S02 worktree.
 
-| Command or assertion | Result |
-| --- | --- |
-| `pnpm install --frozen-lockfile` | Passed for all three workspaces. |
-| `pnpm wasm:build` and `pnpm wasm:build:threads` | Passed; existing website URLs contain the generated variants. |
-| `pnpm package:build` | Passed; wrapper JavaScript/declarations, both variants, worker helper, and MIT license staged. |
-| `pnpm package:check` | Passed. A temporary Cargo version mismatch correctly failed; restoring `0.1.0` passed. |
-| `pnpm --filter ditherette-wasm check` | Rust formatting and Wasm-target compilation passed. |
-| `pnpm wasm:test:native` | 110 native tests passed. |
-| `pnpm exec vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | 120 tests across 16 files passed. |
-| `pnpm wasm:test` | Compilation and runner succeed, but discover zero Wasm tests. This inherited coverage gap remains explicit. |
-| Direct package/artifact assertions | Inert empty public import with throwing fetch/worker guards; valid Wasm bytes; identical crate, distribution, and legacy binaries; threaded worker and matching license present. |
-| Generated scalar export | `initSync` plus nearest resize of `[12,34,56,255]` from 1x1 to 2x2 returns four identical pixels. |
-| `git check-ignore` and `git diff --check` | Generated crate/package output, copied package license, and legacy artifacts remain ignored; diff is clean. |
+| Command or assertion                                                                            | Result                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`                                                                | Passed for all three workspaces.                                                                                                                                                 |
+| `pnpm wasm:build` and `pnpm wasm:build:threads`                                                 | Passed; existing website URLs contain the generated variants.                                                                                                                    |
+| `pnpm package:build`                                                                            | Passed; wrapper JavaScript/declarations, both variants, worker helper, and MIT license staged.                                                                                   |
+| `pnpm package:check`                                                                            | Passed. A temporary Cargo version mismatch correctly failed; restoring `0.1.0` passed.                                                                                           |
+| `pnpm --filter ditherette-wasm check`                                                           | Rust formatting and Wasm-target compilation passed.                                                                                                                              |
+| `pnpm wasm:test:native`                                                                         | 110 native tests passed.                                                                                                                                                         |
+| `pnpm exec vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | 120 tests across 16 files passed.                                                                                                                                                |
+| `pnpm wasm:test`                                                                                | Compilation and runner succeed, but discover zero Wasm tests. This inherited coverage gap remains explicit.                                                                      |
+| Direct package/artifact assertions                                                              | Inert empty public import with throwing fetch/worker guards; valid Wasm bytes; identical crate, distribution, and legacy binaries; threaded worker and matching license present. |
+| Generated scalar export                                                                         | `initSync` plus nearest resize of `[12,34,56,255]` from 1x1 to 2x2 returns four identical pixels.                                                                                |
+| `git check-ignore` and `git diff --check`                                                       | Generated crate/package output, copied package license, and legacy artifacts remain ignored; diff is clean.                                                                      |
 
 Using wasm-pack's cached `wasm-opt --print --all-features`, the scalar memory declaration is `(memory $0 17 32768)`. The threaded declaration is `(memory $mimport$0 18 32768 shared)`. Both maxima are 32768 64-KiB pages, or 2 GiB.
 
