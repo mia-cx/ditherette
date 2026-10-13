@@ -22,7 +22,7 @@ windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
 
 [dev-dependencies]
 ditherette-bench-oracle = { path = "../ditherette-bench-oracle" }
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [[bench]]
 name = "crit_spec_nearest"
