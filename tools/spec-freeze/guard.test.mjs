@@ -254,6 +254,33 @@ test('syntax rejects both directions, aliases, shared/adapter bridges, and sourc
 		);
 	}));
 
+test('inactive tail calls retain attribute and operand restrictions', () =>
+	fixture((root) => {
+		const path = `${CRATE}/src/prod/mod.rs`;
+		const original = readFileSync(join(root, path), 'utf8');
+		for (const expression of ['become f()', '#[allow(unreachable_code)] become f("spec")']) {
+			mutation(root, path, `${original}\n#[cfg(any())] fn tail_call() { ${expression}; }\n`, () =>
+				verifySyntax(root, binary)
+			);
+		}
+		// cfg must not hide attributes or the operand inside Syn's Verbatim tail calls.
+		for (const [expression, expected] of [
+			['#[path = "escape.rs"] become f()', /source-injection attribute: path/],
+			['#[unsafe(export_name = "escape")] become f()', /explicit exported symbols/],
+			['become crate::spec::f()', /forbidden semantic identifier: spec/],
+			['become f(crate::spec::f())', /forbidden semantic identifier: spec/],
+			['become f(include!("escape.rs"))', /source-injection macro: include/],
+			['become f({ #[path = "escape.rs"] become g(); })', /source-injection attribute: path/]
+		]) {
+			mutation(root, path, `${original}\n#[cfg(any())] fn tail_call() { ${expression}; }\n`, () =>
+				assert.throws(
+					() => verifySyntax(root, binary),
+					(error) => expected.test(error.stderr)
+				)
+			);
+		}
+	}));
+
 test('inactive macro paths reject opposite semantic families', () =>
 	fixture((root) => {
 		for (const [role, opposite] of [

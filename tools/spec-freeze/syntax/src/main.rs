@@ -2,7 +2,7 @@
 use std::{env, fs, path::Path};
 
 use quote::ToTokens;
-use syn::{visit::Visit, Attribute, Item, UseTree};
+use syn::{parse::Parser, visit::Visit, Attribute, Item, UseTree};
 
 struct Check<'a> {
     forbidden: &'a [&'a str],
@@ -22,6 +22,37 @@ fn contains_ident(tokens: proc_tokens::TokenStream, names: &[&str]) -> bool {
 }
 
 impl<'ast> Visit<'ast> for Check<'_> {
+    fn visit_expr(&mut self, expr: &'ast syn::Expr) {
+        let syn::Expr::Verbatim(tokens) = expr else {
+            syn::visit::visit_expr(self, expr);
+            return;
+        };
+        // Syn retains tail calls as tokens, including their statement attributes
+        // in Syn 3. Its default visitor skips both attributes and the operand.
+        let parse = |input: syn::parse::ParseStream| {
+            let attrs = input.call(Attribute::parse_outer)?;
+            let operand = if input.peek(syn::Token![become]) {
+                input.parse::<syn::Token![become]>()?;
+                Some(input.parse::<syn::Expr>()?)
+            } else {
+                input.parse::<proc_tokens::TokenStream>()?;
+                None
+            };
+            Ok((attrs, operand))
+        };
+        match parse.parse2(tokens.clone()) {
+            Ok((attrs, operand)) => {
+                for attr in &attrs {
+                    self.visit_attribute(attr);
+                }
+                if let Some(operand) = &operand {
+                    self.visit_expr(operand);
+                }
+            }
+            Err(error) => self.errors.push(error.to_string()),
+        }
+    }
+
     fn visit_ident(&mut self, ident: &'ast syn::Ident) {
         if ["asm", "global_asm", "naked_asm"].contains(&ident.to_string().trim_start_matches("r#"))
         {
