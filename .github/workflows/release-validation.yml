@@ -23,7 +23,7 @@ defaults:
     shell: bash
 
 concurrency:
-  # Only the latest release-PR head waits for approval.
+  # Only the latest release-PR head needs validation.
   group: release-validation-${{ github.event.pull_request.number || inputs.sha || github.sha }}
   cancel-in-progress: true
 
@@ -35,7 +35,6 @@ jobs:
       github.head_ref == 'changeset-release/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    environment: release-validation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

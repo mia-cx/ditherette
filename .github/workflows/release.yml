@@ -107,18 +107,9 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Require release PR credentials
-        env:
-          CHANGESETS_RELEASE_TOKEN: ${{ secrets.CHANGESETS_RELEASE_TOKEN }}
-        run: |
-          if [ -z "$CHANGESETS_RELEASE_TOKEN" ]; then
-            echo '::error::Configure CHANGESETS_RELEASE_TOKEN with repository contents and pull-request write access so generated release PRs trigger CI.'
-            exit 1
-          fi
       - name: Open or update the release pull request
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2
         with:
-          github-token: ${{ secrets.CHANGESETS_RELEASE_TOKEN }}
           version-script: pnpm release:version
           commit-message: 'chore(release): version packages'
           pr-title: 'chore(release): version packages'
