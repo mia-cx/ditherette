@@ -11,7 +11,7 @@ Ditherette turns an image into palette-limited pixel art in the browser. The int
 - **Collapsing.** Every docked column except the preview's is a sidebar, and the window at its top carries a sidebar button: it folds the whole column into a strip of vertical tabs, split evenly, and opens it again. A window that shares its column rolls up to its tab bar with its caret; a floating window rolls up to its title. Windows rolled up before a sidebar folds stay rolled up when it opens. Other side columns keep their widths while a sidebar folds or opens, so the preview takes up the difference. Collapse state persists with the layout, and Reset layout expands everything.
 - **Persistence.** The layout saves to `localStorage` on every change and restores on load. Window > Reset layout rebuilds the default. Closing every window shows a Reset layout button.
 - **Below 1024px.** The same controls stack: preview first, then an accordion of Effects, Dimensions, Dither, Color space, and Scopes, then Palette. Effect rows expand in place instead of opening windows.
-- **Export** stays in a bar under the workspace at every width.
+- **Export** stays in a bar under the workspace at every width. It shows the output size, colour count, and pixels to paint, which leave out Transparent. The palette table's Pixels column counts each colour in the output. Both show — until the output matches the current settings.
 
 ## Pipeline order
 

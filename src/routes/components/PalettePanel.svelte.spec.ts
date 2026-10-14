@@ -49,11 +49,7 @@ beforeEach(() => {
 });
 
 const pixelCell = (colourName: string) =>
-	page
-		.getByRole('row')
-		.filter({ hasText: colourName })
-		.getByRole('cell')
-		.nth(5);
+	page.getByRole('row').filter({ hasText: colourName }).getByRole('cell').nth(5);
 
 it('shows per-colour pixel counts and a dash while the output is out of date', async () => {
 	render(PalettePanel);
@@ -65,7 +61,9 @@ it('shows per-colour pixel counts and a dash while the output is out of date', a
 	const first = selectedPalette.get()[0]!;
 	await expect.element(pixelCell(first.name)).toHaveTextContent('3');
 	await expect.element(pixelCell('Transparent')).toHaveTextContent('1');
-	const other = selectedPalette.get().find((color) => color.name !== first.name && color.kind !== 'transparent')!;
+	const other = selectedPalette
+		.get()
+		.find((color) => color.name !== first.name && color.kind !== 'transparent')!;
 	await expect.element(pixelCell(other.name)).toHaveTextContent('0');
 
 	processingProgress.set({ stage: 'Matching', progress: 0.5 });

@@ -245,7 +245,7 @@ Disabled controls must explain why they are disabled where it is not obvious.
   - `gaussian` — blurrier but useful as an anti-aliasing prefilter.
   - `multi-step` — repeated downscale passes using a simpler filter for quality/performance tradeoffs.
 - Browser canvas `imageSmoothingQuality` may be used only as an implementation fallback. The app should expose named algorithms with documented behavior, not vague browser-dependent “high quality”.
-- Export strip exposes output format `PNG`, dimensions, scale, and active color count.
+- Export strip exposes output format `PNG`, dimensions, scale, and active color count, plus the pixels to paint: every output pixel except Transparent.
 - PNG is the only image export format in the MVP.
 - Exported PNG must be an indexed palette PNG when the output uses ≤256 palette entries: PNG color type 3 with `PLTE` chunk and `tRNS` chunk when Transparent is present/enabled.
 - PNG `PLTE` includes all enabled palette entries in stable palette order, not disabled entries and not only colors used in the output.
@@ -300,6 +300,7 @@ Required UI:
   - swatch,
   - color name/label,
   - hex,
+  - pixel count in the finished output,
   - free/premium/custom status,
   - per-row actions menu/buttons, including row-level **Edit**.
 - On mobile, list mode should collapse secondary columns/actions into a clear **Edit** button or row action that opens a shadcn-svelte `Dialog` with details and edit controls.
@@ -733,7 +734,7 @@ Per-algorithm explanation expectations:
 - Output preview uses crisp rendering when the resize algorithm is `nearest`; otherwise it uses default interpolation. The preview always renders the actual processed pixels — there is no separate pixel-perfect toggle.
 - Show output dimensions and active color count. Transparent counts as an active color when enabled.
 - Bottom export strip/card:
-  - output metadata: dimensions, palette color count, format,
+  - output metadata: dimensions, palette color count, pixels to paint, format,
   - optional scale controls,
   - primary **Download PNG** button.
 - Do not include a Copy PNG button in the MVP, even on browsers that support image clipboard writes, because Wplace does not support pasting images as templates.

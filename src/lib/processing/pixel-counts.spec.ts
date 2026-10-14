@@ -79,7 +79,12 @@ const color = (name: string, kind: PaletteColor['kind'] = 'free'): PaletteColor 
 
 describe('countPalettePixels', () => {
 	it('counts each colour and leaves Transparent out of the painted total', () => {
-		const palette = [color('Black'), color('White'), color('Grey'), color('Transparent', 'transparent')];
+		const palette = [
+			color('Black'),
+			color('White'),
+			color('Grey'),
+			color('Transparent', 'transparent')
+		];
 		const counts = countPalettePixels({
 			indices: new Uint8Array([0, 0, 1, 3, 3, 3]),
 			palette,
