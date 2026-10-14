@@ -12,7 +12,7 @@ Release planning runs for every push without a shared queue. Only release-PR upd
 
 ## First-release setup
 
-- Set the `CHANGESETS_RELEASE_TOKEN` organization Actions secret with access to this repository. Its token needs contents and pull-request write access. GitHub Actions must be allowed to create pull requests. Using a separate token lets generated release PRs trigger normal CI.
+- Allow GitHub Actions to create pull requests in repository settings. Changesets uses the built-in `GITHUB_TOKEN`, so release PRs come from `github-actions[bot]`. Use **Approve workflows** on the release PR to start its checks. Release validation has no separate environment approval.
 - Configure the `production` GitHub environment with `CLOUDFLARE_API_TOKEN` and the `CLOUDFLARE_ACCOUNT_ID` variable. The token needs permission to deploy the existing Worker and its custom domain. Deployment uses Wrangler's existing `production` environment for `ditherette.mia.cx`.
 - Configure the `npm-publish` GitHub environment and npm trusted publishing for `mia-cx/ditherette`, calling workflow `release.yml`. The npm publisher's environment field is optional; if set, use `npm-publish`. npm validates the calling workflow when a reusable workflow publishes. No npm token is stored in this pipeline.
 - The first candidate uses an approved local npm bootstrap without provenance because trusted publishing needs the package to exist first. Build and verify the exact archive before publishing it under `rc`. Configure trusted publishing before an ordinary release.
