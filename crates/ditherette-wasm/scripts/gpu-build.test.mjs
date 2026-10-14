@@ -23,7 +23,12 @@ test('ordinary Engine CI reaches the public fallback and explicitly builds the o
 	const command = manifest.scripts['test:gpu'];
 	assert.match(command, /scripts\/build\.mjs gpu/);
 	assert.match(command, /scripts\/stage-wasm\.mjs gpu/);
-	for (const suite of ['gpu-build', 'gpu-effects-bindings', 'gpu-effects-transport'])
+	for (const suite of [
+		'gpu-build',
+		'gpu-effects-bindings',
+		'gpu-effects-admission',
+		'gpu-effects-transport'
+	])
 		assert.ok(command.includes(`${suite}.test.mjs`));
 	const workflow = await readFile(new URL('.github/workflows/ci.yml', root), 'utf8');
 	const engine = workflow.slice(

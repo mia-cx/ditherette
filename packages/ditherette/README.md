@@ -267,11 +267,35 @@ The fresh scalar fallback processor is disposed after each call.
 
 The budget charges the package-owned async source snapshot, Wasm source and result capacity, row-aligned texture/upload staging,
 packed output/readback buffers, wgpu's temporary Wasm mapped copy, parameter copies, effect bookkeeping, and retained backend/pipeline records.
-Numeric admission charges the effects string/decode/table capacity before text crosses into Wasm.
+Every enabled call first admits the source snapshot plus `512 KiB + 324 * canonicalJsonBytes` for decoding.
+This conservative reserve precedes both GPU and scalar string ABIs, including missing assets, no capability,
+unsupported chains, and calls after retirement. It uses numeric metadata in the package and needs no GPU factory.
+Over-budget decoding reports `memory-limit` before either decoder allocates; it cannot safely fall back to the same decoder.
+The synchronous `createDitherette` contract is unchanged. Disabled/empty chains bypass this reserve and return the source.
+
+The decoder reserve follows the locked Wasm allocation structures, rather than measured page growth:
+
+| Ownership                                              | Reserve per canonical ASCII byte | Capacity basis                                                                                                          |
+| ------------------------------------------------------ | -------------------------------: | ----------------------------------------------------------------------------------------------------------------------- |
+| Whole `serde_json::Value` tree                         |                               96 | 24-byte values; minimum-four/geometric Vec capacity, including old and new realloc storage; BTree nodes below 512 bytes |
+| Serde flatten, internally tagged, and untagged buffers |                              192 | Three 64-byte allowances for 16-byte `Content` sequences and 32-byte map pairs                                          |
+| Decoded curves, masks, grid axes/rows and points       |                               32 | f32/pair/row-vector and curve-enum Vec capacities, including failed untagged attempts                                   |
+| String ABI and decoder string scratch                  |                                4 | ASCII wire allocation and string scratch capacity                                                                       |
+
+Canonical normalization emits bounded enums/numbers and known keys, with no escaped or caller-defined strings.
+For a nonempty array of `n` entries, its `n + 1` bracket/comma bytes cover `max(4, 3n)` slots.
+This includes the largest minimum capacity and a moving realloc's old plus new storage.
+At 24 bytes per `Value`, 96 bytes per punctuation byte is sufficient; at 16 bytes per `Content`, 64 is sufficient.
+Object key/colon/quote punctuation bounds the BTree nodes and `Content` map pairs separately.
+Canonical objects have at least two fields; the locked allocator requests 408 bytes for a two-field BTree node.
+String payload bytes cover their own allocations. These separate byte classes keep nested containers from double-charging the same text.
+The fixed 512 KiB reserves bounded step/planning records. ABI tests pin the package constants to the optional artifact.
+A private diagnostic allocator validates these allowances using requested live layouts, charging old and new realloc storage together.
+Its fixture peaks are validation evidence, not the derivation of this general admission bound.
 Caller-owned input, returned JS buffers, and driver/compiler internals follow the existing ownership exclusions.
 After artifact retirement, engine-managed pages may wait for collection; the facade retains no instance reference.
 Caller-retained diagnostic bindings/exports remain caller-owned and can keep their own instance alive.
-GPU budget rejection can still succeed on CPU; CPU budget rejection reports `memory-limit`.
+GPU image-buffer budget rejection can still succeed on CPU; CPU budget rejection reports `memory-limit`.
 
 `applyEffects(request)` accepts packed RGBA8 only. Image decoding belongs to the host.
 The unreleased optional `ImageBitmap` argument was removed because the locked external-image uploader

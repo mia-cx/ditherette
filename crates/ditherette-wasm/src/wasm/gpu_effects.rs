@@ -58,8 +58,8 @@ fn plan(
     let stage =
         ChannelLookup::from_effects(&steps).map_err(|error| JsError::new(&error.to_string()))?;
     let mut memory = LookupMemory::new(dimensions);
-    // wasm-bindgen's input string plus decoding's temporary JSON text capacity.
-    memory.required_bytes += 2 * effects.len() as u64;
+    // Reserve the Value tree, serde buffers and decoded curves, not just text.
+    memory.required_bytes += LookupMemory::DECODER_BYTES_PER_JSON_BYTE * effects.len() as u64;
     Ok((stage, memory))
 }
 

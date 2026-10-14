@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createScalarBindings } from '../dist/wasm/gpu/ditherette_wasm.factory.js';
-import { initializeGpuEffects } from '../dist/gpu-effects.js';
+import { gpuEffectsDecoderBytes, initializeGpuEffects } from '../dist/gpu-effects.js';
 import { createDitherette } from '../dist/index.js';
 
 const scalar = await WebAssembly.compile(
@@ -22,6 +22,8 @@ const source = {
 test('ordinary Wasm has no GPU exports; the opt-in ABI plans exact enabled-chain eligibility', () => {
 	assert.ok(!WebAssembly.Module.exports(scalar).some(({ name }) => name.startsWith('privateGpu')));
 	assert.ok(WebAssembly.Module.exports(gpu).some(({ name }) => name === 'privateGpuApplyEffects'));
+	for (const bytes of [0, 1, 3137, 2_978_689])
+		assert.equal(bindings.privateGpuEffectsPlanningBytes(bytes), gpuEffectsDecoderBytes(bytes));
 	const plan = (steps) =>
 		bindings.privateGpuEffectsPlan(JSON.stringify(steps), source.width, source.height);
 	assert.ok(plan(effects) > source.data.length * 7);
@@ -77,16 +79,12 @@ test('600-byte admission rejects 64 real exposure steps before the Wasm string p
 		await artifact.default({ module_or_path: gpu });
 		let plannerEntries = 0;
 		let numericAdmissions = 0;
-		let admittedBytes;
-		let planningBytes;
 		const bounded = initializeGpuEffects(
 			{
 				...artifact,
 				privateGpuEffectsPlanningBytes(bytes) {
 					numericAdmissions++;
-					admittedBytes = bytes;
-					planningBytes = artifact.privateGpuEffectsPlanningBytes(bytes);
-					return planningBytes;
+					return artifact.privateGpuEffectsPlanningBytes(bytes);
 				},
 				privateGpuEffectsPlan(...args) {
 					plannerEntries++;
@@ -116,10 +114,8 @@ test('600-byte admission rejects 64 real exposure steps before the Wasm string p
 			}),
 			{ code: 'memory-limit', path: 'memoryLimitBytes' }
 		);
-		assert.equal(numericAdmissions, 1);
+		assert.equal(numericAdmissions, 0, 'admission metadata does not require GPU bindings');
 		assert.equal(plannerEntries, 0);
-		assert.ok(planningBytes > 600);
-		if (!mixed) assert.equal(admittedBytes, 3137);
 		bounded.dispose();
 	}
 });

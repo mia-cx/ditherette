@@ -60,6 +60,19 @@ export interface GpuEffectsBindings {
 }
 
 /**
+ * Decoder admission for validated canonical ASCII JSON, available without a GPU artifact.
+ * Locked Wasm Value/Content occupy 24/16 bytes. Reserve per input byte: 96 for the
+ * Value tree, 3 * 64 for flatten/tagged/untagged Content buffers, 32 for decoded
+ * curve/grid vectors, and 4 for wire/string scratch. Vec reserves include minimum
+ * capacity four and old+new storage during growth; object nodes fit 512 bytes.
+ * The fixed reserve covers bounded step/planning records. The Wasm ABI tests pin
+ * this numeric metadata; no module, factory, or instance survives CPU retirement.
+ */
+export function gpuEffectsDecoderBytes(effectsBytes: number): number {
+	return 512 * 1024 + (96 + 3 * 64 + 32 + 4) * effectsBytes;
+}
+
+/**
  * Create an optional effects processor without changing synchronous createDitherette.
  * Missing WebGPU or optional assets uses the scalar artifact. No Wasm loads on package import.
  */
@@ -160,14 +173,23 @@ export function initializeGpuEffects(
 						'memoryLimitBytes',
 						'Source snapshot exceeds the instance memory limit.'
 					);
+				// Both backends use the same decoder. Rejection must precede either
+				// string ABI, even without GPU assets or after artifact retirement.
+				if (gpuEffectsDecoderBytes(input.effects.json.length) + bytes > options.memoryLimitBytes) {
+					if (bindings) retire('MemoryLimit');
+					throw new DitheretteError(
+						'memory-limit',
+						'memoryLimitBytes',
+						'Effects decoder admission exceeds the instance memory limit.'
+					);
+				}
 				let reason = unavailable;
 				let adapter: string | undefined;
 				let output: Rgba8Image | undefined;
 				if (bindings) {
 					try {
-						// The validator emits ASCII-only keys, enum values and numbers.
-						// Ask the numeric ABI to admit its wire/decode/table capacity
-						// before wasm-bindgen allocates a copy of that JSON string.
+						// The ABI includes backend records alongside decoder capacity.
+						// Its inputs remain numeric until all planning capacity fits.
 						const planning = bindings.privateGpuEffectsPlanningBytes(input.effects.json.length);
 						reason = planning > options.memoryLimitBytes ? 'MemoryLimit' : '';
 						if (!reason) {
