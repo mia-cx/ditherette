@@ -14,6 +14,7 @@
 		DialogTitle
 	} from '$lib/components/ui/dialog';
 	import { paletteColorEnabled } from '$lib/palette/wplace';
+	import { pixelCounts } from '$lib/processing/pixel-counts';
 	import { cn } from '$lib/utils';
 	import {
 		activePalette,
@@ -688,7 +689,7 @@
 				</p>
 			{/if}
 
-			<div class="flex min-h-0 flex-1 flex-col border border-border bg-background">
+			<div class="@container flex min-h-0 flex-1 flex-col border border-border bg-background">
 				<div
 					class="sticky top-0 z-20 flex min-h-9 flex-wrap items-center gap-2 border-b border-border bg-background/95 px-2 py-1.5 backdrop-blur"
 				>
@@ -740,9 +741,12 @@
 							<th class="w-8 p-1.5"><span class="sr-only">Swatch</span></th>
 							<th class="w-8 p-1.5"><span class="sr-only">Visibility</span></th>
 							<th class="p-1.5 text-left font-medium">Name</th>
-							<th class="p-1.5 text-left font-medium">Hex</th>
-							<th class="p-1.5 text-left font-medium">Tags</th>
-							<th class="p-1.5 text-right font-medium">Actions</th>
+							<th class="p-1.5 text-left font-medium @max-lg:hidden">Hex</th>
+							<th class="p-1.5 text-right font-medium">Pixels</th>
+							<th class="p-1.5 text-left font-medium @max-lg:hidden">Tags</th>
+							<th class="p-1.5 text-right font-medium"
+								><span class="@max-lg:sr-only">Actions</span></th
+							>
 						</tr>
 					</thead>
 					<tbody>
@@ -823,6 +827,7 @@
 	{@const selected = selectedColorKeys[color.key] === true}
 	{@const editable = color.kind === 'transparent' || !isBuiltIn}
 	{@const mutable = !isBuiltIn && color.kind !== 'transparent'}
+	{@const pixels = $pixelCounts ? ($pixelCounts.byKey.get(color.key) ?? 0).toLocaleString() : '—'}
 	<tr
 		class="border-t border-border hover:bg-muted/40 data-selected:bg-muted/50 data-disabled:opacity-55"
 		data-disabled={!isVisible || undefined}
@@ -844,20 +849,36 @@
 					setPaletteColorEnabled(color.key, next === true, currentPalette.name)}
 			/>
 		</td>
-		<td class="max-w-32 truncate p-1.5 align-middle font-medium">{color.name}</td>
-		<td class="p-1.5 align-middle font-mono text-muted-foreground">
+		<td class="max-w-32 p-1.5 align-middle @max-lg:max-w-20">
+			<div class="truncate font-medium">{color.name}</div>
+			<div class="mt-0.5 flex flex-wrap items-center gap-1 @lg:hidden">
+				{#if color.kind !== 'transparent'}
+					<span class="font-mono text-muted-foreground">{color.key}</span>
+				{/if}
+				{@render kindBadge(color)}
+			</div>
+		</td>
+		<td class="p-1.5 align-middle font-mono text-muted-foreground @max-lg:hidden">
 			{color.kind === 'transparent' ? '—' : color.key}
 		</td>
-		<td class="p-1.5 align-middle">{@render kindBadge(color)}</td>
+		<td class="p-1.5 text-right align-middle tabular-nums">{pixels}</td>
+		<td class="p-1.5 align-middle @max-lg:hidden">{@render kindBadge(color)}</td>
 		<td class="p-1.5 align-middle">
 			<div class="flex justify-end gap-1">
-				<Button size="xs" variant="ghost" disabled={!editable} onclick={() => editColor(color)}>
+				<Button
+					size="xs"
+					variant="ghost"
+					class="@max-lg:w-6 @max-lg:px-0"
+					disabled={!editable}
+					onclick={() => editColor(color)}
+				>
 					<PencilIcon weight="bold" />
-					Edit
+					<span class="@max-lg:sr-only">Edit</span>
 				</Button>
 				<Button
 					size="icon-xs"
 					variant="ghost"
+					class="@max-lg:hidden"
 					disabled={!mutable}
 					aria-label="Duplicate {color.name}"
 					onclick={() => duplicateColor(color)}
@@ -867,7 +888,7 @@
 				<Button
 					size="icon-xs"
 					variant="ghost"
-					class="hover:text-destructive"
+					class="hover:text-destructive @max-lg:hidden"
 					disabled={!mutable}
 					aria-label="Delete {color.name}"
 					onclick={() => deleteColor(color)}

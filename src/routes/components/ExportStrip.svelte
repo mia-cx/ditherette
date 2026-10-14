@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { exportable, exportPng } from '$lib/processing/export';
+	import { pixelCounts } from '$lib/processing/pixel-counts';
 	import { processedImage } from '$lib/stores/app';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 
@@ -13,6 +14,9 @@
 		$processedImage ? `${$processedImage.width} × ${$processedImage.height}` : 'No output'
 	);
 	const colorLabel = $derived($processedImage ? `${$processedImage.palette.length} colours` : '—');
+	const paintLabel = $derived(
+		`${$pixelCounts ? $pixelCounts.painted.toLocaleString() : '—'} px to paint`
+	);
 </script>
 
 <section
@@ -25,6 +29,7 @@
 		<Badge variant="outline" class="font-mono">PNG</Badge>
 		<Badge variant="outline">{sizeLabel}</Badge>
 		<Badge variant="outline">{colorLabel}</Badge>
+		<Badge variant="outline">{paintLabel}</Badge>
 		<span class="hidden text-xs text-muted-foreground sm:inline">Indexed PNG · PLTE + tRNS</span>
 	</div>
 
