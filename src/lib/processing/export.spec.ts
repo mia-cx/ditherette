@@ -173,8 +173,12 @@ describe('export lifecycle', () => {
 			const signal = vi.mocked(encodeIndexedPngOffThread).mock.calls[0][1]!;
 			if (change === 'result') processedImage.set({ ...exportableImage() });
 			if (change === 'source') sourceImageData.set(image());
-			if (change === 'settings')
-				outputSettings.set({ ...outputSettings.get(), width: outputSettings.get().width + 1 });
+			if (change === 'settings') {
+				const previous = outputSettings.get();
+				outputSettings.set({ ...previous, width: previous.width + 1 });
+				// Returning to the same identity must not revive the cancelled export.
+				outputSettings.set(previous);
+			}
 			if (change === 'processing') processingProgress.set({ stage: 'quantize', progress: 1 });
 			if (change === 'cancel') cancelPngExport();
 			if (change === 'pagehide') window.dispatchEvent(new Event('pagehide'));
