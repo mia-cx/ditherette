@@ -168,6 +168,7 @@ jobs:
       - name: Check and test the website
         run: |
           pnpm exec playwright install --with-deps chromium
+          pnpm test:typography
           pnpm check
           pnpm exec vitest run
 
