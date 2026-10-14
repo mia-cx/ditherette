@@ -19,8 +19,6 @@ const source = {
 	height: 19,
 	data: Uint8Array.from({ length: 37 * 19 * 4 }, (_, i) => i & 255)
 };
-const request = { version: 1, source, effects };
-
 test('ordinary Wasm has no GPU exports; the opt-in ABI plans exact enabled-chain eligibility', () => {
 	assert.ok(!WebAssembly.Module.exports(scalar).some(({ name }) => name.startsWith('privateGpu')));
 	assert.ok(WebAssembly.Module.exports(gpu).some(({ name }) => name === 'privateGpuApplyEffects'));
