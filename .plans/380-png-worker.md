@@ -8,7 +8,7 @@
 
 ## TODOs
 - [x] Replace row/zlib/chunk staging with one IDAT buffer; add cancellable dedicated worker.
-- [ ] Integrate export identity/teardown and verify real PNG decoding and lifecycle.
+- [x] Integrate export identity/teardown and verify real PNG decoding and lifecycle.
 - [ ] Capture browser flow evidence and prepare exclusive before/after measurements; file the child issue PR.
 
 ## Notes
@@ -17,3 +17,4 @@
 - Child issue tracks this slice only; umbrella remains open.
 - Measurements require parent scheduling, the build lock and host benchmark leases.
 - Focused server tests passed, 28 tests. Workspace scalar/threaded package build passed.
+- `pnpm check` passed with zero errors and warnings. Focused ESLint passed.
