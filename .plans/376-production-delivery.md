@@ -13,7 +13,7 @@ Deploy verified main commits independently of npm release eligibility. Parent ow
 
 - [x] Add main delivery, supersession guards and executable workflow tests.
 - [x] Document delivery and recovery; run release tooling and focused lint.
-- [~] Review every changed file, rebase, push and file the non-draft PR.
+- [x] Review every changed file, rebase, push and file the non-draft PR.
 
 ## Notes
 
@@ -24,3 +24,4 @@ Deploy verified main commits independently of npm release eligibility. Parent ow
 - No relevant GitHub Project exists. Issue uses the sibling v1 milestone.
 - Workflow tests pass 21/21, including caller isolation. Actionlint 1.7.12, focused Prettier and ESLint pass.
 - Complete release tooling suite passes 54/54. Delivery docs distinguish CI website recovery from npm release retries.
+- Reviewed every changed hunk and rebased onto c16ba62a. Rebased release suite, focused Prettier/ESLint, actionlint and diff checks pass. Non-draft PR https://github.com/mia-cx/ditherette/pull/382 is linked to this thread. Parent owns CI review, merge and production rollout.
