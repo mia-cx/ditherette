@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { selectedPalette, setPaletteColorEnabled, sourceImageData } from '$lib/stores/app';
+import {
+	outputSettings,
+	selectedPalette,
+	setPaletteColorEnabled,
+	sourceImageData
+} from '$lib/stores/app';
 import {
 	addEffect,
 	effectLayers,
@@ -20,6 +25,8 @@ import {
 	maskInputs,
 	shownMask,
 	startLiveEffects,
+	RETAINED_BYTES,
+	RETAINED_COMPILES,
 	type LiveEffectsRequest,
 	type LiveEffectsResponse
 } from './live-effects';
@@ -50,6 +57,20 @@ class ControlledWorker {
 				outcome instanceof Error
 					? { type: 'mask-failed', id, sourceId, key, message: outcome.message }
 					: { type: 'masked', id, sourceId, key, results: outcome }
+		} as MessageEvent<LiveEffectsResponse>);
+	}
+	/** Answer a compile request with a failure, the latest by default. */
+	fail(message: string, request = this.compiles.at(-1)!) {
+		const { id, sourceId, key } = request;
+		this.onmessage?.({
+			data: { type: 'failed', id, sourceId, key, message }
+		} as MessageEvent<LiveEffectsResponse>);
+	}
+	/** Post the colour index for the loaded source. */
+	index(pixels: Uint32Array) {
+		const source = this.messages.filter((message) => message.type === 'source').at(-1)!;
+		this.onmessage?.({
+			data: { type: 'indexed', sourceId: source.sourceId, pixels, count: pixels.length }
 		} as MessageEvent<LiveEffectsResponse>);
 	}
 	/** Answer a compile request, the latest by default. */
@@ -380,5 +401,243 @@ describe('analysed fits', () => {
 		expect(resolvedFits.get().size).toBe(0);
 		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
 		expect(resolvedFits.get().size).toBe(1);
+	});
+});
+
+describe('retained compiles', () => {
+	const curves = [
+		{
+			kind: 'remap',
+			x: { model: 'oklch', channel: 'lightness' },
+			y: { model: 'oklch', channel: 'lightness' },
+			points: [
+				[0, 0],
+				[1, 1]
+			]
+		}
+	];
+	const other = [
+		{
+			kind: 'remap',
+			x: { model: 'oklch', channel: 'lightness' },
+			y: { model: 'oklch', channel: 'lightness' },
+			points: [
+				[0, 0.25],
+				[1, 0.75]
+			]
+		}
+	];
+
+	/** Two enabled exposure layers: the full pipeline is chain A, disabling `y` gives chain B. */
+	function twoLayers() {
+		const x = addEffect('exposure');
+		const y = addEffect('exposure');
+		updateEffect(y.id, { effect: 'exposure', enabled: true, stops: 1 });
+		return { x, y };
+	}
+
+	it('serves a return to recent settings from the retained compiles', async () => {
+		const { x } = twoLayers();
+		const worker = ControlledWorker.instances[0]!;
+		const source = sourceImageData.get()!;
+		const resultsA = new Uint32Array([0xa]);
+		const resultsB = new Uint32Array([0xb]);
+
+		worker.reply(resultsA);
+		expect(worker.compiles).toHaveLength(2);
+		worker.reply(resultsA);
+		expect(compiledEffects.get()?.results).toBe(resultsA);
+
+		setEffectEnabled(x.id, false);
+		expect(worker.compiles).toHaveLength(3);
+		worker.reply(resultsB);
+		expect(compiledEffects.get()?.results).toBe(resultsB);
+
+		setEffectEnabled(x.id, true);
+		expect(worker.compiles).toHaveLength(3);
+		expect(compiledEffects.get()?.results).toBe(resultsA);
+		await expect(compiledEffectsFor(source, currentEffectsKey())).resolves.toBe(resultsA);
+	});
+
+	it('keeps a current chain when an older reply lands after returning to it', () => {
+		const { x } = twoLayers();
+		const worker = ControlledWorker.instances[0]!;
+		const resultsA = new Uint32Array([0xa]);
+		const resultsB = new Uint32Array([0xb]);
+		worker.reply(resultsA);
+		worker.reply(resultsA);
+
+		setEffectEnabled(x.id, false);
+		expect(worker.compiles).toHaveLength(3);
+		setEffectEnabled(x.id, true);
+		expect(compiledEffects.get()?.results).toBe(resultsA);
+
+		worker.reply(resultsB);
+		expect(compiledEffects.get()?.results).toBe(resultsA);
+
+		// The stale reply was still retained, so going back to chain B costs nothing.
+		setEffectEnabled(x.id, false);
+		expect(worker.compiles).toHaveLength(3);
+		expect(compiledEffects.get()?.results).toBe(resultsB);
+	});
+
+	it('retains the fits that analysis steps read alongside their results', () => {
+		const layer = addEffect('palette-fit');
+		const worker = ControlledWorker.instances[0]!;
+		worker.reply(new Uint32Array([1]), [{ index: 0, curves }]);
+		expect(resolvedFits.get().get(layer.id)).toBe(curves);
+
+		const colour = selectedPalette.get().find((item) => item.rgb)!;
+		setPaletteColorEnabled(colour.key, false);
+		expect(worker.compiles).toHaveLength(2);
+		worker.reply(new Uint32Array([2]), [{ index: 0, curves: other }]);
+		expect(resolvedFits.get().get(layer.id)).toBe(other);
+
+		setPaletteColorEnabled(colour.key, true);
+		expect(worker.compiles).toHaveLength(2);
+		expect(resolvedFits.get().get(layer.id)).toBe(curves);
+
+		// The crop is part of the key too, so changing it still compiles.
+		const settings = outputSettings.get();
+		try {
+			outputSettings.set({ ...settings, crop: { x: 0, y: 0, width: 2, height: 2 } });
+			expect(worker.compiles).toHaveLength(3);
+		} finally {
+			outputSettings.set(settings);
+		}
+	});
+
+	it('retains nothing across a new source', () => {
+		addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		worker.reply(new Uint32Array([1]));
+
+		sourceImageData.set(image());
+		expect(worker.messages.filter((message) => message.type === 'source')).toHaveLength(2);
+		expect(worker.compiles).toHaveLength(2);
+	});
+
+	it('does not load a new source early while every effect is off', () => {
+		const layer = addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		worker.reply(new Uint32Array([1]));
+		worker.index(new Uint32Array(4));
+		setEffectEnabled(layer.id, false);
+
+		sourceImageData.set(image());
+		expect(effectsIndex.get()).toBeUndefined();
+		expect(compiledEffects.get()).toBeUndefined();
+		expect(worker.messages.filter((message) => message.type === 'source')).toHaveLength(1);
+
+		setEffectEnabled(layer.id, true);
+		const messages = worker.messages.map((message) => message.type);
+		expect(messages.slice(-2)).toEqual(['source', 'compile']);
+	});
+
+	it('retains nothing across a worker crash', () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { x } = twoLayers();
+		const failed = ControlledWorker.instances[0]!;
+		const resultsA = new Uint32Array([0xa]);
+		failed.reply(resultsA);
+		failed.reply(resultsA);
+
+		setEffectEnabled(x.id, false);
+		failed.reply(new Uint32Array([0xb]));
+		setEffectEnabled(x.id, true);
+		expect(compiledEffects.get()?.results).toBe(resultsA);
+
+		failed.onerror?.(new Event('error'));
+		setEffectEnabled(x.id, false);
+		const fresh = ControlledWorker.instances[1]!;
+		expect(fresh.messages.map((message) => message.type)).toEqual(['source', 'compile']);
+	});
+
+	it('does not retain a failed compile', () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { x } = twoLayers();
+		const worker = ControlledWorker.instances[0]!;
+		worker.reply(new Uint32Array([0xa]));
+		worker.reply(new Uint32Array([0xa]));
+
+		setEffectEnabled(x.id, false);
+		// The failure settles waiters, then update retries the still-current key at once.
+		worker.fail('No memory.');
+		expect(worker.compiles).toHaveLength(4);
+		setEffectEnabled(x.id, true);
+		expect(worker.compiles).toHaveLength(4);
+		// Failing the retry as well keeps chain B out of the retained compiles.
+		worker.fail('No memory.');
+		setEffectEnabled(x.id, false);
+		expect(worker.compiles).toHaveLength(5);
+	});
+
+	it('retains nothing across teardown', () => {
+		addEffect('exposure');
+		const first = ControlledWorker.instances[0]!;
+		first.reply(new Uint32Array([1]));
+
+		stop();
+		stop = startLiveEffects();
+		const next = ControlledWorker.instances[1]!;
+		expect(next.messages.map((message) => message.type)).toEqual(['source', 'compile']);
+	});
+
+	it('evicts past the count bound', () => {
+		const layer = addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		worker.reply(new Uint32Array([0]));
+		for (let stops = 1; stops <= RETAINED_COMPILES; stops++) {
+			updateEffect(layer.id, { effect: 'exposure', enabled: true, stops });
+			worker.reply(new Uint32Array([stops]));
+		}
+		expect(worker.compiles).toHaveLength(RETAINED_COMPILES + 1);
+
+		// The oldest key was evicted; the second-newest was not.
+		updateEffect(layer.id, { effect: 'exposure', enabled: true, stops: 0 });
+		expect(worker.compiles).toHaveLength(RETAINED_COMPILES + 2);
+		worker.reply(new Uint32Array([0]));
+		updateEffect(layer.id, {
+			effect: 'exposure',
+			enabled: true,
+			stops: RETAINED_COMPILES - 1
+		});
+		expect(worker.compiles).toHaveLength(RETAINED_COMPILES + 2);
+	});
+
+	it('evicts past the byte bound', () => {
+		addEffect('exposure');
+		const y = addEffect('exposure');
+		updateEffect(y.id, { effect: 'exposure', enabled: true, stops: 1 });
+		const worker = ControlledWorker.instances[0]!;
+		const big = () => new Uint32Array(RETAINED_BYTES / 8 + 1);
+		worker.reply(big());
+		worker.reply(big());
+
+		setEffectEnabled(y.id, false);
+		worker.reply(big());
+		// Two entries over half the budget evicted the oldest, so chain A compiles again.
+		setEffectEnabled(y.id, true);
+		expect(worker.compiles).toHaveLength(4);
+	});
+
+	it('keeps the index and the canvas while every effect is off', () => {
+		const layer = addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		const resultsA = new Uint32Array([0xa]);
+		worker.reply(resultsA);
+		const pixels = new Uint32Array(4);
+		worker.index(pixels);
+		const index = effectsIndex.get()!;
+
+		setEffectEnabled(layer.id, false);
+		expect(effectsIndex.get()).toBe(index);
+		expect(shownSource.get()).toBeUndefined();
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		setEffectEnabled(layer.id, true);
+		expect(worker.compiles).toHaveLength(1);
+		expect(shownSource.get()?.index.pixels).toBe(pixels);
+		expect(shownSource.get()?.results).toBe(resultsA);
 	});
 });
