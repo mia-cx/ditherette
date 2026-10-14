@@ -34,6 +34,55 @@ async function fixture(t) {
 	return { root, git };
 }
 
+for (const [step, operation] of [
+	['Prepare the exact release tarball', 'prepare'],
+	['Verify source, artifact, sizes, and recorded release holds', 'publish-check']
+]) {
+	test(`npm ${operation} removes the cache override and rejects custom build flags`, async (t) => {
+		const { root } = await fixture(t);
+		const bin = join(root, 'temporary/bin');
+		await mkdir(bin);
+		const guard = new URL('./prepare-public-benchmark.mjs', import.meta.url).href;
+		// Probe the real guard at each release invocation without building or publishing a package.
+		await writeFile(
+			join(bin, 'node'),
+			`#!${process.execPath}
+const assert = require('node:assert/strict');
+const args = process.argv.slice(2);
+if (args[0] === 'scripts/release-plan.mjs') {
+  assert.deepEqual(args, ['scripts/release-plan.mjs', 'current', 'npm']);
+  process.exit(0);
+}
+assert.deepEqual(args.slice(0, 2), ['packages/ditherette/scripts/release.mjs', ${JSON.stringify(operation)}]);
+import(${JSON.stringify(guard)}).then(({ assertBuildEnvironment }) => {
+  assertBuildEnvironment(process.env);
+  console.log('Checked ' + args[1]);
+});
+`,
+			{ mode: 0o755 }
+		);
+		const script = runStep(await workflow('package-publish'), step);
+		const run = (flags) =>
+			spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+				cwd: root,
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					PATH: `${bin}:${process.env.PATH}`,
+					GITHUB_WORKSPACE: root,
+					CARGO_INCREMENTAL: '0',
+					RUSTFLAGS: flags || undefined
+				}
+			});
+		const ordinary = run('');
+		assert.equal(ordinary.status, 0, ordinary.stdout + ordinary.stderr);
+		assert.match(ordinary.stdout, new RegExp(`Checked ${operation}`));
+		const overridden = run('-C opt-level=0');
+		assert.notEqual(overridden.status, 0);
+		assert.match(overridden.stderr, /Unset build overrides before preparation: RUSTFLAGS/);
+	});
+}
+
 test('validation fetches a squash-merged PR head and falls back when that ref is unavailable', async (t) => {
 	const { root, git } = await fixture(t);
 	const base = git('rev-parse', 'HEAD');
