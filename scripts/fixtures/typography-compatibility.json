@@ -1,0 +1,22 @@
+{
+	"baseline": {
+		"typography": "0.5.19",
+		"parser": "6.0.10",
+		"tailwind": "4.2.4"
+	},
+	"selectors": 100,
+	"api": "dbcdca8c7118a6266a37aec1a8a60da4d33358d25877e4a449bd5e68dc9fb7bb",
+	"ast": "636c6da7f2134725e1441a0ed047195ced1e528b90cf1ae1d7d269de81d6bda3",
+	"css": [
+		{
+			"className": "prose",
+			"bytes": 56721,
+			"sha256": "a81d00dc52426ded16899abf9347a7d8bc84de24ef1dc465d85ac012d3477f67"
+		},
+		{
+			"className": "markdown",
+			"bytes": 58917,
+			"sha256": "20be8e25b5efb4cec1f98d7054b78d5c49c63546812d481164bab2ca0a688d47"
+		}
+	]
+}

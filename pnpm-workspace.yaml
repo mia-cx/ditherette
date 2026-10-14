@@ -11,6 +11,9 @@ allowBuilds:
   wasm-pack: true
 overrides:
   cookie@<0.7.0: '>=0.7.0'
+  # GHSA-rj75-hqrm-r3gf; parser API/AST and prose CSS match the pinned version in test:typography.
+  # Remove after upgrading Typography to a release of https://github.com/tailwindlabs/tailwindcss-typography/pull/429.
+  '@tailwindcss/typography>postcss-selector-parser@6.0.10': '7.1.6'
 minimumReleaseAgeExclude:
   # These exact upstream releases carry the patched sharp and undici dependencies.
   # Remove once they satisfy the configured release age.
