@@ -168,14 +168,23 @@ async function tool(name, version, executable) {
 	return { name, version, digest: digest(await readFile(executable)) };
 }
 
+/** Fingerprint the pnpm package that executes build commands. */
+export async function pnpmTool() {
+	// Lifecycle npm_execpath identifies the executing CLI behind shell shims and Corepack.
+	const entry = await realpath(command('pnpm', ['--silent', 'run', 'bench:pnpm:entry']));
+	return {
+		name: 'pnpm-package',
+		version: command('pnpm', ['--version']),
+		digest: digest(JSON.stringify(await fileInventory(path.dirname(path.dirname(entry)))))
+	};
+}
+
 async function buildTools() {
 	const require = createRequire(new URL('../crates/ditherette-wasm/package.json', import.meta.url));
 	const wasmPack = path.join(
 		path.dirname(require.resolve('wasm-pack/package.json')),
 		'binary/wasm-pack'
 	);
-	const pnpmEntry = await realpath(command('sh', ['-c', 'command -v pnpm']));
-	const pnpmRoot = path.dirname(path.dirname(pnpmEntry));
 	const tools = [
 		await tool('node', process.version, process.execPath),
 		{
@@ -190,11 +199,7 @@ async function buildTools() {
 			)
 		},
 		await tool('wasm-pack', command(wasmPack, ['--version']), wasmPack),
-		{
-			name: 'pnpm-package',
-			version: command('pnpm', ['--version']),
-			digest: digest(JSON.stringify(await fileInventory(pnpmRoot)))
-		}
+		await pnpmTool()
 	];
 	for (const [variant, config] of [
 		['scalar', 'rust-toolchain.toml'],

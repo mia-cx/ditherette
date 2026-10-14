@@ -142,6 +142,8 @@ test('helper-only edits select the release tooling tests while documentation ski
 		['scripts/check-changesets.test.mjs', true],
 		['scripts/changelog-section.mjs', true],
 		['scripts/changelog-section.test.mjs', true],
+		['scripts/prepare-public-benchmark.mjs', true],
+		['scripts/prepare-public-benchmark.test.mjs', true],
 		['docs/note.md', false]
 	]) {
 		const base = git('rev-parse', 'HEAD');

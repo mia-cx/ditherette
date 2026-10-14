@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,7 @@ import {
 	buildFreshPackage,
 	cleanRevision,
 	fileInventory,
+	pnpmTool,
 	sourceInventory,
 	verifyPackageBuildMode
 } from './prepare-public-benchmark.mjs';
@@ -215,4 +216,34 @@ test('built provenance sorts full trees and rejects symbolic links', async (t) =
 	);
 	await symlink('z', path.join(directory, 'alias'));
 	await assert.rejects(fileInventory(directory), /not a regular file/);
+});
+
+test('pnpm provenance follows the executing package through a shell launcher', async (t) => {
+	const directory = await mkdtemp(path.join(tmpdir(), 'ditherette-pnpm-launcher-'));
+	t.after(() => rm(directory, { recursive: true, force: true }));
+	const bin = path.join(directory, 'bin');
+	await mkdir(bin);
+	const executable = execFileSync('sh', ['-c', 'command -v pnpm'], { encoding: 'utf8' }).trim();
+	await writeFile(
+		path.join(bin, 'pnpm'),
+		`#!/bin/sh\nexec '${executable.replaceAll("'", "'\\''")}' "$@"\n`,
+		{
+			mode: 0o755
+		}
+	);
+	// The setup action's launcher lives beside a version-manager tree with package symlinks.
+	await mkdir(path.join(directory, 'global/node_modules'), { recursive: true });
+	await symlink(executable, path.join(directory, 'global/node_modules/pnpm'));
+	const normal = await pnpmTool();
+	const run = spawnSync(
+		process.execPath,
+		[
+			'--input-type=module',
+			'-e',
+			`import { pnpmTool } from ${JSON.stringify(new URL('./prepare-public-benchmark.mjs', import.meta.url).href)}; console.log(JSON.stringify(await pnpmTool()));`
+		],
+		{ encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } }
+	);
+	assert.equal(run.status, 0, run.stdout + run.stderr);
+	assert.deepEqual(JSON.parse(run.stdout), normal);
 });
