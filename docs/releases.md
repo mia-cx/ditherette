@@ -30,7 +30,9 @@ The RC scope is scalar processing by default, with optional threads experimental
 
 ## Reruns
 
-Rerun the original failed workflow. Each release checks that main still has the same version before publication or deployment. A superseded version fails instead of moving production backward. npm reruns skip publication only when registry integrity matches the exact tested archive; mismatches and registry errors fail.
+Rerun the original failed workflow when its workflow definition needs no changes. After a workflow fix, start **Release** on `main` with `retry_release_commit` set to the original release merge's full commit SHA. This uses the updated workflow while building the named release source.
+
+Each release checks that main still has the same version before publication or deployment. A superseded version fails instead of moving production backward. npm reruns skip publication only when registry integrity matches the exact tested archive; mismatches and registry errors fail.
 
 A website rerun redeploys the same tested artifact. If its temporary artifact expired, rerun all jobs to rebuild and test the same commit. Source, package/crate version, provenance, and size checks still apply.
 
