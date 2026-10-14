@@ -11,3 +11,8 @@ allowBuilds:
   wasm-pack: true
 overrides:
   cookie@<0.7.0: '>=0.7.0'
+minimumReleaseAgeExclude:
+  # These exact upstream releases carry the patched sharp and undici dependencies.
+  # Remove once they satisfy the configured release age.
+  - miniflare@5.20261012.0-beta
+  - wrangler@4.151.0
