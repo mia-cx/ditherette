@@ -229,6 +229,55 @@ describe('live effects', () => {
 		expect(compiledEffects.get()).toBeUndefined();
 	});
 
+	it.each(['success', 'failure'])(
+		'keeps processing for the new source pending after an old-source %s',
+		async (outcome) => {
+			const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+			errors.mockClear();
+			addEffect('exposure');
+			const worker = ControlledWorker.instances[0]!;
+			const old = worker.compiles[0]!;
+			const superseded = compiledEffectsFor(sourceImageData.get()!, currentEffectsKey());
+			const source = image();
+			sourceImageData.set(source);
+			const waiting = compiledEffectsFor(source, currentEffectsKey());
+			const settled = vi.fn();
+			void waiting.then(settled, settled);
+			expect(worker.compiles).toHaveLength(1);
+
+			if (outcome === 'success') worker.reply(new Uint32Array([1]), undefined, old);
+			else worker.fail('Old source failed.', old);
+
+			await expect(superseded).rejects.toThrow('The effects changed.');
+			expect(settled).not.toHaveBeenCalled();
+			expect(compiledEffects.get()).toBeUndefined();
+			expect(errors).not.toHaveBeenCalled();
+			expect(worker.compiles).toHaveLength(2);
+			expect(worker.compiles[1]!.sourceId).not.toBe(old.sourceId);
+
+			const results = new Uint32Array([2]);
+			worker.reply(results);
+			await expect(waiting).resolves.toBe(results);
+			expect(compiledEffects.get()).toEqual({ source, key: currentEffectsKey(), results });
+		}
+	);
+
+	it('rejects processing when the current compile fails', async () => {
+		const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+		errors.mockClear();
+		addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		const waiting = compiledEffectsFor(sourceImageData.get()!, currentEffectsKey());
+
+		worker.fail('Current source failed.');
+
+		await expect(waiting).rejects.toThrow('Current source failed.');
+		expect(errors).toHaveBeenCalledExactlyOnceWith(
+			'Could not compile the effects.',
+			'Current source failed.'
+		);
+	});
+
 	it('replaces a worker that fails, once asked again', async () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		addEffect('exposure');

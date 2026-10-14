@@ -434,10 +434,10 @@ export function startLiveEffects() {
 				publish(current, data.key, { results: data.results, fits: data.fits });
 			else settle(current, data.key, data.results);
 		}
-		// Settings that moved on will never compile; their processing is superseded anyway.
+		// An old-source reply must not cancel processing waiting for the selected source and settings.
 		const key = currentEffectsKey();
 		for (const waiter of waiters) {
-			if (waiter.source === current && waiter.key === key) continue;
+			if (waiter.source === source && waiter.key === key) continue;
 			waiters.delete(waiter);
 			waiter.reject(new Error('The effects changed.'));
 		}
