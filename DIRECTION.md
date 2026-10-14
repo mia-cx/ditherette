@@ -14,6 +14,10 @@ Keep that workflow clear and fast, including large images.
   Quantitative export benchmarks remain open.
 - The dependency audit is clear. Scoped security overrides carry executable
   compatibility checks.
+- The palette shows per-colour pixel counts and the total pixels to paint.
+  Its tag and Edit controls remain accessible in narrow panels.
+- Source previews reuse recent effects results and retain the uploaded colour
+  index when effects are toggled off and on.
 - The shared wgpu backend and exact channel-lookup stage exist. Normal processing
   still needs GPU integration and the remaining stages.
 - Ordinary npm publication remains gated by package-size review and the recorded
@@ -31,9 +35,9 @@ Website delivery proceeds independently of npm publication holds.
 1. Make direct production delivery reliable and keep dependencies secure.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
-3. Improve Source-preview reuse, large-output rendering, PNG export, and persistence.
+3. Improve large-output rendering, PNG export, and persistence.
 4. Connect and qualify GPU stages with CPU fallback and explicit memory accounting.
-5. Complete features with settled requirements, including pixel counts and graded histograms.
+5. Complete features with settled requirements, including graded histograms.
 
 Search discovery should cover Wplace templates, colour conversion, dithering,
 palette fitting, and quantisation. Useful public guides should lead into the editor.
