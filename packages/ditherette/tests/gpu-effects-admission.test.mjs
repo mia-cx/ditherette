@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { chmod, cp, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -95,6 +95,16 @@ test('the common reserve rejects one byte below admission, including 600-byte sc
 			const processor = await createGpuEffects({ ...options, memoryLimitBytes: bound - 1 });
 			await rejectedWithoutEntry(processor, input);
 			processor.dispose();
+			const accepted = await createGpuEffects({ ...options, memoryLimitBytes: bound });
+			const before = { ...entries };
+			assert.equal((await accepted.applyEffects(input)).data[3], 29);
+			assert.equal(entries.gpu - before.gpu, capabilityPresent ? 1 : 0);
+			assert.equal(entries.cpu - before.cpu, 1);
+			assert.equal(
+				accepted.execution.fallback,
+				capabilityPresent ? 'UnsupportedChain' : 'NoAdapter'
+			);
+			accepted.dispose();
 			console.log(
 				JSON.stringify({
 					capabilityPresent,
@@ -122,6 +132,11 @@ test('large valid curves and masks reject before both real string ABIs on every 
 		recursive: true,
 		filter: (path) => !path.includes('/wasm/gpu')
 	});
+	// Immutable artifact probes can copy read-only directories. Only the test's
+	// own temporary copy needs writable directories for cleanup.
+	for (const entry of await readdir(directory, { recursive: true, withFileTypes: true }))
+		if (entry.isDirectory()) await chmod(join(entry.parentPath, entry.name), 0o700);
+	await chmod(directory, 0o700);
 	const missing = await import(pathToFileURL(join(directory, 'gpu-effects.js')).href);
 	for (const route of ['no-capability', 'missing-assets', 'gpu-artifact', 'retired']) {
 		delete globalThis.navigator;
@@ -153,6 +168,15 @@ test('large valid curves and masks reject before both real string ABIs on every 
 		const cpu = await createDitherette({ wasm: scalar });
 		assert.deepEqual(await processor.applyEffects(control), cpu.applyEffects(control));
 		assert.equal(processor.execution.backend, 'cpu');
+		assert.equal(
+			processor.execution.fallback,
+			{
+				'no-capability': 'NoAdapter',
+				'missing-assets': 'Initialization',
+				'gpu-artifact': 'MemoryLimit',
+				retired: 'UnsupportedChain'
+			}[route]
+		);
 		cpu.dispose();
 		processor.dispose();
 	}
@@ -173,6 +197,10 @@ test('in-budget real unsupported decoding succeeds, then later admission and fre
 		assert.equal(entries.gpu - before.gpu, 1);
 		assert.equal(entries.cpu - before.cpu, 2);
 		assert.equal(processor.execution.fallback, 'UnsupportedChain');
+		const retired = { ...entries };
+		assert.deepEqual(await processor.applyEffects(input), cpu.applyEffects(input));
+		assert.equal(entries.gpu - retired.gpu, 0);
+		assert.equal(entries.cpu - retired.cpu, 2);
 		await rejectedWithoutEntry(processor, request(kind, 64));
 		assert.deepEqual(await processor.applyEffects(control), cpu.applyEffects(control));
 		assert.equal(processor.execution.fallback, 'UnsupportedChain');
