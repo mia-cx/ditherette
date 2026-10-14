@@ -26,12 +26,18 @@ function jobSource(source, name) {
 	return source.slice(start).split(/\n {2}(?=[\w-]+:)/)[1];
 }
 
-// These guards use the shared Actions/JavaScript boolean syntax. Evaluate the shipped
-// expressions so event or validation changes affect the executable delivery tests.
-function jobAllowed(source, name, context) {
+// Evaluate these guards with Actions' implicit success() unless a status function overrides it.
+// https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions
+function jobAllowed(source, name, context, ancestorResults = []) {
 	const condition = jobSource(source, name).match(/ {4}if: >-\n((?: {6}[^\n]+\n)+)/);
 	assert.ok(condition, name);
-	return runInNewContext(condition[1].trim(), context);
+	const expression = condition[1].trim();
+	const hasStatusCheck = /\b(always|cancelled|failure|success)\s*\(/.test(expression);
+	return runInNewContext(hasStatusCheck ? expression : `success() && (${expression})`, {
+		...context,
+		success: () => ancestorResults.every((result) => result === 'success'),
+		cancelled: () => ancestorResults.includes('cancelled')
+	});
 }
 
 async function fixture(t) {
@@ -359,6 +365,41 @@ test('main delivery requires successful CI and exact-commit conformance before p
 					context.github.ref === github.ref
 			);
 		});
+	}
+});
+
+test('production jobs survive skipped ancestors but still reject cancellation and failed validation', async () => {
+	const source = await workflow('ci');
+	const context = {
+		github: {
+			repository: 'mia-cx/ditherette',
+			ref: 'refs/heads/main',
+			event_name: 'push'
+		},
+		needs: {
+			result: { result: 'success' },
+			production_validation: { result: 'success' }
+		}
+	};
+	// Run38641062557 passed its aggregate after Changeset, Web and Engine intentionally skipped.
+	const ancestors = ['success', 'success', 'skipped', 'success', 'skipped', 'skipped', 'success'];
+	for (const job of ['production_validation', 'website']) {
+		for (const event_name of ['push', 'workflow_dispatch']) {
+			const current = { ...context, github: { ...context.github, event_name } };
+			assert.equal(jobAllowed(source, job, current, ancestors), true, `${job}: ${event_name}`);
+			assert.equal(jobAllowed(source, job, current, [...ancestors, 'cancelled']), false);
+			for (const result of ['failure', 'cancelled', 'skipped']) {
+				const rejected = { ...current, needs: { ...current.needs, result: { result } } };
+				assert.equal(jobAllowed(source, job, rejected, ancestors), false);
+			}
+		}
+	}
+	for (const result of ['failure', 'cancelled', 'skipped']) {
+		const rejected = {
+			...context,
+			needs: { ...context.needs, production_validation: { result } }
+		};
+		assert.equal(jobAllowed(source, 'website', rejected, ancestors), false);
 	}
 });
 
