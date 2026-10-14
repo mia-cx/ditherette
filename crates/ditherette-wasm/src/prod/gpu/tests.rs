@@ -66,6 +66,119 @@ fn no_adapter_runs_the_cpu_path() {
     assert_eq!(rgba, expected);
 }
 
+fn effects(json: &str) -> Vec<crate::prod::effects::EffectStep> {
+    crate::prod::effects::decode_effects(json).unwrap()
+}
+
+fn real_chain() -> Vec<crate::prod::effects::EffectStep> {
+    effects(
+        r#"[
+        {"effect":"brightness-contrast","enabled":true,"brightness":-0.11,"contrast":0.32},
+        {"effect":"levels","enabled":true,"channel":"red","input":{"black":0.1,"white":0.9},"gamma":1.7,"output":{"black":0.8,"white":0.2}},
+        {"effect":"exposure","enabled":true,"stops":0.6},
+        {"effect":"white-balance","enabled":true,"temperature":-0.2,"tint":0.4}
+    ]"#,
+    )
+}
+
+#[test]
+fn lookup_selects_only_the_whole_enabled_unmasked_channel_chain() {
+    let chain = real_chain();
+    let stage = ChannelLookup::from_effects(&chain).unwrap().unwrap();
+    assert_eq!(
+        stage.0,
+        crate::prod::effects::table::ChannelTables::new(chain.iter().map(|step| &step.effect))
+            .bytes()
+    );
+
+    let mixed =
+        r#"{"effect":"hue-saturation","enabled":true,"hue":30,"saturation":0.2,"lightness":0}"#;
+    let mut chain = real_chain();
+    chain.extend(effects(&format!("[{mixed}]")));
+    assert!(ChannelLookup::from_effects(&chain).unwrap().is_none());
+    chain.last_mut().unwrap().enabled = false;
+    assert!(ChannelLookup::from_effects(&chain).unwrap().is_some());
+    chain[0].mask =
+        serde_json::from_str(r#"[{"x":{"model":"srgb","channel":"red"},"points":[[0,0],[1,1]]}]"#)
+            .unwrap();
+    assert!(ChannelLookup::from_effects(&chain).unwrap().is_none());
+    chain[0].enabled = false;
+    assert!(ChannelLookup::from_effects(&chain).unwrap().is_some());
+}
+
+#[test]
+fn lookup_memory_includes_padded_upload_and_all_owned_pixel_buffers() {
+    let dimensions = ImageDimensions::new(37, 19).unwrap();
+    let plan = LookupMemory::new(dimensions);
+    assert_eq!(plan.rgba_bytes, 37 * 19 * 4);
+    assert_eq!(plan.aligned_texture_bytes, 256 * 19);
+    assert_eq!(
+        plan.required_bytes,
+        LookupMemory::FIXED_BYTES + 2 * 256 * 19 + 5 * 37 * 19 * 4
+    );
+    assert_eq!(
+        plan.check(plan.required_bytes - 1),
+        Err(Fallback::MemoryLimit)
+    );
+    assert_eq!(plan.check(plan.required_bytes), Ok(()));
+    let huge = LookupMemory::new(ImageDimensions::new(32768, 32768).unwrap());
+    assert!(huge.required_bytes > u64::from(u32::MAX));
+}
+
+#[test]
+fn real_effects_lookup_is_exact_and_keeps_owned_outputs_and_alpha() {
+    let Some((_serial, mut backend)) = any_gpu() else {
+        return;
+    };
+    let Backend::Gpu(gpu) = &backend else {
+        panic!("hardware rejected");
+    };
+    eprintln!("real effects adapter: {:?}", gpu.info());
+    let chain = real_chain();
+    let stage = ChannelLookup::from_effects(&chain).unwrap().unwrap();
+    let (_, dimensions, input) = ChannelLookup::known_answer();
+    let expected = crate::prod::effects::apply_effects(crate::prod::effects::EffectsRequest {
+        version: 1,
+        source: crate::prod::contract::request::Source {
+            width: dimensions.width(),
+            height: dimensions.height(),
+            data: &input,
+        },
+        effects: &chain,
+        context: Default::default(),
+    })
+    .unwrap();
+    let limit = LookupMemory::new(dimensions).required_bytes;
+    assert_eq!(
+        block_on(backend.lookup(&stage, dimensions, &input, limit - 1)),
+        Err(Fallback::MemoryLimit)
+    );
+    assert!(matches!(backend, Backend::Gpu(_)));
+    let output = block_on(backend.lookup(&stage, dimensions, &input, limit)).unwrap();
+    assert_eq!(output, expected.data());
+    assert!(output
+        .chunks_exact(4)
+        .zip(input.chunks_exact(4))
+        .all(|(out, source)| out[3] == source[3]));
+    let later = block_on(backend.lookup(&stage, dimensions, &vec![0; input.len()], limit)).unwrap();
+    assert_ne!(output, later);
+    drop(backend);
+    assert_eq!(output, expected.data());
+}
+
+#[test]
+fn real_lookup_device_loss_returns_fallback_without_partial_output() {
+    let Some((_serial, Backend::Gpu(gpu))) = any_gpu() else {
+        return;
+    };
+    gpu.device.destroy();
+    let mut backend = Backend::Gpu(gpu);
+    let (stage, dimensions, input) = ChannelLookup::known_answer();
+    assert!(block_on(backend.lookup(&stage, dimensions, &input, u64::MAX)).is_err());
+    assert!(matches!(backend, Backend::Cpu(_)));
+    assert_eq!(input, ChannelLookup::known_answer().2);
+}
+
 #[test]
 fn parity_reports_largest_difference_and_differing_pixels() {
     let cpu = [0, 0, 0, 255, 10, 20, 30, 40, 7, 7, 7, 7];

@@ -34,6 +34,13 @@ pub struct Gpu {
     pipelines: Mutex<HashMap<TypeId, wgpu::ComputePipeline>>,
 }
 
+impl Drop for Gpu {
+    fn drop(&mut self) {
+        // CPU fallback must release live GPU resources before allocating its scratch.
+        self.device.destroy();
+    }
+}
+
 impl Gpu {
     /// An instance with every backend this build supports.
     pub fn instance() -> wgpu::Instance {
@@ -90,6 +97,12 @@ impl Gpu {
         dimensions: ImageDimensions,
         rgba: &[u8],
     ) -> Result<wgpu::Texture, Fallback> {
+        self.check_limits(dimensions)?;
+        if rgba.len() as u64 != u64::from(dimensions.width()) * u64::from(dimensions.height()) * 4 {
+            return Err(Fallback::Failed(
+                "RGBA length does not match dimensions".into(),
+            ));
+        }
         let texture = self.source_texture(dimensions, wgpu::TextureUsages::empty())?;
         self.queue.write_texture(
             texture.as_image_copy(),
@@ -141,8 +154,69 @@ impl Gpu {
         dimensions: ImageDimensions,
         rgba: &[u8],
     ) -> Result<Vec<u8>, Fallback> {
-        let source = self.upload(dimensions, rgba)?;
-        self.run(stage, &source).await
+        self.check_limits(dimensions)?;
+        let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let result = async {
+            let source = self.upload(dimensions, rgba)?;
+            let result = self.run(stage, &source).await;
+            source.destroy();
+            result
+        }
+        .await;
+        let validation = validation.pop();
+        let memory = memory.pop();
+        if let Some(error) = validation.await.or(memory.await) {
+            return Err(Fallback::Failed(error.to_string()));
+        }
+        result
+    }
+
+    /// Bitmap upload follows the same scopes and limits as packed-byte processing.
+    #[cfg(target_arch = "wasm32")]
+    pub async fn process_bitmap<S: Stage>(
+        &self,
+        stage: &S,
+        bitmap: &wgpu::web_sys::ImageBitmap,
+    ) -> Result<Vec<u8>, Fallback> {
+        let dimensions = ImageDimensions::new(bitmap.width(), bitmap.height())
+            .map_err(|_| Fallback::TooLarge)?;
+        self.check_limits(dimensions)?;
+        let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let result = async {
+            let source = self.upload_bitmap(bitmap)?;
+            let result = self.run(stage, &source).await;
+            source.destroy();
+            result
+        }
+        .await;
+        let validation = validation.pop();
+        let memory = memory.pop();
+        if let Some(error) = validation.await.or(memory.await) {
+            return Err(Fallback::Failed(error.to_string()));
+        }
+        self.check()?;
+        result
+    }
+
+    /// Checks image-wide limits before creating a texture, including dispatch limits.
+    fn check_limits(&self, dimensions: ImageDimensions) -> Result<(), Fallback> {
+        self.check()?;
+        let limits = self.device.limits();
+        let bytes = u64::from(dimensions.width()) * u64::from(dimensions.height()) * 4;
+        if dimensions.width() > limits.max_texture_dimension_2d
+            || dimensions.height() > limits.max_texture_dimension_2d
+            || dimensions.width().div_ceil(WORKGROUP) > limits.max_compute_workgroups_per_dimension
+            || dimensions.height().div_ceil(WORKGROUP) > limits.max_compute_workgroups_per_dimension
+            || bytes
+                > limits
+                    .max_storage_buffer_binding_size
+                    .min(limits.max_buffer_size)
+        {
+            return Err(Fallback::TooLarge);
+        }
+        Ok(())
     }
 
     /// Runs `stage` on both backends and compares the results.
@@ -228,22 +302,29 @@ impl Gpu {
         encoder.copy_buffer_to_buffer(&output, 0, &readback, 0, bytes);
         self.queue.submit([encoder.finish()]);
 
-        let validation = validation.pop();
-        let memory = memory.pop();
-        if let Some(error) = validation.await.or(memory.await) {
-            return Err(Fallback::Failed(error.to_string()));
+        let result = async {
+            let validation = validation.pop();
+            let memory = memory.pop();
+            if let Some(error) = validation.await.or(memory.await) {
+                return Err(Fallback::Failed(error.to_string()));
+            }
+            let mapped = map_read(readback.slice(..));
+            unwound(|| self.device.poll(wgpu::PollType::wait_indefinitely()))?
+                .map_err(|error| Fallback::Failed(error.to_string()))?;
+            mapped
+                .await
+                .map_err(|error| Fallback::Failed(error.to_string()))?;
+            let result = unwound(|| readback.slice(..).get_mapped_range().to_vec())?;
+            // A device lost mid-call may still have mapped stale memory.
+            self.check()?;
+            Ok(result)
         }
-        let mapped = map_read(readback.slice(..));
-        unwound(|| self.device.poll(wgpu::PollType::wait_indefinitely()))?
-            .map_err(|error| Fallback::Failed(error.to_string()))?;
-        mapped
-            .await
-            .map_err(|error| Fallback::Failed(error.to_string()))?;
-        let result = unwound(|| readback.slice(..).get_mapped_range().to_vec())?;
+        .await;
         readback.unmap();
-        // A device lost mid-call may still have mapped stale memory.
-        self.check()?;
-        Ok(result)
+        readback.destroy();
+        output.destroy();
+        params.destroy();
+        result
     }
 
     /// Fails once the device was lost or reported an error outside a call.

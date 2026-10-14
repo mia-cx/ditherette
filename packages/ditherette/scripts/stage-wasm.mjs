@@ -9,8 +9,12 @@ export async function stageWasm(
 	license,
 	variants = ['scalar', 'threads']
 ) {
-	await access(new URL('dist/scalar/ditherette_wasm.factory.js', crate));
-	await access(new URL('dist/scalar/ditherette_wasm.factory.d.ts', crate));
+	const factoryVariant = variants.includes('scalar') ? 'scalar' : variants[0];
+	await access(new URL(`dist/${factoryVariant}/ditherette_wasm.factory.js`, crate));
+	await access(new URL(`dist/${factoryVariant}/ditherette_wasm.factory.d.ts`, crate));
+	// An ordinary rebuild must not accidentally ship a previous opt-in GPU artifact.
+	if (!variants.includes('gpu'))
+		await rm(new URL('dist/wasm/gpu/', packageDirectory), { recursive: true, force: true });
 	for (const variant of variants) {
 		const destination = new URL(`dist/wasm/${variant}/`, packageDirectory);
 		await rm(destination, { recursive: true, force: true });
@@ -24,7 +28,10 @@ export async function stageWasm(
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-	const variants = process.argv[2] === 'scalar' ? ['scalar'] : undefined;
+	const variant = process.argv[2];
+	if (variant !== undefined && !['scalar', 'gpu'].includes(variant))
+		throw new Error('Expected scalar or opt-in gpu staging.');
+	const variants = variant ? [variant] : undefined;
 	await stageWasm(
 		new URL('../../../crates/ditherette-wasm/', import.meta.url),
 		new URL('../', import.meta.url),

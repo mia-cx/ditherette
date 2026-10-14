@@ -1406,3 +1406,5 @@ mod tests {
 // Declared last so default builds keep every panic location above, byte for byte.
 #[cfg(all(feature = "gpu", target_arch = "wasm32"))]
 mod gpu;
+#[cfg(all(feature = "gpu", target_arch = "wasm32"))]
+mod gpu_effects;
