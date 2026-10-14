@@ -242,3 +242,76 @@ jobs:
               exit 1
             fi
           done
+
+  production_validation:
+    name: Validate the production website commit
+    needs: result
+    if: >-
+      needs.result.result == 'success' &&
+      github.repository == 'mia-cx/ditherette' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      sha: ${{ github.sha }}
+
+  website:
+    name: Deploy the website
+    needs: [result, production_validation]
+    if: >-
+      needs.result.result == 'success' && needs.production_validation.result == 'success' &&
+      github.repository == 'mia-cx/ditherette' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      # Serialize migrations and deploys; queued runs still check the latest main before delivery.
+      group: ditherette-website
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 492214885e7a580ccc1d141dfdb4dc5f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reject superseded website commits
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo '::error::This website commit is superseded. Run CI on current main.'
+            exit 1
+          fi
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install the wasm toolchain
+        run: |
+          rustup show
+          rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates/ditherette-wasm
+      - name: Build the website
+        run: pnpm build
+      - name: Deliver the current website commit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo '::error::Configure CLOUDFLARE_API_TOKEN with Workers Scripts and D1 edit access so CI can deploy.'
+            exit 1
+          fi
+          # A newer push during the build must not migrate or replace production.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo '::error::This website commit is superseded. Run CI on current main.'
+            exit 1
+          fi
+          pnpm exec wrangler d1 migrations apply EVENTS --remote --env production
+          pnpm exec wrangler deploy --env production

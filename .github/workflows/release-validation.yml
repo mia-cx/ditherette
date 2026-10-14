@@ -23,8 +23,8 @@ defaults:
     shell: bash
 
 concurrency:
-  # Only the latest release-PR head needs validation.
-  group: release-validation-${{ github.event.pull_request.number || inputs.sha || github.sha }}
+  # Keep CI and Release callers independent; only the latest PR head needs validation.
+  group: release-validation-${{ github.workflow }}-${{ github.event.pull_request.number || inputs.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
