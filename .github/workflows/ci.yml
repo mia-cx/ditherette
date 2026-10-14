@@ -79,6 +79,8 @@ jobs:
           ^wrangler\.jsonc$
           ^migrations/
           ^playwright\.config\.
+          ^scripts/typography-compatibility(\.test)?\.mjs$
+          ^scripts/fixtures/typography-compatibility\.json$
           EOF
           # Inputs of `pnpm test:release`: the scripts, their assertions, changeset state,
           # manifests, and changelogs.
