@@ -10,6 +10,10 @@ Keep that workflow clear and fast, including large images.
   after fresh conformance at the exact commit. npm publication has separate gates.
 - Rust/Wasm provides the normal processing path. The frozen CPU reference stays
   in `spec/`; production copies live in `prod/` and earn optimizations through benchmarks.
+- Indexed PNG encoding runs in a disposable worker and cancels superseded exports.
+  Quantitative export benchmarks remain open.
+- The dependency audit is clear. Scoped security overrides carry executable
+  compatibility checks.
 - The shared wgpu backend and exact channel-lookup stage exist. Normal processing
   still needs GPU integration and the remaining stages.
 - Ordinary npm publication remains gated by package-size review and the recorded
