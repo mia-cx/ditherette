@@ -13,7 +13,7 @@ import {
 import { activeEffectSteps, effectLayers } from '$lib/stores/effects';
 import { useTestStorageEngine } from '@nanostores/persistent';
 import type { SourceMeta } from '$lib/stores/app';
-import type { PaletteColor, ProcessedImage } from './types';
+import type { EnabledPaletteColor, PaletteColor, ProcessedImage } from './types';
 
 vi.mock('./png', () => ({ downloadIndexedPng: vi.fn() }));
 vi.mock('./live-effects', async (importOriginal) => ({
@@ -71,10 +71,14 @@ afterEach(() => {
 	unsubscribe();
 });
 
-const color = (name: string, kind: PaletteColor['kind'] = 'free'): PaletteColor => ({
+const color = (
+	name: string,
+	kind: PaletteColor['kind'] = 'free'
+): EnabledPaletteColor => ({
 	name,
 	key: name.toLowerCase(),
-	kind
+	kind,
+	enabled: true
 });
 
 describe('countPalettePixels', () => {
