@@ -6,7 +6,8 @@ Keep that workflow clear and fast, including large images.
 
 ## Current state
 
-- The website runs at https://ditherette.mia.cx on Cloudflare.
+- CI now delivers verified main commits to https://ditherette.mia.cx on Cloudflare,
+  after fresh conformance at the exact commit. npm publication has separate gates.
 - Rust/Wasm provides the normal processing path. The frozen CPU reference stays
   in `spec/`; production copies live in `prod/` and earn optimizations through benchmarks.
 - The shared wgpu backend and exact channel-lookup stage exist. Normal processing
@@ -29,6 +30,9 @@ Website delivery proceeds independently of npm publication holds.
 3. Improve Source-preview reuse, large-output rendering, PNG export, and persistence.
 4. Connect and qualify GPU stages with CPU fallback and explicit memory accounting.
 5. Complete features with settled requirements, including pixel counts and graded histograms.
+
+Search discovery should cover Wplace templates, colour conversion, dithering,
+palette fitting, and quantisation. Useful public guides should lead into the editor.
 
 ## Decisions still requiring Mia
 
