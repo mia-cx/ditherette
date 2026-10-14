@@ -227,6 +227,59 @@ const graded = applyCompiledEffects(source, indices, results); // equals applyEf
 Colours and results are packed `r | g << 8 | b << 16`. A palette fit needs its `recipe` here; derive a missing one with `analyzeRecolour`.
 The package leaves display to you: upload `indices` and `results` as textures to draw only the visible region on the GPU, or map pixels on the CPU with `applyCompiledEffects`, passing the previous output as `into` to reuse its memory.
 
+### Optional async GPU effects
+
+`createGpuEffects` runs whole enabled per-channel chains on the validated wgpu lookup backend.
+It uses the production CPU's exact `ChannelTables` bytes and preserves every alpha byte.
+`createDitherette` and its synchronous operations keep their CPU behavior.
+
+Build and stage the optional artifact explicitly, after the ordinary package build:
+
+```sh
+pnpm package:build
+pnpm --filter ditherette-wasm exec node scripts/build.mjs gpu
+node packages/ditherette/scripts/stage-wasm.mjs gpu
+```
+
+Ordinary staging removes previous GPU assets. This optional artifact has separate release qualification;
+these commands do not publish the package or clear its release gates.
+Serve `dist/wasm/gpu/` alongside the package modules, including generated snippets and Wasm.
+The optional module loads by URL relative to `gpu-effects.js`, so bundling hosts must preserve that asset location.
+
+```ts
+import { createGpuEffects } from 'ditherette';
+
+const effectsProcessor = await createGpuEffects({ memoryLimitBytes: 512 * 1024 ** 2 });
+const image = await effectsProcessor.applyEffects({ version: 1, source, effects });
+console.log(effectsProcessor.execution); // Last successful call's backend, adapter and fallback reason.
+effectsProcessor.dispose();
+```
+
+`wasm` supplies an alternate scalar artifact; `gpuWasm` supplies an alternate GPU artifact.
+Neither setting changes the other artifact. Missing WebGPU, optional assets, failed startup verification,
+unsupported/masked/mixed chains, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
+The facade releases the GPU device and pipeline before allocating CPU fallback resources.
+It disposes the fresh fallback processor after each call. After request-specific rejections,
+later eligible calls may detect the GPU again. Failed capability/verification/devices and unexpected Wasm exceptions
+keep the facade on CPU for its lifetime; create a new facade to retry detection.
+
+The budget charges the package-owned async source snapshot, Wasm source and result capacity, row-aligned texture/upload staging,
+packed output and mapped readback buffers, parameter copies, effect bookkeeping, and retained backend/pipeline records.
+Caller-owned input, returned JS buffers, and driver/compiler internals follow the existing ownership exclusions.
+GPU budget rejection can still succeed on CPU; CPU budget rejection reports `memory-limit`.
+
+Pass a decoded `ImageBitmap` as the second argument to use `copyExternalImageToTexture`.
+It must represent the same source bytes, with matching dimensions, `premultiplyAlpha: 'none'`, and `colorSpaceConversion: 'none'`.
+The caller owns it and keeps it open until the promise settles. Results always use mapped readback, never canvas readback.
+Without a bitmap, the backend uploads the captured packed RGBA8 bytes.
+
+Enabled calls snapshot source bytes and normalized effects before their first await.
+Outputs remain valid after subsequent calls and disposal. Empty/disabled chains return the source itself.
+One facade accepts one active call; overlapping calls and active-call disposal reject with `reentrant-call`.
+Progress callback exceptions report `callback`, and `execution` updates only after a successful call.
+The host owns its source/slider generation guard and checks that guard before publishing an awaited image.
+This API applies effects only. Resize, dithering, palette indices, and indexed PNG export remain with the existing processor.
+
 ## Direct quantization
 
 ```ts

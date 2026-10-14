@@ -4,6 +4,8 @@ import { validateOptions } from './validation.js';
 import type { Ditherette, InitOptions } from './types.js';
 
 export { DitheretteError } from './errors.js';
+export { createGpuEffects } from './gpu-effects.js';
+export type { EffectsExecution, GpuEffects, GpuEffectsOptions } from './gpu-effects.js';
 export {
 	applyCompiledEffects,
 	compileEffectMask,
