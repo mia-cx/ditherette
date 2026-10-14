@@ -21,6 +21,7 @@
 		"test:e2e": "pnpm build && playwright install && playwright test",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:unit": "vitest",
+		"test:typography": "node --test scripts/typography-compatibility.test.mjs",
 		"gen": "node scripts/worker-types.mjs",
 		"wasm:build": "pnpm --filter ditherette-wasm build:scalar && node scripts/stage-wasm.mjs scalar",
 		"wasm:build:threads": "pnpm --filter ditherette-wasm build:threads && node scripts/stage-wasm.mjs threads",

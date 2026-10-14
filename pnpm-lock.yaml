@@ -6,6 +6,7 @@ settings:
 
 overrides:
   cookie@<0.7.0: '>=0.7.0'
+  '@tailwindcss/typography>postcss-selector-parser@6.0.10': 7.1.6
 
 importers:
 
@@ -2212,10 +2213,6 @@ packages:
     peerDependencies:
       postcss: ^8.4.29
 
-  postcss-selector-parser@6.0.10:
-    resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
-    engines: {node: '>=4'}
-
   postcss-selector-parser@7.1.6:
     resolution: {integrity: sha512-7qASPzhKF2l2KLboRZux8CCTRMdGiV08vWmyKzPz22qZ7ZjQBOeY7rNzNoCLSUiftJ7HUq0GERHmxw/t0dCdMw==}
     engines: {node: '>=4'}
@@ -3577,7 +3574,7 @@ snapshots:
 
   '@tailwindcss/typography@0.5.19(tailwindcss@4.2.4)':
     dependencies:
-      postcss-selector-parser: 6.0.10
+      postcss-selector-parser: 7.1.6
       tailwindcss: 4.2.4
 
   '@tailwindcss/vite@4.2.4(vite@8.3.4(@types/node@24.12.2)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))':
@@ -4695,11 +4692,6 @@ snapshots:
   postcss-scss@4.0.9(postcss@8.5.30):
     dependencies:
       postcss: 8.5.30
-
-  postcss-selector-parser@6.0.10:
-    dependencies:
-      cssesc: 3.0.0
-      util-deprecate: 1.0.2
 
   postcss-selector-parser@7.1.6:
     dependencies:

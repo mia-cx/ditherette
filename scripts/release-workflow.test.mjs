@@ -204,16 +204,19 @@ test('CI result fails when change detection fails or is cancelled and selected t
 	assert.ok(source.includes('needs: [changes, lint, changeset, web, engine, release-tooling]'));
 });
 
-test('helper-only edits select the release tooling tests while documentation skips them', async (t) => {
+test('helper-only edits select their CI tests while documentation skips them', async (t) => {
 	const { root, git } = await fixture(t);
 	const script = runStep(await workflow('ci'), 'Detect changed areas');
-	for (const [path, expected] of [
+	for (const [path, expected, web = false] of [
 		['scripts/check-changesets.mjs', true],
 		['scripts/check-changesets.test.mjs', true],
 		['scripts/changelog-section.mjs', true],
 		['scripts/changelog-section.test.mjs', true],
 		['scripts/prepare-public-benchmark.mjs', true],
 		['scripts/prepare-public-benchmark.test.mjs', true],
+		['scripts/typography-compatibility.mjs', false, true],
+		['scripts/typography-compatibility.test.mjs', false, true],
+		['scripts/fixtures/typography-compatibility.json', false, true],
 		['docs/note.md', false]
 	]) {
 		const base = git('rev-parse', 'HEAD');
@@ -234,6 +237,7 @@ test('helper-only edits select the release tooling tests while documentation ski
 			}
 		});
 		assert.match(await readFile(output, 'utf8'), new RegExp(`^tooling=${expected}$`, 'm'), path);
+		assert.match(await readFile(output, 'utf8'), new RegExp(`^web=${web}$`, 'm'), path);
 	}
 });
 
