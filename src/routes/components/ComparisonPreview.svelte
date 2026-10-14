@@ -21,7 +21,7 @@
 		shownSource,
 		supportsWebGL2
 	} from '$lib/processing/effects-view.svelte';
-	import { shownMask } from '$lib/processing/live-effects';
+	import { effectsIndex, shownMask } from '$lib/processing/live-effects';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputPreview,
@@ -1341,16 +1341,18 @@
 			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 			draggable="false"
 		/>
-		{#if $shownSource}
+		{#if $effectsIndex}
 			<!-- Covers the pane and draws only the visible part of the source, at screen resolution.
-			Hidden rather than removed while off, so turning it on keeps the GPU's copies. -->
+			Mounts once the source's colour index arrives and stays mounted while every effect is
+			off or results are pending, so the GPU keeps the uploaded index. Hidden whenever it
+			has nothing to draw. -->
 			<canvas
 				{@attach effectsView(
 					() => $sourceMeta && mediaFrame(pane, $sourceMeta.width, $sourceMeta.height),
 					shownSource
 				)}
 				class="pointer-events-none absolute inset-0 size-full select-none"
-				hidden={!sourceDrawn}
+				hidden={!sourceDrawn || !$shownSource}
 				aria-hidden="true"
 			></canvas>
 		{/if}

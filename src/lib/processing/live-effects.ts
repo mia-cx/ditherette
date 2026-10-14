@@ -65,7 +65,10 @@ export type LiveEffectsResponse =
 export const effectsIndex = atom<
 	{ source: ImageData; pixels: Uint32Array; count: number } | undefined
 >();
-/** The latest compiled effects: each distinct colour's result, for the source and key named. */
+/**
+ * The latest compiled effects: each distinct colour's result, for the source and key named.
+ * A retained earlier compile can stand in while the current key is still compiling.
+ */
 export const compiledEffects = atom<
 	{ source: ImageData; key: string; results: Uint32Array } | undefined
 >();
@@ -177,6 +180,10 @@ const waiters = new Set<Waiter>();
 /** Compiles the current settings if nothing is compiling them; set while live effects run. */
 let requestCompile: (() => void) | undefined;
 
+/** Bounds on the successful compiles kept for the loaded source, by count and by size. */
+export const RETAINED_COMPILES = 8;
+export const RETAINED_BYTES = 64 * 1024 * 1024;
+
 /**
  * The compiled results for `source` under `key`, once the effects worker has them. Processing waits
  * on this, so effects run once per edit and the output reuses them.
@@ -204,7 +211,8 @@ function settle(source: ImageData, key: string, outcome: Uint32Array | Error) {
 /**
  * Compile effects the moment they change, in a worker of their own, so the Source preview keeps up
  * while the output is still dithering. One compile runs at a time; edits during it fold into the
- * next, and the latest edit wins. Returns a stop function.
+ * next, and the latest edit wins. Successful compiles stay in a bounded per-source cache, so
+ * returning to recent settings draws at once without recompiling. Returns a stop function.
  */
 /** The running session's measure call; `undefined` before `startLiveEffects` or after stop. */
 let session:
@@ -235,23 +243,63 @@ export function startLiveEffects() {
 		number,
 		{ resolve: (fits: ReadonlyMap<number, MeasuredFit>) => void; reject: (error: Error) => void }
 	>();
+	type Retained = {
+		results: Uint32Array;
+		fits?: readonly { readonly index: number; readonly curves: readonly Curve[] }[];
+	};
+	/** Successful compiles for the loaded source, oldest first, bounded by count and bytes. */
+	const retained = new Map<string, Retained>();
+
+	/** Drop the state tied to one source: its index, results, and retained compiles. */
+	function invalidate() {
+		effectsIndex.set(undefined);
+		compiledEffects.set(undefined);
+		compiledMask.set(undefined);
+		analysedFits.set({ key: '', byIndex: new Map() });
+		retained.clear();
+		loaded = undefined;
+	}
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
 	function reset(reason: string) {
 		worker?.terminate();
 		worker = undefined;
-		loaded = undefined;
+		invalidate();
 
 		busy = maskBusy = false;
 		failedMask = undefined;
-		effectsIndex.set(undefined);
-		compiledEffects.set(undefined);
-		compiledMask.set(undefined);
-		analysedFits.set({ key: '', byIndex: new Map() });
 		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
 		for (const waiter of measureWaiters.values()) waiter.reject(new Error(reason));
 		measureWaiters.clear();
+	}
+
+	/** Move `entry` to newest under `key` and evict the oldest compiles past the bounds. */
+	function retain(key: string, entry: Retained) {
+		retained.delete(key);
+		// A compile larger than the whole byte budget still shows; it just isn't retained.
+		if (entry.results.byteLength <= RETAINED_BYTES) retained.set(key, entry);
+		let bytes = 0;
+		for (const kept of retained.values()) bytes += kept.results.byteLength;
+		while (retained.size > RETAINED_COMPILES || bytes > RETAINED_BYTES) {
+			const oldest = retained.keys().next().value;
+			if (oldest === undefined) break;
+			bytes -= retained.get(oldest)!.results.byteLength;
+			retained.delete(oldest);
+		}
+	}
+
+	/** Show `entry` for `source` under `key` and release whoever waits on it. */
+	function publish(source: ImageData, key: string, entry: Retained) {
+		compiledEffects.set({ source, key, results: entry.results });
+		// Publish only the curves for the settings that produced them, by their index in
+		// the sent steps; a stale reply's fits never sit editable under a current layer.
+		if (key === currentEffectsKey()) {
+			const byIndex = new Map<number, readonly Curve[]>();
+			entry.fits?.forEach(({ index, curves }) => byIndex.set(index, curves));
+			analysedFits.set({ key, byIndex });
+		}
+		settle(source, key, entry.results);
 	}
 
 	function stop() {
@@ -273,6 +321,9 @@ export function startLiveEffects() {
 	function update() {
 		const source = sourceImageData.get();
 		if (!source) return stop();
+		// The index, the results, and the canvas belong to one source, so a new source
+		// drops them even while nothing compiles.
+		if (source !== loaded) invalidate();
 		const effects = activeEffectSteps.get();
 		const masked = maskInputs(effectLayers.get(), shownMask.get());
 		if (!masked) failedMask = undefined;
@@ -285,11 +336,7 @@ export function startLiveEffects() {
 			worker.onmessage = receive;
 			worker.onerror = worker.onmessageerror = crashed;
 		}
-		if (source !== loaded) {
-			effectsIndex.set(undefined);
-			compiledEffects.set(undefined);
-			compiledMask.set(undefined);
-			analysedFits.set({ key: '', byIndex: new Map() });
+		if (!loaded) {
 			worker.postMessage({
 				type: 'source',
 				sourceId: sourceId(source),
@@ -301,17 +348,23 @@ export function startLiveEffects() {
 		const crop = outputSettings.get().crop;
 		const key = effectsKey(effects, context, crop);
 		const current = compiledEffects.get();
-		if (effects.length && !busy && (current?.source !== source || current.key !== key)) {
-			busy = true;
-			worker.postMessage({
-				type: 'compile',
-				id: ++requestId,
-				sourceId: sourceId(source),
-				key,
-				effects,
-				context,
-				crop
-			} satisfies LiveEffectsRequest);
+		if (effects.length && (current?.source !== source || current.key !== key)) {
+			const hit = retained.get(key);
+			if (hit) {
+				retain(key, hit);
+				publish(source, key, hit);
+			} else if (!busy) {
+				busy = true;
+				worker.postMessage({
+					type: 'compile',
+					id: ++requestId,
+					sourceId: sourceId(source),
+					key,
+					effects,
+					context,
+					crop
+				} satisfies LiveEffectsRequest);
+			}
 		}
 		if (!masked) return;
 		const maskKey = shownMaskKey.get()!;
@@ -371,15 +424,15 @@ export function startLiveEffects() {
 			console.error('Could not compile the effects.', data.message);
 			settle(current, data.key, new Error(data.message));
 		} else if (current && data.type === 'compiled') {
-			compiledEffects.set({ source: current, key: data.key, results: data.results });
-			// Publish only the curves for the settings that produced them, by their index in
-			// the sent steps; a stale reply's fits never sit editable under a current layer.
-			if (data.key === currentEffectsKey()) {
-				const byIndex = new Map<number, readonly Curve[]>();
-				data.fits?.forEach(({ index, curves }) => byIndex.set(index, curves));
-				analysedFits.set({ key: data.key, byIndex });
-			}
-			settle(current, data.key, data.results);
+			// Same-source replies are valid results even when stale, so retain them all.
+			retain(data.key, { results: data.results, fits: data.fits });
+			const key = currentEffectsKey();
+			const shown = compiledEffects.get();
+			// An older reply stands in while the current settings compile, but never replaces
+			// them once they show.
+			if (data.key === key || shown?.source !== current || shown.key !== key)
+				publish(current, data.key, { results: data.results, fits: data.fits });
+			else settle(current, data.key, data.results);
 		}
 		// Settings that moved on will never compile; their processing is superseded anyway.
 		const key = currentEffectsKey();
