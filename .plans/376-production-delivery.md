@@ -12,8 +12,8 @@ Deploy verified main commits independently of npm release eligibility. Parent ow
 ## TODOs
 
 - [x] Add main delivery, supersession guards and executable workflow tests.
-- [~] Document delivery and recovery; run release tooling and focused lint.
-- [ ] Review every changed file, rebase, push and file the non-draft PR.
+- [x] Document delivery and recovery; run release tooling and focused lint.
+- [~] Review every changed file, rebase, push and file the non-draft PR.
 
 ## Notes
 
@@ -23,3 +23,4 @@ Deploy verified main commits independently of npm release eligibility. Parent ow
 - Parent approved release-validation.yml concurrency ownership. Include caller workflow in the key to keep CI and Release validation independent while preserving latest-head PR cancellation.
 - No relevant GitHub Project exists. Issue uses the sibling v1 milestone.
 - Workflow tests pass 21/21, including caller isolation. Actionlint 1.7.12, focused Prettier and ESLint pass.
+- Complete release tooling suite passes 54/54. Delivery docs distinguish CI website recovery from npm release retries.
