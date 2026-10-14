@@ -3,8 +3,9 @@ import { createServer } from 'node:http';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
 import { runBrowserTransport } from './benchmark-transport.mjs';
+
+export { startBenchmarkServer };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -20,121 +21,126 @@ const significantNumberFormatter = new Intl.NumberFormat('en-US', {
 });
 const liveRenderState = { lines: 0, lastRenderMs: 0 };
 let runHeaderPrinted = false;
-
-const options = await resolveOptions(process.argv.slice(2));
-const outDir = path.resolve(
-	root,
-	options.outputDir ?? `benchmark-results/wasm-resize-${timestamp}`
-);
-
-const pkgDir = options.threadedWasm ? threadedPkgDir : scalarPkgDir;
-const buildCommand = options.threadedWasm ? 'pnpm wasm:build:threads' : 'pnpm wasm:build';
-await assertFile(
-	path.join(pkgDir, 'ditherette_wasm.js'),
-	`Run \`${buildCommand}\` before benchmarking.`
-);
-await assertFile(
-	path.join(pkgDir, 'ditherette_wasm_bg.wasm'),
-	`Run \`${buildCommand}\` before benchmarking.`
-);
-
-const fixtures = await benchmarkFixtures(options.fixtures);
 let statusLineActive = false;
 
-await runBrowserTransport({
-	startServer: () => startBenchmarkServer({ pkgDir, fixtures }),
-	launchBrowserServer: () =>
-		chromium.launchServer({
-			headless: true,
-			handleSIGINT: false,
-			handleSIGTERM: false,
-			handleSIGHUP: false
-		}),
-	run: async ({ server, browserServer }) => {
-		const browser = await chromium.connect(browserServer.wsEndpoint());
-		try {
-			let browserResult;
-			const runConfigs = sweepRunConfigs(options);
-			for (let runIndex = 0; runIndex < runConfigs.length; runIndex += 1) {
-				const runConfig = runConfigs[runIndex];
-				const page = await browser.newPage();
-				page.on('console', (message) => {
-					if (message.type() !== 'debug') return;
-					const text = message.text();
-					if (text.startsWith('bench-progress ')) {
-						if (!options.jsonlEvents) writeStatusLine(text.slice('bench-progress '.length));
-						return;
-					}
-					if (text.startsWith('bench-event ')) {
-						const event = JSON.parse(text.slice('bench-event '.length));
-						if (options.jsonlEvents) {
-							console.log(JSON.stringify(event));
+if (import.meta.main) await main();
+
+async function main() {
+	const { chromium } = await import('playwright');
+	const options = await resolveOptions(process.argv.slice(2));
+	const outDir = path.resolve(
+		root,
+		options.outputDir ?? `benchmark-results/wasm-resize-${timestamp}`
+	);
+
+	const pkgDir = options.threadedWasm ? threadedPkgDir : scalarPkgDir;
+	const buildCommand = options.threadedWasm ? 'pnpm wasm:build:threads' : 'pnpm wasm:build';
+	await assertFile(
+		path.join(pkgDir, 'ditherette_wasm.js'),
+		`Run \`${buildCommand}\` before benchmarking.`
+	);
+	await assertFile(
+		path.join(pkgDir, 'ditherette_wasm_bg.wasm'),
+		`Run \`${buildCommand}\` before benchmarking.`
+	);
+
+	const fixtures = await benchmarkFixtures(options.fixtures);
+
+	await runBrowserTransport({
+		startServer: () => startBenchmarkServer({ pkgDir, fixtures }),
+		launchBrowserServer: () =>
+			chromium.launchServer({
+				headless: true,
+				handleSIGINT: false,
+				handleSIGTERM: false,
+				handleSIGHUP: false
+			}),
+		run: async ({ server, browserServer }) => {
+			const browser = await chromium.connect(browserServer.wsEndpoint());
+			try {
+				let browserResult;
+				const runConfigs = sweepRunConfigs(options);
+				for (let runIndex = 0; runIndex < runConfigs.length; runIndex += 1) {
+					const runConfig = runConfigs[runIndex];
+					const page = await browser.newPage();
+					page.on('console', (message) => {
+						if (message.type() !== 'debug') return;
+						const text = message.text();
+						if (text.startsWith('bench-progress ')) {
+							if (!options.jsonlEvents) writeStatusLine(text.slice('bench-progress '.length));
 							return;
 						}
-						handleBenchEvent(event, options);
-					}
-				});
-				await page.goto(server.url, { waitUntil: 'load' });
+						if (text.startsWith('bench-event ')) {
+							const event = JSON.parse(text.slice('bench-event '.length));
+							if (options.jsonlEvents) {
+								console.log(JSON.stringify(event));
+								return;
+							}
+							handleBenchEvent(event, options);
+						}
+					});
+					await page.goto(server.url, { waitUntil: 'load' });
 
-				const partialResult = await page.evaluate(
-					async (config) => globalThis.runWasmBench(config),
-					{
-						domain: options.domain,
-						profile: options.profile,
-						fixtures: fixtures.map((fixture) => ({
-							name: fixture.name,
-							url: `/fixtures/${encodeURIComponent(fixture.name)}`
-						})),
-						subjects: runConfig.subjects.map(subjectConfig),
-						reportSubjects: options.subjects.map(subjectConfig),
-						scales: runConfig.scales,
-						reportScales: options.scales,
-						lanes: options.lanes,
-						baseline: options.baseline,
-						sampleSize: options.sampleSize,
-						measurementTimeMs: options.measurementTimeMs,
-						warmUpTimeMs: options.warmUpTimeMs,
-						warmUpIterations: options.warmUpIterations,
-						targetSampleTimeMs: options.targetSampleTimeMs,
-						liveStats: options.liveStats,
-						threadedWasm: options.threadedWasm,
-						threadCount: runConfig.threadCount,
-						rowBandHeight: runConfig.rowBandHeight,
-						sweepLabel: runConfig.label,
-						emitStart: runIndex === 0,
-						periodicScalarRemeasurement:
-							runConfig.periodicScalarRemeasurement ?? options.periodicScalarRemeasurement
+					const partialResult = await page.evaluate(
+						async (config) => globalThis.runWasmBench(config),
+						{
+							domain: options.domain,
+							profile: options.profile,
+							fixtures: fixtures.map((fixture) => ({
+								name: fixture.name,
+								url: `/fixtures/${encodeURIComponent(fixture.name)}`
+							})),
+							subjects: runConfig.subjects.map(subjectConfig),
+							reportSubjects: options.subjects.map(subjectConfig),
+							scales: runConfig.scales,
+							reportScales: options.scales,
+							lanes: options.lanes,
+							baseline: options.baseline,
+							sampleSize: options.sampleSize,
+							measurementTimeMs: options.measurementTimeMs,
+							warmUpTimeMs: options.warmUpTimeMs,
+							warmUpIterations: options.warmUpIterations,
+							targetSampleTimeMs: options.targetSampleTimeMs,
+							liveStats: options.liveStats,
+							threadedWasm: options.threadedWasm,
+							threadCount: runConfig.threadCount,
+							rowBandHeight: runConfig.rowBandHeight,
+							sweepLabel: runConfig.label,
+							emitStart: runIndex === 0,
+							periodicScalarRemeasurement:
+								runConfig.periodicScalarRemeasurement ?? options.periodicScalarRemeasurement
+						}
+					);
+					await page.close();
+					if (!browserResult) {
+						browserResult = partialResult;
+					} else {
+						browserResult.results.push(...partialResult.results);
 					}
-				);
-				await page.close();
-				if (!browserResult) {
-					browserResult = partialResult;
-				} else {
-					browserResult.results.push(...partialResult.results);
 				}
-			}
-			const artifact = benchRunArtifact(options, browserResult);
+				const artifact = benchRunArtifact(options, browserResult);
 
-			if (options.jsonlEvents) {
-				console.log(JSON.stringify({ kind: 'complete', artifact }));
-			} else {
-				await mkdir(outDir, { recursive: true });
-				const jsonPath = path.join(
-					outDir,
-					`${sanitizePathComponent(options.profile ?? 'ad-hoc')}.json`
-				);
-				await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
+				if (options.jsonlEvents) {
+					console.log(JSON.stringify({ kind: 'complete', artifact }));
+				} else {
+					await mkdir(outDir, { recursive: true });
+					const jsonPath = path.join(
+						outDir,
+						`${sanitizePathComponent(options.profile ?? 'ad-hoc')}.json`
+					);
+					await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
 
+					clearStatusLine();
+					if (!runHeaderPrinted) console.log(renderPerfStart(artifact));
+					console.log(renderSummary(artifact));
+					console.log(`\nWrote ${path.relative(root, jsonPath)}`);
+				}
+			} finally {
 				clearStatusLine();
-				if (!runHeaderPrinted) console.log(renderPerfStart(artifact));
-				console.log(renderSummary(artifact));
-				console.log(`\nWrote ${path.relative(root, jsonPath)}`);
 			}
-		} finally {
-			clearStatusLine();
 		}
-	}
-});
+	});
+}
 
 function sweepRunConfigs(options) {
 	const configs = [];
@@ -321,6 +327,7 @@ async function resolveFixtureFile(value) {
 	throw new Error(`Benchmark fixture not found: ${value}`);
 }
 
+/** Serve local benchmark assets without exposing request error details to clients. */
 async function startBenchmarkServer({ pkgDir, fixtures }) {
 	const fixturesByName = new Map(fixtures.map((fixture) => [fixture.name, fixture.file]));
 	const server = createServer(async (request, response) => {
@@ -358,8 +365,9 @@ async function startBenchmarkServer({ pkgDir, fixtures }) {
 			response.writeHead(404);
 			response.end('Not found');
 		} catch (error) {
+			console.error(error);
 			response.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
-			response.end(error instanceof Error ? error.stack : String(error));
+			response.end('Internal server error');
 		}
 	});
 
