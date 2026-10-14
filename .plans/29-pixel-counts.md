@@ -12,7 +12,7 @@ Show how many pixels each palette colour takes in the finished output, and the t
 
 ## TODOs
 - [x] Add `countPalettePixels` and the `pixelCounts` store in `src/lib/processing/pixel-counts.ts`, with unit tests for counting semantics and the changed-source lifecycle.
-- [ ] Add the Pixels column to `PalettePanel.svelte` and the total badge to `ExportStrip.svelte`, with a component test.
+- [x] Add the Pixels column to `PalettePanel.svelte` and the total badge to `ExportStrip.svelte`, with a component test.
 - [ ] Document the counts in SPEC.md and DESIGN.md.
 - [ ] Capture before/after screenshots of the palette and export bar with a processed image.
 

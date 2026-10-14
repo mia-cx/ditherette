@@ -14,6 +14,7 @@
 		DialogTitle
 	} from '$lib/components/ui/dialog';
 	import { paletteColorEnabled } from '$lib/palette/wplace';
+	import { pixelCounts } from '$lib/processing/pixel-counts';
 	import { cn } from '$lib/utils';
 	import {
 		activePalette,
@@ -741,6 +742,7 @@
 							<th class="w-8 p-1.5"><span class="sr-only">Visibility</span></th>
 							<th class="p-1.5 text-left font-medium">Name</th>
 							<th class="p-1.5 text-left font-medium">Hex</th>
+							<th class="p-1.5 text-right font-medium">Pixels</th>
 							<th class="p-1.5 text-left font-medium">Tags</th>
 							<th class="p-1.5 text-right font-medium">Actions</th>
 						</tr>
@@ -823,6 +825,7 @@
 	{@const selected = selectedColorKeys[color.key] === true}
 	{@const editable = color.kind === 'transparent' || !isBuiltIn}
 	{@const mutable = !isBuiltIn && color.kind !== 'transparent'}
+	{@const pixels = $pixelCounts ? ($pixelCounts.byKey.get(color.key) ?? 0).toLocaleString() : '—'}
 	<tr
 		class="border-t border-border hover:bg-muted/40 data-selected:bg-muted/50 data-disabled:opacity-55"
 		data-disabled={!isVisible || undefined}
@@ -848,6 +851,7 @@
 		<td class="p-1.5 align-middle font-mono text-muted-foreground">
 			{color.kind === 'transparent' ? '—' : color.key}
 		</td>
+		<td class="p-1.5 text-right align-middle tabular-nums">{pixels}</td>
 		<td class="p-1.5 align-middle">{@render kindBadge(color)}</td>
 		<td class="p-1.5 align-middle">
 			<div class="flex justify-end gap-1">
