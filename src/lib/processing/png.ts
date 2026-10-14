@@ -302,10 +302,6 @@ export async function decodePng(
 	return { data, width, height };
 }
 
-export function downloadIndexedPng(image: ProcessedImage, filename = 'ditherette.png') {
-	downloadPngBlob(encodeIndexedPng(image), filename);
-}
-
 /** Publish a finished PNG; callers must check export identity before invoking this. */
 export function downloadPngBlob(blob: Blob, filename = 'ditherette.png') {
 	const url = URL.createObjectURL(blob);
