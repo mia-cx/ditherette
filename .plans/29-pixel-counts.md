@@ -19,5 +19,5 @@ Show how many pixels each palette colour takes in the finished output, and the t
 ## Notes
 - `exportable` in `export.ts` already means "finished and matches the current settings"; the counts reuse it as their readiness gate.
 - Disabled colours are not in the output palette, so they count 0.
-- At 390px the palette table already overflowed its `overflow-x: hidden` viewport before this change (468px of content in 358px), clipping the Actions column. The Pixels column widens the table to 512px, so Tags clip too. Fixing the phone table layout is outside this issue.
+- The palette table switches to a compact layout below 32rem of panel width (container query): hex and tag buttons move under the colour name, the Pixels column stays, Edit shrinks to its icon, and Duplicate/Delete stay in the selection bar — reachable inside the viewport down to 276px.
 - Checks: `pnpm vitest --run --project server src/lib/processing/pixel-counts.spec.ts src/lib/processing/export.spec.ts`, `pnpm vitest --run --project client src/routes/components/PalettePanel.svelte.spec.ts src/routes/components/ExportStrip.svelte.spec.ts`, `pnpm check`, prettier and eslint on changed files.
