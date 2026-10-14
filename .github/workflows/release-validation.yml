@@ -71,6 +71,8 @@ jobs:
           cargo fetch --locked --manifest-path crates/ditherette-bench/Cargo.toml
       - name: Build fresh ordinary package and frozen oracle
         run: |
+          # rust-cache exports this override; provenance must use the committed build configuration.
+          unset CARGO_INCREMENTAL
           mkdir -p target
           node scripts/prepare-public-benchmark.mjs "$GITHUB_WORKSPACE/target/conformance-public" | tee target/conformance-build.log
           cargo run --locked --release --manifest-path crates/ditherette-bench/Cargo.toml --example yliluoma_conformance -- "$GITHUB_WORKSPACE/target/yliluoma-conformance.json"
