@@ -55,8 +55,13 @@ it('sets the dither algorithm from Image > Dither', async () => {
 	});
 	focus(page.getByRole('menuitem', { name: 'Image', exact: true }).element());
 	await userEvent.keyboard('{Enter}');
+	// The menu assigns its initial keyboard focus after mounting.
+	await expect
+		.element(page.getByRole('menuitem', { name: 'Adjustments', exact: true }))
+		.toHaveFocus();
 	focus(page.getByRole('menuitem', { name: 'Dither', exact: true }).element());
 	await userEvent.keyboard('{ArrowRight}');
+	await expect.element(page.getByRole('menuitemradio', { name: 'Sierra Lite' })).toBeVisible();
 	focus(page.getByRole('menuitemradio', { name: 'Sierra Lite' }).element());
 	await userEvent.keyboard('{Enter}');
 	await expect.poll(() => ditherSettings.get().algorithm).toBe('sierra-lite');
