@@ -22,16 +22,6 @@ function crc32(bytes: Uint8Array) {
 	return (crc ^ 0xffffffff) >>> 0;
 }
 
-function adler32(bytes: Uint8Array) {
-	let a = 1;
-	let b = 0;
-	for (const byte of bytes) {
-		a = (a + byte) % 65521;
-		b = (b + a) % 65521;
-	}
-	return ((b << 16) | a) >>> 0;
-}
-
 function writeU32(bytes: Uint8Array, offset: number, value: number) {
 	bytes[offset] = (value >>> 24) & 0xff;
 	bytes[offset + 1] = (value >>> 16) & 0xff;
@@ -53,15 +43,27 @@ function chunk(type: string, data: Uint8Array) {
 	return output;
 }
 
-function zlibStore(bytes: Uint8Array) {
-	const blockCount = Math.ceil(bytes.length / 65535) || 1;
-	const output = new Uint8Array(2 + bytes.length + blockCount * 5 + 4);
-	let offset = 0;
+/** Write filter bytes and stored deflate blocks directly into the final IDAT chunk. */
+function indexedDataChunk(image: ProcessedImage) {
+	const rowBytes = (image.width + 1) * image.height;
+	const blockCount = Math.ceil(rowBytes / 65535);
+	const dataLength = 2 + rowBytes + blockCount * 5 + 4;
+	const output = new Uint8Array(12 + dataLength);
+	writeU32(output, 0, dataLength);
+	output.set(ascii('IDAT'), 4);
+	let offset = 8;
 	output[offset++] = 0x78;
 	output[offset++] = 0x01;
-	let sourceOffset = 0;
+	let remaining = rowBytes;
+	let column = 0;
+	let index = 0;
+	let a = 1;
+	let b = 0;
+	let checksumBytes = 0;
+	// RFC 1950's Adler-32 bound prevents overflow between reductions.
+	const ADLER_BATCH = 5552;
 	for (let block = 0; block < blockCount; block++) {
-		const length = Math.min(65535, bytes.length - sourceOffset);
+		const length = Math.min(65535, remaining);
 		const final = block === blockCount - 1 ? 1 : 0;
 		output[offset++] = final;
 		output[offset++] = length & 0xff;
@@ -69,14 +71,26 @@ function zlibStore(bytes: Uint8Array) {
 		const inverse = ~length & 0xffff;
 		output[offset++] = inverse & 0xff;
 		output[offset++] = (inverse >>> 8) & 0xff;
-		output.set(bytes.subarray(sourceOffset, sourceOffset + length), offset);
-		offset += length;
-		sourceOffset += length;
+		for (let byte = 0; byte < length; byte++) {
+			const value = column === 0 ? 0 : image.indices[index++];
+			output[offset++] = value;
+			if (++column > image.width) column = 0;
+			a += value;
+			b += a;
+			if (++checksumBytes === ADLER_BATCH) {
+				a %= 65521;
+				b %= 65521;
+				checksumBytes = 0;
+			}
+		}
+		remaining -= length;
 	}
-	writeU32(output, offset, adler32(bytes));
+	writeU32(output, offset, (((b % 65521) << 16) | (a % 65521)) >>> 0);
+	writeU32(output, output.length - 4, crc32(output.subarray(4, output.length - 4)));
 	return output;
 }
 
+/** Encode exact 8-bit palette indices and transparency without an RGBA/canvas conversion. */
 export function encodeIndexedPng(image: ProcessedImage): Blob {
 	const safeImage = validatePngExportImage(image);
 
@@ -100,23 +114,13 @@ export function encodeIndexedPng(image: ProcessedImage): Blob {
 		trns[i] = color.kind === 'transparent' ? 0 : 255;
 	}
 
-	const rows = new Uint8Array((safeImage.width + 1) * safeImage.height);
-	for (let y = 0; y < safeImage.height; y++) {
-		const rowOffset = y * (safeImage.width + 1);
-		rows[rowOffset] = 0;
-		rows.set(
-			safeImage.indices.subarray(y * safeImage.width, (y + 1) * safeImage.width),
-			rowOffset + 1
-		);
-	}
-
 	return new Blob(
 		[
 			PNG_SIGNATURE,
 			chunk('IHDR', ihdr),
 			chunk('PLTE', plte),
 			chunk('tRNS', trns),
-			chunk('IDAT', zlibStore(rows)),
+			indexedDataChunk(safeImage),
 			chunk('IEND', new Uint8Array())
 		],
 		{ type: 'image/png' }
@@ -298,8 +302,8 @@ export async function decodePng(
 	return { data, width, height };
 }
 
-export function downloadIndexedPng(image: ProcessedImage, filename = 'ditherette.png') {
-	const blob = encodeIndexedPng(image);
+/** Publish a finished PNG; callers must check export identity before invoking this. */
+export function downloadPngBlob(blob: Blob, filename = 'ditherette.png') {
 	const url = URL.createObjectURL(blob);
 	const link = document.createElement('a');
 	link.href = url;

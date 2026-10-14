@@ -1,4 +1,4 @@
-import { computed } from 'nanostores';
+import { computed, onStop } from 'nanostores';
 import {
 	activePalette,
 	colorSpace,
@@ -9,6 +9,7 @@ import {
 	processingProgress,
 	selectedPalette,
 	shareExportData,
+	sourceImageData,
 	sourceMeta
 } from '$lib/stores/app';
 import { activeEffectSteps, effectLayers } from '$lib/stores/effects';
@@ -16,7 +17,8 @@ import { looksApplied } from '$lib/stores/fit-looks';
 import { buildExportEvent, type FitEvent } from '$lib/telemetry/event';
 import { measurePaletteFits } from './live-effects';
 import { processingIdentityHash } from './hash';
-import { downloadIndexedPng } from './png';
+import { downloadPngBlob } from './png';
+import { encodeIndexedPngOffThread } from './png-worker';
 import type { ProcessedImage } from './types';
 
 /** Identity of the settings on screen; the processed image matches it once processing catches up. */
@@ -49,21 +51,70 @@ export const exportable = computed(
 	(image, progress, hash) => Boolean(image && !progress && image.settingsHash === hash)
 );
 
-/** Download the processed image as an indexed PNG named after the source. */
+let cancelActiveExport: (() => void) | undefined;
+
+/** Stop a pending export without publishing its file or anonymous event. */
+export function cancelPngExport() {
+	cancelActiveExport?.();
+}
+
+// The last export control unmounting ends the export, including client-side navigation.
+onStop(exportable, cancelPngExport);
+if (import.meta.hot) import.meta.hot.dispose(cancelPngExport);
+
+/** Download the current indexed result without blocking the page or detaching displayed indices. */
 export function exportPng() {
 	const image = processedImage.get();
 	if (!image || !exportable.get()) return;
-	downloadIndexedPng(image, exportFilename(image));
+	cancelPngExport();
+	const controller = new AbortController();
+	const source = sourceImageData.get();
+	const filename = exportFilename(image);
+	const isCurrent = () =>
+		processedImage.get() === image &&
+		sourceImageData.get() === source &&
+		!processingProgress.get() &&
+		image.settingsHash === currentHash.get();
+	const cancel = () => controller.abort();
+	const invalidate = () => {
+		if (!isCurrent()) cancel();
+	};
+	const subscriptions = [
+		processedImage.listen(invalidate),
+		sourceImageData.listen(invalidate),
+		processingProgress.listen(invalidate),
+		currentHash.listen(invalidate)
+	];
+	window.addEventListener('pagehide', cancel, { once: true });
+	cancelActiveExport = cancel;
+	const completed = encodeIndexedPngOffThread(image, controller.signal)
+		.then((blob) => {
+			if (controller.signal.aborted || !isCurrent()) return false;
+			downloadPngBlob(blob, filename);
+			return true;
+		})
+		.catch((error: unknown) => {
+			if (!controller.signal.aborted) console.error('PNG export failed.', error);
+			return false;
+		})
+		.finally(() => {
+			for (const unsubscribe of subscriptions) unsubscribe();
+			window.removeEventListener('pagehide', cancel);
+			if (cancelActiveExport === cancel) cancelActiveExport = undefined;
+		});
 	if (shareExportData.get()) {
 		// Fire and forget: the export never waits on or surfaces the event.
-		void sendExportEvent(image).catch((error: unknown) =>
-			console.debug('Export event skipped.', error)
+		void sendExportEvent({ width: image.width, height: image.height }, completed).catch(
+			(error: unknown) => console.debug('Export event skipped.', error)
 		);
 	}
 }
 
 /** Post the anonymous export event: settings and colour measurements, never the image. */
-async function sendExportEvent(image: ProcessedImage) {
+async function sendExportEvent(
+	image: Pick<ProcessedImage, 'width' | 'height'>,
+	completed: Promise<boolean>
+) {
 	// One synchronous snapshot: everything the event reports is read before the measurement
 	// await, so a mid-measurement edit can't split the event between two states.
 	const effects = activeEffectSteps.get();
@@ -74,6 +125,7 @@ async function sendExportEvent(image: ProcessedImage) {
 	const space = colorSpace.get();
 	const palette = activePalette.get();
 	const enabled = paletteEnabled.get();
+	if (!(await completed)) return;
 	const measured = await measurePaletteFits(effects);
 	const fits: FitEvent[] = [];
 	layers

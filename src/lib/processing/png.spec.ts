@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { encodeIndexedPng } from './png';
+import { inflateSync } from 'node:zlib';
+import { decodePng, encodeIndexedPng } from './png';
 import type { ProcessedImage } from './types';
 
 function sampleImage(): ProcessedImage {
@@ -38,6 +39,68 @@ function chunkNames(bytes: Uint8Array) {
 }
 
 describe('encodeIndexedPng', () => {
+	it.each([
+		[1, 1],
+		[255, 256], // Exactly one stored block, including filter bytes.
+		[256, 256], // Block boundary falls inside a row.
+		[16384, 9] // Multiple blocks and checksum batches.
+	])('decodes exact indices, palette and alpha for %ix%i', async (width, height) => {
+		const palette: ProcessedImage['palette'] = Array.from({ length: 256 }, (_, i) => ({
+			name: `Colour ${i}`,
+			key: `${i}`,
+			kind: i === 77 ? 'transparent' : 'free',
+			rgb: { r: i, g: 255 - i, b: (i * 37) % 256 },
+			enabled: true
+		}));
+		const image = {
+			...sampleImage(),
+			width,
+			height,
+			palette,
+			transparentIndex: 77,
+			indices: Uint8Array.from({ length: width * height }, (_, i) => (i * 31 + 77) % 256)
+		};
+		const png = await bytes(encodeIndexedPng(image));
+		const chunks = new Map<string, Uint8Array>();
+		for (let offset = 8; offset < png.length; ) {
+			const length = new DataView(png.buffer).getUint32(offset);
+			const name = String.fromCharCode(...png.subarray(offset + 4, offset + 8));
+			const end = offset + 8 + length;
+			// Independent bitwise CRC verifies chunk framing, including the final IDAT checksum.
+			let crc = 0xffffffff;
+			for (const byte of png.subarray(offset + 4, end)) {
+				crc ^= byte;
+				for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+			}
+			expect(new DataView(png.buffer).getUint32(end)).toBe((crc ^ 0xffffffff) >>> 0);
+			chunks.set(name, png.subarray(offset + 8, end));
+			offset = end + 4;
+		}
+		expect(chunks.get('IHDR')?.[8]).toBe(8);
+		expect(chunks.get('IHDR')?.[9]).toBe(3);
+		expect(chunks.get('PLTE')).toEqual(
+			Uint8Array.from(palette.flatMap((color) => Object.values(color.rgb!)))
+		);
+		expect(chunks.get('tRNS')).toEqual(Uint8Array.from(palette, (_, i) => (i === 77 ? 0 : 255)));
+		const rows = inflateSync(chunks.get('IDAT')!);
+		for (let y = 0; y < height; y++) {
+			const offset = y * (width + 1);
+			expect(rows[offset]).toBe(0);
+			expect(new Uint8Array(rows.subarray(offset + 1, offset + 1 + width))).toEqual(
+				image.indices.subarray(y * width, (y + 1) * width)
+			);
+		}
+		const decoded = await decodePng(png);
+		const expected = Uint8ClampedArray.from(
+			Array.from(image.indices).flatMap((i) => [
+				palette[i].rgb!.r,
+				palette[i].rgb!.g,
+				palette[i].rgb!.b,
+				i === 77 ? 0 : 255
+			])
+		);
+		expect(decoded?.data).toEqual(expected);
+	});
 	it('writes an indexed PNG with PLTE and tRNS chunks', async () => {
 		const png = await bytes(encodeIndexedPng(sampleImage()));
 
