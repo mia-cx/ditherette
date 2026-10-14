@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
 	activePalette,
 	colorSpace,
@@ -14,12 +14,6 @@ import { activeEffectSteps, effectLayers } from '$lib/stores/effects';
 import { useTestStorageEngine } from '@nanostores/persistent';
 import type { SourceMeta } from '$lib/stores/app';
 import type { EnabledPaletteColor, PaletteColor, ProcessedImage } from './types';
-
-vi.mock('./png', () => ({ downloadIndexedPng: vi.fn() }));
-vi.mock('./live-effects', async (importOriginal) => ({
-	...(await importOriginal<typeof import('./live-effects')>()),
-	measurePaletteFits: vi.fn(async () => new Map())
-}));
 
 import { countPalettePixels, pixelCounts } from './pixel-counts';
 import { processingIdentityHash } from './hash';
@@ -71,10 +65,7 @@ afterEach(() => {
 	unsubscribe();
 });
 
-const color = (
-	name: string,
-	kind: PaletteColor['kind'] = 'free'
-): EnabledPaletteColor => ({
+const color = (name: string, kind: PaletteColor['kind'] = 'free'): EnabledPaletteColor => ({
 	name,
 	key: name.toLowerCase(),
 	kind,
