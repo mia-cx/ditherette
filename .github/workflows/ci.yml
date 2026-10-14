@@ -246,8 +246,9 @@ jobs:
   production_validation:
     name: Validate the production website commit
     needs: result
+    # Main skips PR-only ancestors; override the implicit success() in both delivery guards.
     if: >-
-      needs.result.result == 'success' &&
+      !cancelled() && needs.result.result == 'success' &&
       github.repository == 'mia-cx/ditherette' && github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     uses: ./.github/workflows/release-validation.yml
@@ -258,7 +259,7 @@ jobs:
     name: Deploy the website
     needs: [result, production_validation]
     if: >-
-      needs.result.result == 'success' && needs.production_validation.result == 'success' &&
+      !cancelled() && needs.result.result == 'success' && needs.production_validation.result == 'success' &&
       github.repository == 'mia-cx/ditherette' && github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
