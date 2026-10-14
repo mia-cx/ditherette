@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 const workflow = (name) =>
 	readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
@@ -17,6 +18,20 @@ function runStep(source, name) {
 	const body = step.match(/ {8}run: \|\n((?: {10}[^\n]*(?:\n|$)|\n)*)/);
 	assert.ok(body, name);
 	return body[1].replace(/^ {10}/gm, '');
+}
+
+function jobSource(source, name) {
+	const start = source.indexOf(`\n  ${name}:\n`);
+	assert.notEqual(start, -1, name);
+	return source.slice(start).split(/\n {2}(?=[\w-]+:)/)[1];
+}
+
+// These guards use the shared Actions/JavaScript boolean syntax. Evaluate the shipped
+// expressions so event or validation changes affect the executable delivery tests.
+function jobAllowed(source, name, context) {
+	const condition = jobSource(source, name).match(/ {4}if: >-\n((?: {6}[^\n]+\n)+)/);
+	assert.ok(condition, name);
+	return runInNewContext(condition[1].trim(), context);
 }
 
 async function fixture(t) {
@@ -218,13 +233,6 @@ test('helper-only edits select the release tooling tests while documentation ski
 
 for (const [name, step, manifest, changelog, tag] of [
 	[
-		'release',
-		'Tag and release the deployed version',
-		'package.json',
-		'CHANGELOG.md',
-		'ditherette-web@0.0.2'
-	],
-	[
 		'package-publish',
 		'Tag and release the published version',
 		'packages/ditherette/package.json',
@@ -294,3 +302,156 @@ fs.writeFileSync(process.env.RELEASE_RECORD, JSON.stringify({ args, notes: fs.re
 		assert.equal(conflict.status, 1, conflict.stdout + conflict.stderr);
 	});
 }
+
+test('main delivery requires successful CI and exact-commit conformance before production', async (t) => {
+	const source = await workflow('ci');
+	const validation = jobSource(source, 'production_validation');
+	const delivery = jobSource(source, 'website');
+	assert.match(validation, /needs: result\n/);
+	assert.match(validation, /uses: \.\/\.github\/workflows\/release-validation\.yml\n/);
+	assert.match(validation, /sha: \$\{\{ github\.sha \}\}/);
+	assert.match(delivery, /needs: \[result, production_validation\]/);
+	assert.match(delivery, /ref: \$\{\{ github\.sha \}\}/);
+	assert.match(delivery, /environment: production\n/);
+	assert.match(delivery, /group: ditherette-website\n\s+cancel-in-progress: false/);
+	assert.doesNotMatch(await workflow('release'), /wrangler (deploy|d1)|environment: production/);
+	const github = {
+		repository: 'mia-cx/ditherette',
+		ref: 'refs/heads/main',
+		event_name: 'push'
+	};
+	const needs = {
+		result: { result: 'success' },
+		production_validation: { result: 'success' }
+	};
+	for (const [label, context, allowed] of [
+		['ordinary main push', { github, needs }, true],
+		[
+			'manual main recovery',
+			{ github: { ...github, event_name: 'workflow_dispatch' }, needs },
+			true
+		],
+		['PR', { github: { ...github, event_name: 'pull_request' }, needs }, false],
+		[
+			'privileged PR event',
+			{ github: { ...github, event_name: 'pull_request_target' }, needs },
+			false
+		],
+		['fork', { github: { ...github, repository: 'fork/ditherette' }, needs }, false],
+		['branch dispatch', { github: { ...github, ref: 'refs/heads/untrusted' }, needs }, false],
+		...['failure', 'cancelled', 'skipped'].flatMap((result) => [
+			[`CI ${result}`, { github, needs: { ...needs, result: { result } } }, false],
+			[
+				`conformance ${result}`,
+				{ github, needs: { ...needs, production_validation: { result } } },
+				false
+			]
+		])
+	]) {
+		await t.test(label, () => {
+			assert.equal(jobAllowed(source, 'website', context), allowed);
+			const validate = jobAllowed(source, 'production_validation', context);
+			assert.equal(
+				validate,
+				context.needs.result.result === 'success' &&
+					['push', 'workflow_dispatch'].includes(context.github.event_name) &&
+					context.github.repository === github.repository &&
+					context.github.ref === github.ref
+			);
+		});
+	}
+});
+
+test('validation callers at the same commit cannot cancel each other; PR heads still supersede', async () => {
+	const source = await workflow('release-validation');
+	const concurrency = source.match(/\nconcurrency:\n([\s\S]*?)\njobs:/)?.[1];
+	assert.ok(concurrency);
+	const group = concurrency.match(/ {2}group: ([^\n]+)/)?.[1];
+	assert.ok(group);
+	assert.match(concurrency, /cancel-in-progress: true\n/);
+	const key = (workflow, sha, number) =>
+		group.replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, expression) =>
+			runInNewContext(expression, {
+				github: { workflow, sha, event: { pull_request: { number } } },
+				inputs: { sha: number ? '' : sha }
+			})
+		);
+	const sha = 'a'.repeat(40);
+	assert.notEqual(key('CI', sha), key('Release', sha));
+	assert.notEqual(key('CI', sha), key('Release validation', sha));
+	assert.equal(key('Release validation', sha, 123), key('Release validation', 'b'.repeat(40), 123));
+	assert.notEqual(key('Release validation', sha, 123), key('Release validation', sha, 124));
+});
+
+test('website shell deploys ordinary main, rejects older queued commits and stops on migration errors', async (t) => {
+	const { root, git } = await fixture(t);
+	const source = await workflow('ci');
+	const reject = runStep(source, 'Reject superseded website commits');
+	const deliver = runStep(source, 'Deliver the current website commit');
+	const origin = join(root, 'temporary/origin.git');
+	execFileSync('git', ['init', '--bare', origin]);
+	git('remote', 'add', 'origin', origin);
+	git('push', 'origin', 'HEAD:main');
+	const sha = git('rev-parse', 'HEAD');
+	const bin = join(root, 'temporary/bin');
+	await mkdir(bin);
+	const record = join(root, 'temporary/deliveries');
+	await writeFile(
+		join(bin, 'pnpm'),
+		`#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.DELIVERY_RECORD, JSON.stringify(args) + '\\n');
+if (args.includes('migrations') && process.env.FAIL_MIGRATION === 'true') process.exit(1);
+`,
+		{ mode: 0o755 }
+	);
+	const env = {
+		...process.env,
+		PATH: `${bin}:${process.env.PATH}`,
+		GITHUB_SHA: sha,
+		CLOUDFLARE_API_TOKEN: 'fixture-token',
+		DELIVERY_RECORD: record
+	};
+	const run = (script, overrides = {}) =>
+		spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+			cwd: root,
+			encoding: 'utf8',
+			env: { ...env, ...overrides }
+		});
+	assert.equal(run(reject).status, 0);
+	const ordinary = run(deliver);
+	assert.equal(ordinary.status, 0, ordinary.stdout + ordinary.stderr);
+	assert.deepEqual((await readFile(record, 'utf8')).trim().split('\n').map(JSON.parse), [
+		['exec', 'wrangler', 'd1', 'migrations', 'apply', 'EVENTS', '--remote', '--env', 'production'],
+		['exec', 'wrangler', 'deploy', '--env', 'production']
+	]);
+	await writeFile(record, '');
+	const failed = run(deliver, { FAIL_MIGRATION: 'true' });
+	assert.equal(failed.status, 1, failed.stdout + failed.stderr);
+	assert.equal((await readFile(record, 'utf8')).trim().split('\n').length, 1);
+	await writeFile(record, '');
+	assert.equal(run(deliver, { CLOUDFLARE_API_TOKEN: '' }).status, 1);
+	assert.equal(run(deliver, { GITHUB_SHA: 'a'.repeat(40) }).status, 1);
+	assert.equal(await readFile(record, 'utf8'), '');
+	// The version need not change for a newer main commit to supersede a queued build.
+	await writeFile(join(root, 'ordinary-change.txt'), 'newer website\n');
+	git('add', '.');
+	git('commit', '-m', 'ordinary main change');
+	const latest = git('rev-parse', 'HEAD');
+	git('push', 'origin', 'HEAD:main');
+	git('checkout', '--detach', sha);
+	// The first check caught a stale queued candidate. The second also catches a push during its build.
+	for (const script of [reject, deliver]) {
+		const stale = run(script);
+		assert.equal(stale.status, 1, stale.stdout + stale.stderr);
+		assert.match(stale.stdout, /superseded/);
+	}
+	assert.equal(await readFile(record, 'utf8'), '', 'stale commits must not migrate or deploy');
+	git('checkout', '--detach', latest);
+	assert.equal(run(deliver, { GITHUB_SHA: latest }).status, 0);
+	git('remote', 'remove', 'origin');
+	await writeFile(record, '');
+	assert.notEqual(run(deliver, { GITHUB_SHA: latest }).status, 0);
+	assert.equal(await readFile(record, 'utf8'), '', 'a failed freshness fetch must stop delivery');
+});
