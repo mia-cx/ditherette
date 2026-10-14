@@ -27,21 +27,24 @@ export interface EffectsExecution {
 	readonly fallback?: string;
 }
 
-/** Serial async effects processing. Hosts keep their own source/slider generation before publishing output. */
+/**
+ * Serial async effects processing. CPU fallback retires GPU ownership for this facade;
+ * create a fresh facade to retry GPU. Hosts guard their source/slider generation before publishing output.
+ */
 export interface GpuEffects {
 	readonly execution: EffectsExecution | undefined;
 	/**
 	 * Applies real effects with exact channel tables, preserving alpha and independent output ownership.
-	 * Optional `bitmap` must represent the same source, decoded with premultiplyAlpha and
-	 * colorSpaceConversion set to 'none'. Keep it open until this promise settles.
+	 * Uploads only the request's captured packed RGBA8 bytes. Image decoding belongs to the host.
 	 */
-	applyEffects(request: ApplyEffectsRequest, bitmap?: ImageBitmap): Promise<Rgba8Image>;
+	applyEffects(request: ApplyEffectsRequest): Promise<Rgba8Image>;
 	/** Release the device once. An active call rejects disposal and overlapping calls. */
 	dispose(): void;
 }
 
 /** Private ABI of the optional artifact. It is absent from ordinary scalar/threaded builds. */
 export interface GpuEffectsBindings {
+	privateGpuEffectsPlanningBytes(effectsBytes: number): number;
 	privateGpuEffectsPlan(effects: string, width: number, height: number): number;
 	privateGpuEffectsDetect(memoryLimit: number): Promise<string>;
 	privateGpuEffectsAdapter(): string;
@@ -50,12 +53,10 @@ export interface GpuEffectsBindings {
 		width: number,
 		height: number,
 		effects: string,
-		bitmap: ImageBitmap | undefined,
 		memoryLimit: number,
 		sink: { value?: Rgba8Image }
 	): Promise<string>;
 	privateGpuEffectsDispose(): void;
-	privateGpuEffectsOverhead?(): number;
 }
 
 /**
@@ -118,15 +119,23 @@ export function initializeGpuEffects(
 				'Processing and disposal cannot reenter an active call.'
 			);
 	};
-	const release = () => {
-		bindings?.privateGpuEffectsDispose();
-		detected = false;
+	const retire = (reason: string) => {
+		try {
+			bindings?.privateGpuEffectsDispose();
+		} finally {
+			// Drop the artifact itself before a fresh scalar module is allocated.
+			// Device destruction cannot reclaim wgpu's forgotten callbacks or the
+			// retained Wasm heap while this factory remains reachable.
+			bindings = undefined;
+			detected = false;
+			unavailable = reason;
+		}
 	};
 	return {
 		get execution() {
 			return execution;
 		},
-		async applyEffects(request, bitmap) {
+		async applyEffects(request) {
 			requireIdle();
 			active = true;
 			try {
@@ -144,12 +153,6 @@ export function initializeGpuEffects(
 					execution = { backend: 'cpu', fallback: 'NoEnabledEffects' };
 					return input.source;
 				}
-				if (bitmap && (bitmap.width !== input.sourceWidth || bitmap.height !== input.sourceHeight))
-					throw new DitheretteError(
-						'invalid-image',
-						'bitmap',
-						'Bitmap dimensions must match the source.'
-					);
 				const bytes = input.data.length;
 				if (bytes >= options.memoryLimitBytes)
 					throw new DitheretteError(
@@ -162,31 +165,31 @@ export function initializeGpuEffects(
 				let output: Rgba8Image | undefined;
 				if (bindings) {
 					try {
-						const required = bindings.privateGpuEffectsPlan(
-							input.effects.json,
-							input.sourceWidth,
-							input.sourceHeight
-						);
-						reason =
-							required === 0
-								? 'UnsupportedChain'
-								: required > options.memoryLimitBytes
-									? 'MemoryLimit'
-									: '';
+						// The validator emits ASCII-only keys, enum values and numbers.
+						// Ask the numeric ABI to admit its wire/decode/table capacity
+						// before wasm-bindgen allocates a copy of that JSON string.
+						const planning = bindings.privateGpuEffectsPlanningBytes(input.effects.json.length);
+						reason = planning > options.memoryLimitBytes ? 'MemoryLimit' : '';
+						if (!reason) {
+							const required = bindings.privateGpuEffectsPlan(
+								input.effects.json,
+								input.sourceWidth,
+								input.sourceHeight
+							);
+							reason =
+								required === 0
+									? 'UnsupportedChain'
+									: required > options.memoryLimitBytes
+										? 'MemoryLimit'
+										: '';
+						}
 					} catch {
 						reason = 'Failed';
 					}
 				}
 				// An unsupported or over-budget request must release the previous
 				// device before allocating even its CPU-bound source snapshot.
-				if (reason) release();
-				const idleCapacity = bindings?.privateGpuEffectsOverhead?.() ?? 0;
-				if (bytes + idleCapacity >= options.memoryLimitBytes)
-					throw new DitheretteError(
-						'memory-limit',
-						'memoryLimitBytes',
-						'Source snapshot and idle bridge exceed the instance memory limit.'
-					);
+				if (reason) retire(reason);
 				// Capture before the first await. Later source edits cannot change this call
 				// or its CPU fallback. Charge this package-owned buffer to either backend.
 				let snapshot: Uint8Array;
@@ -215,7 +218,6 @@ export function initializeGpuEffects(
 								source.width,
 								source.height,
 								input.effects.json,
-								bitmap,
 								options.memoryLimitBytes,
 								sink
 							);
@@ -225,12 +227,10 @@ export function initializeGpuEffects(
 						reason = 'Failed';
 						// A Wasm trap may strand backend state. Retire this factory permanently.
 						try {
-							release();
+							retire(reason);
 						} catch {
 							/* A trapped artifact is discarded below. */
 						}
-						bindings = undefined;
-						unavailable = reason;
 					}
 				}
 				if (!reason && output) {
@@ -241,18 +241,11 @@ export function initializeGpuEffects(
 					execution = { backend: 'gpu', adapter };
 					return output;
 				}
-				// No retained device/pipeline may coexist with CPU fallback capacity.
-				release();
-				if (!['UnsupportedChain', 'TooLarge', 'MemoryLimit'].includes(reason)) {
-					// Failed capability/verification/devices stay on CPU for this facade.
-					// Request-specific limits and unsupported chains may probe again later.
-					bindings = undefined;
-					unavailable = reason || 'Failed';
-				}
+				// No library-owned GPU artifact may coexist with CPU fallback capacity.
+				retire(reason || 'Failed');
 				const cpu = await createScalar({
 					wasm: options.wasm,
-					memoryLimitBytes:
-						options.memoryLimitBytes - bytes - (bindings?.privateGpuEffectsOverhead?.() ?? 0)
+					memoryLimitBytes: options.memoryLimitBytes - bytes
 				});
 				try {
 					const palette = input.palette?.map(
@@ -288,8 +281,7 @@ export function initializeGpuEffects(
 		dispose() {
 			if (disposed) return;
 			requireIdle();
-			release();
-			bindings = undefined;
+			retire('Disposed');
 			disposed = true;
 		}
 	};

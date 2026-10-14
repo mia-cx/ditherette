@@ -70,3 +70,56 @@ test('real Wasm memory plan routes a package operation to CPU before GPU detecti
 		cpu.dispose();
 	}
 });
+
+test('600-byte admission rejects 64 real exposure steps before the Wasm string planner', async () => {
+	for (const mixed of [false, true]) {
+		const artifact = createScalarBindings();
+		await artifact.default({ module_or_path: gpu });
+		let plannerEntries = 0;
+		let numericAdmissions = 0;
+		let admittedBytes;
+		let planningBytes;
+		const bounded = initializeGpuEffects(
+			{
+				...artifact,
+				privateGpuEffectsPlanningBytes(bytes) {
+					numericAdmissions++;
+					admittedBytes = bytes;
+					planningBytes = artifact.privateGpuEffectsPlanningBytes(bytes);
+					return planningBytes;
+				},
+				privateGpuEffectsPlan(...args) {
+					plannerEntries++;
+					return artifact.privateGpuEffectsPlan(...args);
+				}
+			},
+			{ wasm: scalar, memoryLimitBytes: 600 }
+		);
+		const effects = Array.from({ length: 64 }, () => ({
+			effect: 'exposure',
+			enabled: true,
+			stops: 0.5
+		}));
+		if (mixed)
+			effects[63] = {
+				effect: 'hue-saturation',
+				enabled: true,
+				hue: 30,
+				saturation: 0.2,
+				lightness: 0
+			};
+		await assert.rejects(
+			bounded.applyEffects({
+				version: 1,
+				source: { width: 1, height: 1, data: new Uint8Array(4) },
+				effects
+			}),
+			{ code: 'memory-limit', path: 'memoryLimitBytes' }
+		);
+		assert.equal(numericAdmissions, 1);
+		assert.equal(plannerEntries, 0);
+		assert.ok(planningBytes > 600);
+		if (!mixed) assert.equal(admittedBytes, 3137);
+		bounded.dispose();
+	}
+});

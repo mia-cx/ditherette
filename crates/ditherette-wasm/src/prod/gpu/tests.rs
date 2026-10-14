@@ -114,7 +114,7 @@ fn lookup_memory_includes_padded_upload_and_all_owned_pixel_buffers() {
     assert_eq!(plan.aligned_texture_bytes, 256 * 19);
     assert_eq!(
         plan.required_bytes,
-        LookupMemory::FIXED_BYTES + 2 * 256 * 19 + 5 * 37 * 19 * 4
+        LookupMemory::FIXED_BYTES + 2 * 256 * 19 + 6 * 37 * 19 * 4
     );
     assert_eq!(
         plan.check(plan.required_bytes - 1),

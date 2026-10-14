@@ -58,6 +58,7 @@ test('GPU failures release resources before the existing CPU fallback, including
 	]) {
 		const events = [];
 		const bindings = {
+			privateGpuEffectsPlanningBytes: () => 1,
 			privateGpuEffectsPlan: () => 1,
 			privateGpuEffectsDetect: async () => '',
 			privateGpuEffectsAdapter: () => 'test adapter',
@@ -82,10 +83,11 @@ test('GPU failures release resources before the existing CPU fallback, including
 	}
 });
 
-test('known-answer rejection stays on CPU while request-specific rejections can retry', async () => {
+test('known-answer rejection stays on CPU for the facade lifetime', async () => {
 	let detections = 0;
 	const processor = initializeGpuEffects(
 		{
+			privateGpuEffectsPlanningBytes: () => 1,
 			privateGpuEffectsPlan: () => 1,
 			privateGpuEffectsDetect: async () => {
 				detections++;
@@ -106,10 +108,11 @@ test('execution describes only successful calls and GPU callback failures leave 
 	let dispatches = 0;
 	const processor = initializeGpuEffects(
 		{
+			privateGpuEffectsPlanningBytes: () => 1,
 			privateGpuEffectsPlan: () => 1,
 			privateGpuEffectsDetect: async () => '',
 			privateGpuEffectsAdapter: () => 'test adapter',
-			privateGpuApplyEffects: async (data, width, height, _effects, _bitmap, _limit, sink) => {
+			privateGpuApplyEffects: async (data, width, height, _effects, _limit, sink) => {
 				dispatches++;
 				sink.value = { width, height, data: data.slice() };
 				return '';
@@ -140,6 +143,7 @@ test('unsupported chains and limits avoid detection/dispatch and preserve CPU ch
 	for (const planned of [0, options.memoryLimitBytes + 1]) {
 		const processor = initializeGpuEffects(
 			{
+				privateGpuEffectsPlanningBytes: () => 1,
 				privateGpuEffectsPlan: () => planned,
 				privateGpuEffectsDetect: () => assert.fail('preflight must precede detection'),
 				privateGpuApplyEffects: () => assert.fail('preflight must precede dispatch'),
@@ -166,6 +170,7 @@ test('async source and effects are captured once; overlapping calls and disposal
 	});
 	const processor = initializeGpuEffects(
 		{
+			privateGpuEffectsPlanningBytes: () => 1,
 			privateGpuEffectsPlan: () => 1,
 			privateGpuEffectsDetect: async () => {
 				await gate;
@@ -187,17 +192,13 @@ test('async source and effects are captured once; overlapping calls and disposal
 	processor.dispose();
 });
 
-test('no-op, progress failure, invalid request, bitmap dimensions and tight CPU budget preserve lifecycle', async () => {
+test('no-op, progress failure, invalid request and tight CPU budget preserve lifecycle', async () => {
 	const processor = initializeGpuEffects(undefined, options);
 	const empty = request({ effects: [] });
 	assert.equal(await processor.applyEffects(empty), empty.source);
 	await assert.rejects(
 		processor.applyEffects(request({ version: 9 })),
 		diagnostic('invalid-request')
-	);
-	await assert.rejects(
-		processor.applyEffects(request(), { width: 1, height: 1 }),
-		diagnostic('invalid-image')
 	);
 	await assert.rejects(
 		processor.applyEffects(

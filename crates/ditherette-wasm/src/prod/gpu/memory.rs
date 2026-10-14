@@ -1,6 +1,10 @@
 //! Owned lookup capacity, preflighted before any source upload or readback allocation.
 
-use std::{any::TypeId, cell::RefCell, mem::size_of};
+use std::{
+    any::TypeId,
+    cell::{Cell, RefCell},
+    mem::size_of,
+};
 
 use crate::{image::ImageDimensions, prod::effects::operation::BOOKKEEPING_BYTES};
 
@@ -19,8 +23,9 @@ pub struct LookupMemory {
 
 impl LookupMemory {
     /// Retained bridge slot and wasm-bindgen's first 128 four-byte handle slots.
-    /// This remains owned even after the device is released for CPU fallback.
-    pub const BRIDGE_BYTES: u64 = 128 * 4 + size_of::<RefCell<Option<Backend>>>() as u64;
+    /// Retiring the artifact releases ownership of these records before CPU fallback.
+    pub const BRIDGE_BYTES: u64 =
+        128 * 4 + size_of::<RefCell<Option<Backend>>>() as u64 + size_of::<Cell<bool>>() as u64;
 
     /// Reserves effect decode/planning, the backend and one cached lookup pipeline.
     /// The three parameter copies are CPU bytes, GPU storage and queue staging.
@@ -30,6 +35,13 @@ impl LookupMemory {
         + size_of::<ChannelLookup>() as u64
         + 4 * size_of::<(TypeId, wgpu::ComputePipeline)>() as u64
         + 3 * 3 * 256 * 4;
+
+    /// Scalar-only admission before wasm-bindgen copies the effects string or
+    /// Rust decodes the chain and builds its tables. The package supplies the
+    /// byte length of its validated canonical ASCII JSON, without copying it.
+    pub const fn planning_bytes(effects_bytes: u64) -> u64 {
+        Self::FIXED_BYTES + 2 * effects_bytes
+    }
 
     /// Plans packed buffers and a conservative padded texture/upload allocation.
     pub fn new(dimensions: ImageDimensions) -> Self {
@@ -41,7 +53,9 @@ impl LookupMemory {
             * height;
         // Texture and upload staging use padded rows. Storage output and mapped
         // readback are packed buffers; snapshot, Wasm source and result Vec are packed too.
-        let required_bytes = Self::FIXED_BYTES + 2 * aligned_texture_bytes + 5 * rgba_bytes;
+        // wgpu's WebBufferMappedRange copies mapped JS bytes into a temporary
+        // Wasm Vec before get_mapped_range().to_vec() creates our result Vec.
+        let required_bytes = Self::FIXED_BYTES + 2 * aligned_texture_bytes + 6 * rgba_bytes;
         Self {
             rgba_bytes,
             aligned_texture_bytes,

@@ -172,34 +172,6 @@ impl Gpu {
         result
     }
 
-    /// Bitmap upload follows the same scopes and limits as packed-byte processing.
-    #[cfg(target_arch = "wasm32")]
-    pub async fn process_bitmap<S: Stage>(
-        &self,
-        stage: &S,
-        bitmap: &wgpu::web_sys::ImageBitmap,
-    ) -> Result<Vec<u8>, Fallback> {
-        let dimensions = ImageDimensions::new(bitmap.width(), bitmap.height())
-            .map_err(|_| Fallback::TooLarge)?;
-        self.check_limits(dimensions)?;
-        let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let result = async {
-            let source = self.upload_bitmap(bitmap)?;
-            let result = self.run(stage, &source).await;
-            source.destroy();
-            result
-        }
-        .await;
-        let validation = validation.pop();
-        let memory = memory.pop();
-        if let Some(error) = validation.await.or(memory.await) {
-            return Err(Fallback::Failed(error.to_string()));
-        }
-        self.check()?;
-        result
-    }
-
     /// Checks image-wide limits before creating a texture, including dispatch limits.
     fn check_limits(&self, dimensions: ImageDimensions) -> Result<(), Fallback> {
         self.check()?;

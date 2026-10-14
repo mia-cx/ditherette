@@ -153,6 +153,21 @@ for (const noGpu of [false, true])
 				async ({ noGpu }) => {
 					const { createDitherette, createGpuEffects } =
 						await import('/packages/ditherette/dist/index.js');
+					let deviceRequests = 0;
+					if (navigator.gpu) {
+						const requestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
+						navigator.gpu.requestAdapter = async (...args) => {
+							const adapter = await requestAdapter(...args);
+							if (adapter) {
+								const requestDevice = adapter.requestDevice.bind(adapter);
+								adapter.requestDevice = (...args) => {
+									deviceRequests++;
+									return requestDevice(...args);
+								};
+							}
+							return adapter;
+						};
+					}
 					const selected = await navigator.gpu?.requestAdapter({
 						powerPreference: 'high-performance'
 					});
@@ -204,10 +219,10 @@ for (const noGpu of [false, true])
 					const gpu = await createGpuEffects();
 					const reports = [];
 					let retained;
-					const run = async (source, effects, label, bitmap) => {
+					const run = async (source, effects, label) => {
 						const request = { version: 1, source, effects };
 						const wanted = cpu.applyEffects(request);
-						const actual = await gpu.applyEffects(request, bitmap);
+						const actual = await gpu.applyEffects(request);
 						let maxByteDifference = 0;
 						let alphaDifferences = 0;
 						for (let i = 0; i < wanted.data.length; i++) {
@@ -234,16 +249,15 @@ for (const noGpu of [false, true])
 							(_, i) => (i * 61 + (i >> 2)) & 255
 						);
 						const source = { width, height, data };
-						const bitmap = await createImageBitmap(
-							new ImageData(new Uint8ClampedArray(data), width, height),
-							{ premultiplyAlpha: 'none', colorSpaceConversion: 'none' }
-						);
-						try {
-							await run(source, chains[1], 'RGBA ramp bitmap upload', bitmap);
-						} finally {
-							bitmap.close();
-						}
 						await run(source, chains[1], 'RGBA ramp packed upload');
+						const noOpIdentity =
+							(await gpu.applyEffects({ version: 1, source, effects: [] })) === source;
+						const disabledIdentity =
+							(await gpu.applyEffects({
+								version: 1,
+								source,
+								effects: chains[1].map((step) => ({ ...step, enabled: false }))
+							})) === source;
 						for (const photo of [
 							'Celeste_Insta_selfie.png',
 							'Picking_at_thread.jpg',
@@ -254,8 +268,8 @@ for (const noGpu of [false, true])
 								{ premultiplyAlpha: 'none', colorSpaceConversion: 'none' }
 							);
 							try {
-								// Canvas supplies this test's CPU reference input only. Production GPU
-								// output uses the optional decoded-bitmap upload and mapped readback.
+								// Decode is host-owned. Both backends receive these exact packed
+								// reference bytes; GPU output comes only from mapped readback.
 								const canvas = new OffscreenCanvas(decoded.width, decoded.height);
 								const context = canvas.getContext('2d');
 								context.drawImage(decoded, 0, 0);
@@ -264,11 +278,12 @@ for (const noGpu of [false, true])
 								);
 								const source = { width: decoded.width, height: decoded.height, data };
 								for (const [index, chain] of chains.entries())
-									await run(source, chain, `${photo}, chain ${index}`, decoded);
+									await run(source, chain, `${photo}, chain ${index}`);
 							} finally {
 								decoded.close();
 							}
 						}
+						const eligibleDeviceRequests = deviceRequests;
 						await run(
 							source,
 							[
@@ -295,8 +310,47 @@ for (const noGpu of [false, true])
 							],
 							'masked CPU fallback'
 						);
+						for (let i = 0; i < 16; i++)
+							await run(
+								source,
+								[
+									...chains[1],
+									...(i % 2
+										? [
+												{
+													effect: 'hue-saturation',
+													enabled: true,
+													hue: 30,
+													saturation: 0.2,
+													lightness: 0
+												}
+											]
+										: [])
+								],
+								`retired facade ${i}`
+							);
+						const retiredDeviceRequests = deviceRequests;
+						const fresh = await createGpuEffects();
+						let recovery;
+						try {
+							const input = { version: 1, source, effects: chains[1] };
+							const wanted = cpu.applyEffects(input);
+							const actual = await fresh.applyEffects(input);
+							recovery = {
+								...fresh.execution,
+								exact: actual.data.every((byte, index) => byte === wanted.data[index])
+							};
+						} finally {
+							fresh.dispose();
+						}
 						return {
 							reports,
+							noOpIdentity,
+							disabledIdentity,
+							eligibleDeviceRequests,
+							retiredDeviceRequests,
+							deviceRequests,
+							recovery,
 							retained: Array.from(retained.output).every(
 								(value, index) => value === retained.copy[index]
 							),
@@ -313,6 +367,10 @@ for (const noGpu of [false, true])
 			);
 			assert.deepEqual(errors, []);
 			assert.ok(result.retained);
+			assert.ok(result.noOpIdentity);
+			assert.ok(result.disabledIdentity);
+			assert.ok(result.recovery.exact);
+			assert.equal(result.retiredDeviceRequests, result.eligibleDeviceRequests);
 			for (const report of result.reports) {
 				assert.equal(report.maxByteDifference, 0, JSON.stringify(report));
 				assert.equal(report.alphaDifferences, 0, JSON.stringify(report));
@@ -320,6 +378,12 @@ for (const noGpu of [false, true])
 			}
 			assert.equal(result.reports.at(-1).backend, 'cpu');
 			assert.equal(result.reports.at(-2).backend, 'cpu');
+			if (result.reports[0].backend === 'gpu') {
+				assert.ok(result.reports.slice(0, 10).every((report) => report.backend === 'gpu'));
+				assert.equal(result.eligibleDeviceRequests, 1);
+				assert.equal(result.deviceRequests, 2);
+				assert.equal(result.recovery.backend, 'gpu');
+			}
 			if (!noGpu && !result.reports.some((report) => report.backend === 'gpu'))
 				t.diagnostic(`No browser hardware GPU execution: ${JSON.stringify(result.reports[0])}`);
 			t.diagnostic(JSON.stringify({ system, ...result }));

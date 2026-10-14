@@ -1,11 +1,10 @@
 //! Optional async package bridge. The module factory owns one verified backend.
 //! CPU fallback stays in the existing scalar package processor.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
-use wgpu::web_sys::ImageBitmap;
 
 use crate::{
     image::ImageDimensions,
@@ -19,12 +18,22 @@ use super::processor::copy_input;
 
 thread_local! {
     static BACKEND: RefCell<Option<Backend>> = const { RefCell::new(None) };
+    // Locked wgpu forgets its JS error/loss closures. A factory gets one device
+    // attempt; the host must retire the artifact after releasing that device.
+    static DETECTION_ATTEMPTED: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Idle bridge ownership deducted from the CPU fallback's available capacity.
+/// Diagnostic bridge record capacity. CPU fallback retires the artifact itself;
+/// this fixed value is not a charge for keeping its entire memory reachable.
 #[wasm_bindgen(js_name = privateGpuEffectsOverhead)]
 pub fn private_gpu_effects_overhead() -> f64 {
     LookupMemory::BRIDGE_BYTES as f64
+}
+
+/// Numeric-only admission, called before any effects text crosses the ABI.
+#[wasm_bindgen(js_name = privateGpuEffectsPlanningBytes)]
+pub fn private_gpu_effects_planning_bytes(effects_bytes: u32) -> f64 {
+    LookupMemory::planning_bytes(u64::from(effects_bytes)) as f64
 }
 
 #[wasm_bindgen(module = "/src/wasm/copy_helpers.js")]
@@ -66,9 +75,12 @@ pub fn private_gpu_effects_plan(effects: &str, width: u32, height: u32) -> Resul
     })
 }
 
-/// Detects once per retained backend. The package serializes detection and processing.
+/// Detects at most once per owning artifact, including after disposal or failure.
 #[wasm_bindgen(js_name = privateGpuEffectsDetect)]
 pub async fn private_gpu_effects_detect(memory_limit: f64) -> String {
+    if DETECTION_ATTEMPTED.with(|attempted| attempted.replace(true)) {
+        return "ArtifactRetired".into();
+    }
     let (_, dimensions, _) = ChannelLookup::known_answer();
     if LookupMemory::new(dimensions)
         .check(memory_limit as u64)
@@ -104,14 +116,12 @@ pub fn private_gpu_effects_adapter() -> String {
 
 /// Returns an empty reason after writing durable JS-owned RGBA8 to the result sink.
 /// Any reason asks the package to release this backend and run the frozen CPU path.
-#[allow(clippy::too_many_arguments)]
 #[wasm_bindgen(js_name = privateGpuApplyEffects)]
 pub async fn private_gpu_apply_effects(
     input: Uint8Array,
     width: u32,
     height: u32,
     effects: String,
-    bitmap: Option<ImageBitmap>,
     memory_limit: f64,
     sink: JsValue,
 ) -> Result<String, JsError> {
@@ -125,38 +135,26 @@ pub async fn private_gpu_apply_effects(
     if u64::from(input.length()) != memory.rgba_bytes {
         return Err(JsError::new("source data no longer matches its dimensions"));
     }
-    if bitmap
-        .as_ref()
-        .is_some_and(|bitmap| bitmap.width() != width || bitmap.height() != height)
-    {
-        return Err(JsError::new("bitmap dimensions must match the source"));
-    }
     let dimensions =
         ImageDimensions::new(width, height).map_err(|error| JsError::new(&error.to_string()))?;
     let mut backend = BACKEND.with(|slot| slot.borrow_mut().take());
     let result = match backend.as_mut() {
-        Some(backend) => match bitmap {
-            Some(bitmap) => match backend {
-                Backend::Gpu(gpu) => gpu.process_bitmap(&stage, &bitmap).await,
-                Backend::Cpu(reason) => Err(reason.clone()),
-            },
-            None => {
-                let mut rgba = Vec::new();
-                if rgba.try_reserve_exact(memory.rgba_bytes as usize).is_err() {
-                    Err(Fallback::Failed("source allocation failed".into()))
-                } else {
-                    rgba.resize(memory.rgba_bytes as usize, 0);
-                    match copy_input(&mut rgba, &input) {
-                        Ok(()) => {
-                            backend
-                                .lookup(&stage, dimensions, &rgba, memory_limit as u64)
-                                .await
-                        }
-                        Err(_) => Err(Fallback::Failed("source copy failed".into())),
+        Some(backend) => {
+            let mut rgba = Vec::new();
+            if rgba.try_reserve_exact(memory.rgba_bytes as usize).is_err() {
+                Err(Fallback::Failed("source allocation failed".into()))
+            } else {
+                rgba.resize(memory.rgba_bytes as usize, 0);
+                match copy_input(&mut rgba, &input) {
+                    Ok(()) => {
+                        backend
+                            .lookup(&stage, dimensions, &rgba, memory_limit as u64)
+                            .await
                     }
+                    Err(_) => Err(Fallback::Failed("source copy failed".into())),
                 }
             }
-        },
+        }
         None => Err(Fallback::NoAdapter),
     };
     if let Some(backend) = backend.as_mut() {

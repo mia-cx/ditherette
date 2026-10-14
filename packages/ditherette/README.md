@@ -258,20 +258,25 @@ effectsProcessor.dispose();
 `wasm` supplies an alternate scalar artifact; `gpuWasm` supplies an alternate GPU artifact.
 Neither setting changes the other artifact. Missing WebGPU, optional assets, failed startup verification,
 unsupported/masked/mixed chains, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
-The facade releases the GPU device and pipeline before allocating CPU fallback resources.
-It disposes the fresh fallback processor after each call. After request-specific rejections,
-later eligible calls may detect the GPU again. Failed capability/verification/devices and unexpected Wasm exceptions
-keep the facade on CPU for its lifetime; create a new facade to retry detection.
+The facade reuses one verified device for repeated eligible calls. Any CPU fallback releases the device
+and drops the entire library-owned GPU artifact before allocating scalar resources.
+The locked WebGPU backend forgets its error callbacks; retaining the artifact for re-detection would accumulate them.
+The facade stays on CPU after that retirement, including for request-specific limits or unsupported chains.
+Create a fresh facade to retry GPU processing. Empty/disabled chains return the source and preserve an existing device.
+The fresh scalar fallback processor is disposed after each call.
 
 The budget charges the package-owned async source snapshot, Wasm source and result capacity, row-aligned texture/upload staging,
-packed output and mapped readback buffers, parameter copies, effect bookkeeping, and retained backend/pipeline records.
+packed output/readback buffers, wgpu's temporary Wasm mapped copy, parameter copies, effect bookkeeping, and retained backend/pipeline records.
+Numeric admission charges the effects string/decode/table capacity before text crosses into Wasm.
 Caller-owned input, returned JS buffers, and driver/compiler internals follow the existing ownership exclusions.
+After artifact retirement, engine-managed pages may wait for collection; the facade retains no instance reference.
+Caller-retained diagnostic bindings/exports remain caller-owned and can keep their own instance alive.
 GPU budget rejection can still succeed on CPU; CPU budget rejection reports `memory-limit`.
 
-Pass a decoded `ImageBitmap` as the second argument to use `copyExternalImageToTexture`.
-It must represent the same source bytes, with matching dimensions, `premultiplyAlpha: 'none'`, and `colorSpaceConversion: 'none'`.
-The caller owns it and keeps it open until the promise settles. Results always use mapped readback, never canvas readback.
-Without a bitmap, the backend uploads the captured packed RGBA8 bytes.
+`applyEffects(request)` accepts packed RGBA8 only. Image decoding belongs to the host.
+The unreleased optional `ImageBitmap` argument was removed because the locked external-image uploader
+can panic on a synchronous DOM exception and strand its Wasm promise.
+The facade uploads the captured bytes and returns mapped-buffer results, never canvas readback.
 
 Enabled calls snapshot source bytes and normalized effects before their first await.
 Outputs remain valid after subsequent calls and disposal. Empty/disabled chains return the source itself.
