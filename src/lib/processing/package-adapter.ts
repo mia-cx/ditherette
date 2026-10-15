@@ -13,6 +13,7 @@ import type {
 	WorkingSpace
 } from 'ditherette';
 import { bayerSizeForAlgorithm } from './bayer';
+import { paletteMatteKey } from '$lib/palette/wplace';
 import type {
 	ColorSpaceId,
 	CropRect,
@@ -324,7 +325,8 @@ function resolveMatteRgb(
 	visible: EnabledPaletteColor[],
 	matteKey: string
 ): { matte: Rgb; warning?: string } {
-	const selected = palette.find((color) => color.key === matteKey)?.rgb;
+	const key = paletteMatteKey(palette, matteKey);
+	const selected = palette.find((color) => color.key === key)?.rgb;
 	if (selected) return { matte: selected };
 	const matteRgb = rgbFromHexKey(matteKey);
 	if (matteRgb) {

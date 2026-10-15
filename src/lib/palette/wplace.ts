@@ -109,9 +109,26 @@ export function paletteEnabledKey(paletteName: string, colorKey: string) {
  */
 const CORRECTED_WPLACE_KEYS = [['#10AE82', '#10AEA6']] as const;
 
-/** The current key for a Wplace key that a hex correction replaced, or undefined. */
-export function correctedWplaceKey(key: string): string | undefined {
-	return CORRECTED_WPLACE_KEYS.find(([previous]) => previous === key)?.[1];
+/** The other key of a corrected Wplace colour: the current key for its previous key, and back. */
+function correctionPartner(key: string): string | undefined {
+	for (const [previous, current] of CORRECTED_WPLACE_KEYS) {
+		if (key === previous) return current;
+		if (key === current) return previous;
+	}
+	return undefined;
+}
+
+/**
+ * The key a saved matte names among `colors`: the matte key itself, or else the other key of a
+ * corrected Wplace colour, so a Teal matte stays Teal on either side of the correction.
+ */
+export function paletteMatteKey(
+	colors: readonly { key: string }[],
+	matteKey: string
+): string | undefined {
+	if (colors.some((color) => color.key === matteKey)) return matteKey;
+	const partner = correctionPartner(matteKey);
+	return partner && colors.some((color) => color.key === partner) ? partner : undefined;
 }
 
 function legacyPaletteEnabledKey(paletteName: string, colorKey: string) {

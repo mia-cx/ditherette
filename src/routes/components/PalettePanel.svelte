@@ -13,7 +13,7 @@
 		DialogHeader,
 		DialogTitle
 	} from '$lib/components/ui/dialog';
-	import { paletteColorEnabled } from '$lib/palette/wplace';
+	import { paletteColorEnabled, paletteMatteKey } from '$lib/palette/wplace';
 	import { pixelCounts } from '$lib/processing/pixel-counts';
 	import { cn } from '$lib/utils';
 	import {
@@ -92,8 +92,9 @@
 	const someRowsSelected = $derived(selectedCount > 0 && !allRowsSelected);
 	const alphaLabel = $derived(ALPHA_MODES.find((mode) => mode.id === alpha)?.label ?? 'Alpha');
 	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
+	const matteChoice = $derived(paletteMatteKey(visiblePaletteColors, matteKey));
 	const matteLabel = $derived(
-		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte colour'
+		visiblePaletteColors.find((color) => color.key === matteChoice)?.name ?? 'Select matte colour'
 	);
 
 	type TagSelectionSource = 'kind' | 'tag';
@@ -207,8 +208,7 @@
 	);
 
 	$effect(() => {
-		if (!visiblePaletteColors.length) return;
-		if (visiblePaletteColors.some((color) => color.key === matteKey)) return;
+		if (!visiblePaletteColors.length || matteChoice) return;
 		matteKey = fallbackMatteKey(matteKey);
 	});
 
@@ -272,7 +272,8 @@
 	}
 
 	function fallbackMatteKey(previousKey: string) {
-		const previous = currentPalette.colors.find((color) => color.key === previousKey)?.rgb;
+		const key = paletteMatteKey(currentPalette.colors, previousKey);
+		const previous = currentPalette.colors.find((color) => color.key === key)?.rgb;
 		if (!previous) return visiblePaletteColors[0]!.key;
 		let best = visiblePaletteColors[0]!;
 		let bestDistance = Number.POSITIVE_INFINITY;
@@ -578,7 +579,11 @@
 				<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
 					<Label for="matte-color">Matte</Label>
 					<div class="flex gap-2">
-						<Select bind:value={matteKey} type="single" disabled={!visiblePaletteColors.length}>
+						<Select
+							bind:value={() => matteChoice ?? matteKey, (key) => (matteKey = key)}
+							type="single"
+							disabled={!visiblePaletteColors.length}
+						>
 							<SelectTrigger id="matte-color" class="min-w-0 flex-1">{matteLabel}</SelectTrigger>
 							<SelectContent>
 								{#each visiblePaletteColors as color (color.key)}

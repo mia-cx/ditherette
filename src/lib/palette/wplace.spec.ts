@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
 	WPLACE_PALETTE,
 	WPLACE_PALETTE_NAME,
-	correctedWplaceKey,
 	enabledPalette,
 	enabledWplacePalette,
 	paletteColorEnabled,
-	paletteEnabledKey
+	paletteEnabledKey,
+	paletteMatteKey
 } from './wplace';
 import type { Palette } from '$lib/processing/types';
 
@@ -151,8 +151,18 @@ describe('Wplace Teal correction', () => {
 		).toBe(true);
 	});
 
-	it('maps the previous key to the corrected key only one way', () => {
-		expect(correctedWplaceKey('#10AE82')).toBe('#10AEA6');
-		expect(correctedWplaceKey('#10AEA6')).toBeUndefined();
+	it('resolves a saved matte key against whichever side of the correction a palette holds', () => {
+		const oldCopyColors = [
+			{ key: '#FF0000' },
+			{ key: '#10AE82' } // old Teal, kept by a custom palette
+		];
+		const both = [{ key: '#10AE82' }, { key: '#10AEA6' }];
+
+		expect(paletteMatteKey(WPLACE_PALETTE, '#10AE82')).toBe('#10AEA6');
+		expect(paletteMatteKey(oldCopyColors, '#10AEA6')).toBe('#10AE82');
+		expect(paletteMatteKey(oldCopyColors, '#10AE82')).toBe('#10AE82');
+		expect(paletteMatteKey(both, '#10AE82')).toBe('#10AE82');
+		expect(paletteMatteKey(both, '#10AEA6')).toBe('#10AEA6');
+		expect(paletteMatteKey([{ key: '#FF0000' }], '#10AE82')).toBeUndefined();
 	});
 });

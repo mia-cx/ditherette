@@ -341,6 +341,41 @@ describe('website package request', () => {
 			).toThrow(/must be finite/);
 		}
 	});
+	it('resolves a matte key to the correction partner the palette holds', () => {
+		const withCorrectedTeal: EnabledPaletteColor[] = [
+			{ name: 'Black', key: '#000000', rgb: { r: 0, g: 0, b: 0 }, kind: 'free', enabled: true },
+			{ name: 'Teal', key: '#10AEA6', rgb: { r: 16, g: 174, b: 166 }, kind: 'free', enabled: true }
+		];
+		const withOldTeal: EnabledPaletteColor[] = [
+			{ name: 'Black', key: '#000000', rgb: { r: 0, g: 0, b: 0 }, kind: 'custom', enabled: true },
+			{
+				name: 'Old teal',
+				key: '#10AE82',
+				rgb: { r: 16, g: 174, b: 130 },
+				kind: 'custom',
+				enabled: true
+			}
+		];
+
+		const corrected = packageProcessRequest(
+			source,
+			withCorrectedTeal,
+			{ ...settings, output: { ...settings.output, alphaMode: 'matte', matteKey: '#10AE82' } },
+			settings.output
+		);
+		expect(corrected.request.recipe.alpha).toEqual({ mode: 'matte', rgb: [16, 174, 166] });
+		expect(corrected.warnings).toEqual([]);
+
+		const old = packageProcessRequest(
+			source,
+			withOldTeal,
+			{ ...settings, output: { ...settings.output, alphaMode: 'matte', matteKey: '#10AEA6' } },
+			settings.output
+		);
+		expect(old.request.recipe.alpha).toEqual({ mode: 'matte', rgb: [16, 174, 130] });
+		expect(old.warnings).toEqual([]);
+	});
+
 	it('uses the existing disabled and missing matte policy', () => {
 		for (const matteKey of ['#FFFFFF', 'missing']) {
 			const mapped = packageProcessRequest(

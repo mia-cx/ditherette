@@ -1,19 +1,24 @@
-import { beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { page, type Locator } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { WPLACE_PALETTE, WPLACE_PALETTE_NAME } from '$lib/palette/wplace';
 import {
 	activePalette,
+	activePaletteName,
 	colorSpace,
+	customPalettes,
 	ditherSettings,
 	outputSettings,
+	paletteEnabled,
 	processedImage,
 	processingProgress,
 	selectedPalette,
+	setPaletteColorEnabled,
 	sourceMeta
 } from '$lib/stores/app';
 import { activeEffectSteps, effectLayers } from '$lib/stores/effects';
 import { processingIdentityHash } from '$lib/processing/hash';
-import type { ProcessedImage } from '$lib/processing/types';
+import type { Palette, ProcessedImage } from '$lib/processing/types';
 import PalettePanel from './PalettePanel.svelte';
 import '../layout.css';
 
@@ -183,3 +188,123 @@ it.each([276, 358, 376, 600])(
 		}
 	}
 );
+
+describe('matte key across palette switches', () => {
+	const oldCopy: Palette = {
+		name: 'Old copy',
+		source: 'custom',
+		colors: [
+			{ name: 'Red', key: '#FF0000', rgb: { r: 255, g: 0, b: 0 }, kind: 'custom' },
+			{ name: 'Old teal', key: '#10AE82', rgb: { r: 16, g: 174, b: 130 }, kind: 'custom' },
+			{ name: 'Transparent', key: 'transparent', kind: 'transparent' }
+		]
+	};
+
+	let saved: {
+		palettes: Palette[];
+		name: string;
+		output: ReturnType<typeof outputSettings.get>;
+		enabled: Record<string, boolean>;
+	};
+
+	beforeEach(() => {
+		saved = {
+			palettes: customPalettes.get(),
+			name: activePaletteName.get(),
+			output: outputSettings.get(),
+			enabled: paletteEnabled.get()
+		};
+	});
+
+	afterEach(() => {
+		customPalettes.set(saved.palettes);
+		activePaletteName.set(saved.name);
+		outputSettings.set(saved.output);
+		paletteEnabled.set(saved.enabled);
+	});
+
+	const matteText = () => document.querySelector('#matte-color')?.textContent?.trim();
+
+	async function openTransparentSettings() {
+		const row = page.getByRole('row').filter({ hasText: 'Transparent' });
+		await row.getByRole('button', { name: 'Edit' }).click();
+		await expect
+			.element(page.getByRole('dialog', { name: 'Transparent swatch settings' }))
+			.toBeVisible();
+	}
+
+	async function switchPreset(name: string) {
+		// Bits UI selects open on pointerdown; a plain click never reaches them.
+		const trigger = document.querySelector('#palette-preset') as HTMLElement;
+		trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+		trigger.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+		await expect.poll(() => document.querySelectorAll('[role="option"]').length).toBeGreaterThan(0);
+		// Locator clicks miss options portaled outside the test viewport; dispatch on the node.
+		const option = [...document.querySelectorAll('[role="option"]')].find(
+			(node) => node.getAttribute('aria-label') === name || node.textContent?.includes(name)
+		) as HTMLElement;
+		expect(option, `option ${name}`).toBeTruthy();
+		option.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+		option.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+		option.click();
+		await expect.poll(() => activePalette.get().name).toBe(name);
+	}
+
+	it('keeps a Teal matte on Teal whichever side of the correction is active', async () => {
+		customPalettes.set([oldCopy]);
+		activePaletteName.set('Old copy');
+		outputSettings.set({ ...outputSettings.get(), alphaMode: 'matte', matteKey: '#10AE82' });
+		render(PalettePanel);
+		await expect.element(page.getByRole('table'), { timeout: 10_000 }).toBeInTheDocument();
+
+		await openTransparentSettings();
+		expect(matteText()).toBe('Old teal');
+		await page.getByRole('button', { name: 'Done' }).click();
+
+		await switchPreset(WPLACE_PALETTE_NAME);
+		expect(outputSettings.get().matteKey).toBe('#10AE82');
+		await openTransparentSettings();
+		expect(matteText()).toBe('Teal');
+		await page.getByRole('button', { name: 'Done' }).click();
+
+		await switchPreset('Old copy');
+		expect(outputSettings.get().matteKey).toBe('#10AE82');
+		await openTransparentSettings();
+		expect(matteText()).toBe('Old teal');
+		await page.getByRole('button', { name: 'Done' }).click();
+	});
+
+	it('keeps a corrected-Teal matte when the custom palette holds the previous colour', async () => {
+		customPalettes.set([oldCopy]);
+		activePaletteName.set(WPLACE_PALETTE_NAME);
+		outputSettings.set({ ...outputSettings.get(), alphaMode: 'matte', matteKey: '#10AEA6' });
+		render(PalettePanel);
+		await expect.element(page.getByRole('table'), { timeout: 10_000 }).toBeInTheDocument();
+
+		await switchPreset('Old copy');
+		expect(outputSettings.get().matteKey).toBe('#10AEA6');
+		await openTransparentSettings();
+		expect(matteText()).toBe('Old teal');
+		await page.getByRole('button', { name: 'Done' }).click();
+	});
+
+	it('falls back to the colour nearest corrected Teal when it is hidden', async () => {
+		activePaletteName.set(WPLACE_PALETTE_NAME);
+		outputSettings.set({ ...outputSettings.get(), alphaMode: 'matte', matteKey: '#10AE82' });
+		render(PalettePanel);
+		await expect.element(page.getByRole('table'), { timeout: 10_000 }).toBeInTheDocument();
+		setPaletteColorEnabled('#10AEA6', false, WPLACE_PALETTE_NAME);
+
+		const corrected = { r: 16, g: 174, b: 166 };
+		const expected = WPLACE_PALETTE.filter(
+			(color) => color.rgb && color.key !== '#10AEA6' && color.kind !== 'transparent'
+		).reduce((best, color) => {
+			const d = (c: { r: number; g: number; b: number }) =>
+				(c.r - corrected.r) ** 2 + (c.g - corrected.g) ** 2 + (c.b - corrected.b) ** 2;
+			return d(color.rgb!) < d(best.rgb!) ? color : best;
+		}).key;
+
+		await expect.poll(() => outputSettings.get().matteKey).toBe(expected);
+		expect(outputSettings.get().matteKey).not.toBe('#000000');
+	});
+});
