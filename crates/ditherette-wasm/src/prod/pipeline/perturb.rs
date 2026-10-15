@@ -127,11 +127,21 @@ pub(super) fn validate(policy: PerturbPolicy) -> Result<(), Failure> {
 }
 
 pub(super) fn validate_placement(placement: Placement) -> Result<(), Failure> {
-    if let Placement::SmoothGradientV1 { min_gradient_size } = placement {
-        if !(4..=32768).contains(&min_gradient_size) {
+    if let Placement::SmoothAreaV1 {
+        sample_size,
+        contrast_threshold,
+    } = placement
+    {
+        if !(4..=32768).contains(&sample_size) {
             return Err(Failure::new(
                 ErrorCode::InvalidSettings,
-                ErrorPath::PerturbMinGradientSize,
+                ErrorPath::PerturbSampleSize,
+            ));
+        }
+        if !contrast_threshold.is_finite() || !(0.0..=1.0).contains(&contrast_threshold) {
+            return Err(Failure::new(
+                ErrorCode::InvalidSettings,
+                ErrorPath::PerturbContrastThreshold,
             ));
         }
     }

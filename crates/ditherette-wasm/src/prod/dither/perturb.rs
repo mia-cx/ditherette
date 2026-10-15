@@ -242,7 +242,7 @@ pub(crate) fn perturb_by_field_with_scratch(
 /// Output row zero corresponds to `rows.y_start()`; field coordinates remain absolute.
 /// Adaptive placement reuses converted rows when `scratch` holds three source-width rows;
 /// empty scratch keeps the allocation-free per-pixel neighbor conversion.
-/// SmoothGradientV1 requires one full-source `[f32;3]` record per pixel instead.
+/// SmoothAreaV1 requires full-image records and a larger-side line queue instead.
 pub fn perturb_by_field_band_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -304,8 +304,17 @@ fn perturb_rows(
             )),
             None,
         ),
-        Placement::SmoothGradientV1 { min_gradient_size } => {
-            super::smooth_gradient_v1::select(source, min_gradient_size, scratch, || progress(0))?;
+        Placement::SmoothAreaV1 {
+            sample_size,
+            contrast_threshold,
+        } => {
+            super::smooth_area_v1::select(
+                source,
+                sample_size,
+                contrast_threshold,
+                scratch,
+                || progress(0),
+            )?;
             (None, Some(&*scratch))
         }
         _ => (None, None),
@@ -320,7 +329,7 @@ fn perturb_rows(
             let global_index = u64::from(y) * u64::from(dimensions.width()) + u64::from(x);
             let threshold = field(x, y, global_index);
             let mask = match (&cached_row, placement) {
-                (_, Placement::SmoothGradientV1 { .. }) => {
+                (_, Placement::SmoothAreaV1 { .. }) => {
                     smooth.expect("prepared mask")[global_index as usize][2]
                 }
                 (

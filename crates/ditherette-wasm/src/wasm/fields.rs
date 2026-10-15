@@ -309,19 +309,27 @@ fn parse_placement(
             threshold: scalar(threshold, threshold_path)?,
             softness: scalar(softness, softness_path)?,
         },
-        // Append-only private tag. The radius slot carries size only for this versioned mode.
-        2.0 if threshold == 0.0 && softness == 0.0 => {
+        // Unshipped area preview uses the radius/threshold slots for square size and tolerance.
+        2.0 if softness == 0.0 => {
             let path = if placement_path == ErrorPath::PerturbPlacement {
-                ErrorPath::PerturbMinGradientSize
+                ErrorPath::PerturbSampleSize
             } else {
-                ErrorPath::DitherMinGradientSize
+                ErrorPath::DitherSampleSize
             };
             let size = dimension(radius, MAX_SOURCE_SIDE, ErrorCode::InvalidSettings, path)?;
             if size < 4 {
                 return Err(invalid(path));
             }
-            Placement::SmoothGradientV1 {
-                min_gradient_size: size,
+            if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+                return Err(invalid(if placement_path == ErrorPath::PerturbPlacement {
+                    ErrorPath::PerturbContrastThreshold
+                } else {
+                    ErrorPath::DitherContrastThreshold
+                }));
+            }
+            Placement::SmoothAreaV1 {
+                sample_size: size,
+                contrast_threshold: threshold as f32,
             }
         }
         _ => return Err(invalid(placement_path)),

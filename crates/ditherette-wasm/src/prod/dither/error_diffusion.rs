@@ -278,7 +278,7 @@ pub fn diffuse(request: DitherQuantizeRequest<'_>) -> Result<IndexedImage, Dithe
     if matches!(
         request.dither,
         DitherPolicy::Diffusion {
-            placement: crate::prod::contract::request::Placement::SmoothGradientV1 { .. },
+            placement: crate::prod::contract::request::Placement::SmoothAreaV1 { .. },
             ..
         }
     ) {

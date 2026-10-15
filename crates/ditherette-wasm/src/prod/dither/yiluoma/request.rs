@@ -265,10 +265,14 @@ pub(super) fn dither_yiluoma_band_with_progress(
             )),
             None,
         ),
-        Placement::SmoothGradientV1 { min_gradient_size } => {
-            crate::prod::dither::smooth_gradient_v1::select(
+        Placement::SmoothAreaV1 {
+            sample_size,
+            contrast_threshold,
+        } => {
+            crate::prod::dither::smooth_area_v1::select(
                 source,
-                min_gradient_size,
+                sample_size,
+                contrast_threshold,
                 placement_rows,
                 || progress(0),
             )?;
@@ -311,7 +315,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
                     };
                     // Everywhere has mask 1, so the target is the source and nearest is unused.
                     let mix = match placement {
-                        Placement::SmoothGradientV1 { .. } => search(),
+                        Placement::SmoothAreaV1 { .. } => search(),
                         Placement::Everywhere {} => match &mut source_mixes {
                             Some(mixes) => mixes.mix(rgb, search),
                             None => search(),

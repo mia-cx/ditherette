@@ -2117,6 +2117,80 @@
 				}
 			],
 			"contentSha256": "6f2ee0a0f8823b1295be16d07323cfe73c3e1b43370e26da6d388dc57557b7f3"
+		},
+		{
+			"name": "smooth-area-v1",
+			"summary": "Replace the unshipped directional preview with overlapping areas bounded by local perceptual contrast",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "8e76e1bdc891de0b9524a9fd87196115d7030cfeddab3c3b57f680f35065885f"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "7bd36efc6e97499b8b943735aa4a4d28bd75e596f7c9047b34ba2287f9d27654"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "e31e10d0fbefb70c1454cf86475f377f4399e6e4759428ca742b4876dc066407"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "6f862f6d2e64f43e306a92722a3d436db8da304d4acb31af4afdb68bafd11a1f"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1/render.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1/render.rs",
+						"mode": "100644",
+						"sha256": "43159a3a3543aa54e587d8f14e415f2de284e956d0e44a5ad04146a766fcf71a"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+						"mode": "100644",
+						"sha256": "1701d0d983a97e9074d69fd6e17c198b8754576c1fd5f796e5ca3378573deb26"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+						"mode": "100644",
+						"sha256": "72c8e8873146b8ebc248856f5e71e367593d22a61e6d4e57b15a983148cae8bf"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+						"mode": "100644",
+						"sha256": "07499bfa5d541af73bb4e962bde1459f203980f30acb4fd6a22509fe453fe12b"
+					},
+					"after": null
+				}
+			],
+			"contentSha256": "6829540f6a7cae4378b10757b4d74b41095d44d5eed73f4eed78af0439633db4"
 		}
 	]
 }

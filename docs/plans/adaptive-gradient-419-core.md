@@ -1,68 +1,61 @@
-# Gradient-only adaptive placement core
+# Area placement core for issue419
 
-Implements the engine and public package portion of [#419](https://github.com/mia-cx/ditherette/issues/419).
-The UI owner integrates `src/**`; the parent owns direction, review, freeze approval and delivery.
+The core/package branch replaces the unshipped directional preview. UI integration, DIRECTION,
+trusted freeze approval and delivery belong to the parent/UI owners.
 
 ## Contract
 
-`Placement { mode: 'smooth-gradient-v1', minGradientSize: number }` extends existing recipes.
-The integer range is 4..32768; the editor default is 24. Size uses working pixels after resize,
-or source pixels in direct APIs. Legacy `adaptive` and Everywhere remain unchanged.
-The [reference](../../crates/ditherette-wasm/src/spec/smooth_gradient_v1.md) defines smoothness and its limits.
+`Placement { mode: 'smooth-area-v1', sampleSize, contrastThreshold }`.
+Square side is an integer from 4 through 32768 working pixels after resize; tolerance is finite 0..1.
+Editor defaults are 64px/0.12. Direct APIs measure source pixels. Samples clip to smaller images.
+Frozen legacy Adaptive and Everywhere recipes remain unchanged.
 
-## Work
+## Selection
 
-- [x] Reproduce edge selection and missing ramp output through actual Bayer and diffusion calls.
-- [x] Add the append-only reference, production selector, capacity preflight and visible diffusion masking.
-- [x] Prove quantized/nonlinear/oblique gradients, flat tails, exact parity, cancellation and bounded native calls.
-- [x] Validate actual scalar/threaded package requests, validation and historical frozen conformance.
-- [x] Record the append-only freeze extension for parent review and UI integration.
+Each pixel measures the largest Euclidean Oklab distance to its immediate eight neighbours.
+Each square qualifies when its maximum local distance, clipped to 1, is within tolerance.
+Select the complete union of all overlapping qualifying footprints. A fixed one-pixel read
+halo keeps bold boundary pixels outside every qualifying footprint; it does not grow with size.
+A black-to-white ramp over 100px qualifies at 12%; an equally contrasting 1–2px step fails.
+Total ramp contrast is unrestricted. Fine-step bounds imply bounds at larger octave distances,
+so the maximum-step rule needs no directional fits or repeated pyramid passes.
+Sample size requires a coherent square footprint. Tolerance independently bounds perceptual
+jump magnitude. The same-width green-to-yellow step qualifies at 25%; green-to-dark-blue fails.
+Size does not change the colour metric or substitute a dimensionless fine/broad contrast ratio.
+Flat pixels and quantized plateaus qualify with their surrounding area. Low-contrast texture
+can qualify. Zero tolerance admits flat areas; one admits the entire image.
 
-## Diagnosis
+The [reference](../../crates/ditherette-wasm/src/spec/smooth_area_v1.md) defines the complete rule.
+It has a separate corresponding production copy. The new append-only checkpoint record removes
+only the unshipped gradient reference files and registers the area domain.
 
-Reported Bayer16x16 strength30%, radius6/threshold12/softness12 in sRGB perturbation with Oklab matching
-changed 348/528/529 pixels around vertical/horizontal/diagonal steps and none in a 96px smooth ramp.
-Floyd-Steinberg changed 378/528/365 step pixels and none in the ramp. Source-only legacy activation
-covered 2, 12 and 24 columns at radii 1, 6 and 12 respectively. No resize was required.
-Broad-ramp contrast activates only weakly enough that reconstruction rounds the field away.
-Legacy diffusion masks outgoing error after matching an already contaminated pixel.
+## Rendering and ownership
 
-With the new selector, the same hard steps, eight-pixel ramp and flat fill change zero pixels.
-The initial extension's 96px ramp changed 632 Bayer pixels and 629 Floyd-Steinberg pixels.
-A 2048px repeated-byte ramp selects 99.32%; the quadratic ramp selects 93.60% at minimum256.
-The oblique fixture selects 100%. Short ramps with long flat tails and tested texture select zero.
-Every mathematical fixture also preserves selection when transposed. Equal slopes use the longer support.
+Fields retain their normal arithmetic inside selection. Diffusion keeps its ordinary continuous
+recurrence and masks only visible output: selected indices equal Everywhere, excluded indices
+equal plain matching. Preserved transparent pixels keep the existing sink semantics.
 
-The supplied Celeste original later exposed sparse bands in Bayer and Sierra at minimum4.
-Its smooth sky contains one- and two-byte channel reversals, which the first selector treated as texture.
-A generated two-byte-quantized coloured plane reproduced the same selection failure without retaining the image.
-The selector now tolerates two-byte fitting error and bounded channel backtracking. Sharp steps, true flat
-tails and the existing texture controls remain excluded. The fixed guard remains one pixel wide.
-Diffusion now keeps the ordinary kernel recurrence and masks only the visible result. Selected indices
-equal Everywhere; excluded indices equal plain matching. The first implementation's incoming/outgoing
-gates depleted the recurrence at mask holes and changed Sierra's texture even inside selected regions.
+One call-owned allocation stores 12 bytes/pixel plus 12 bytes times max(2 * width, height).
+Pixel records hold Oklab, local sharpness, row maxima, square maxima and then footprint coverage.
+Two source colour rows preserve live coordinates while sharpness overwrites dead values.
+That same storage then holds one monotone queue. A 4096-byte reserve covers scalar records. Source snapshots,
+intermediates, retained output, wrappers, allocation headers and actual capacities stay charged.
+No global cache or per-worker analysis copy exists. Analysis runs once and releases after the call.
+Every analysis/coverage line and render row permits cancellation. Work is O(pixel count).
 
-## Capacity and ownership
+## Evidence
 
-The new mode reserves one separate `[f32;3]` record per working pixel before preparing other call buffers.
-Actual vector capacity, headers, live legacy placement records and a conservative 4 KiB selector reserve count.
-Source snapshots, resized/intermediate images, indices, wrappers and retained caches keep their existing charges.
-The selector runs once on unchanged working RGB, then drops its scratch after rendering. It allocates no global cache.
-The new mode stays scalar within both Wasm variants; no per-worker selector allocation exists.
+The original contrast recipe selected hard edges and reconstructed negligible broad-ramp fields.
+The first directional preview later selected only 86.79% of the supplied 1024x384 Celeste sky crop
+at size 114, with visible strips. Its output leaves holes inside complete qualifying footprints.
+The RGB-channel prototype also rejects the lower perceptual contrast green-to-yellow control.
+Both failures have actual public-path red proofs in the task cache.
 
-For a 70x12 source and 35x6 process output, native exact limits are 41568/43000/42144/33394/33822 bytes
-for perturb, fused Bayer, fused diffusion, process Bayer and process diffusion. One byte below fails normally.
-Actual public scalar and required-threaded limits agree at 46572/48960/36502 bytes for perturb,
-fused Bayer and resized process diffusion. Cancellation and recovery pass at the exact limits.
-Source changes recompute analysis; minimum-size changes affect processing identity.
+The area proof covers equal-total-contrast ramps and steps, complete overlapping footprints,
+quantized plateaus, tolerance monotonicity, transpose/stride/alpha independence, extreme side sizes,
+normal Bayer/Sierra texture, source/settings changes, exact budget limits and cancellation recovery.
+Original private image bytes and before/after artifacts remain in the task cache outside git.
 
-## Validation scope
-
-Initial screenshots were output, so initial synthetic evidence did not reproduce the original image.
-The subsequent Celeste original supports exact input controls and sky before/after evidence. Private image
-bytes stay outside the repository. Developer builds use supported task-specific
-temporary compiler targets because the root filesystem lacks space. They are not release qualification,
-timed performance evidence, GPU hardware evidence or permission to publish.
-Reference content, compiler, build configuration and resolved dependencies pass local checks.
-The parent owns the exact freeze approval and complete trusted syntax/isolated-compilation guard,
-plus final UI evidence, PR integration and delivery. The root-disk capacity exception does not waive those gates.
+Developer scalar/threaded builds use separate supported temporary targets under the shared build
+lock. They are developer artifacts, not fresh release qualification. Parent owns trusted freeze
+approval, final website checks, browser acceptance and deployment.
