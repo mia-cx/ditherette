@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
+	import Seo from '$lib/components/Seo.svelte';
+	import { canonicalUrl, SITE_NAME } from '$lib/seo';
 	import AppBar from './components/AppBar.svelte';
 	import ComparisonPreview from './components/ComparisonPreview.svelte';
 	import DitherPanel from './components/DitherPanel.svelte';
@@ -117,7 +120,17 @@
 	}
 </script>
 
-<svelte:head><title>ditherette</title></svelte:head>
+<Seo
+	title="Ditherette: image to pixel art for Wplace and custom palettes"
+	description="Turn an image into palette-limited pixel art in your browser. Resize it, match it to the Wplace colours or your own palette, dither it, and export an indexed PNG."
+	path="/"
+	jsonLd={{
+		'@context': 'https://schema.org',
+		'@type': 'WebSite',
+		name: SITE_NAME,
+		url: canonicalUrl('/')
+	}}
+/>
 
 <input
 	bind:this={fileInput}
@@ -165,6 +178,12 @@
 </div>
 
 {#snippet appBarExtras()}
+	<a
+		href={resolve('/guides')}
+		data-sveltekit-reload
+		class="hidden px-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none sm:inline"
+		>Guides</a
+	>
 	<PerformanceDebugPopover />
 {/snippet}
 
