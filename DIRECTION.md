@@ -25,12 +25,11 @@ Keep that workflow clear and fast, including large images.
 - Scopes inspect Source, Effects before resize and palette matching, and Output.
   Histograms compare stages and report sampled pure black and pure white clipping.
 - Production Adaptive placement follows local contrast and can halo hard edges.
-  The development preview preserves each dithering algorithm's normal texture,
-  but its directional mask still fragments smooth areas. Compare fine-scale contrast
-  with broader contrast to separate sharp edges from gradual ramps, even when the ramp's
-  total colour change is large. Dither whole qualifying areas. Expose sample size and
-  contrast tolerance; higher tolerance includes less-smooth areas. Visual acceptance
-  remains open at https://development.ditherette.mia.cx.
+  The development preview compares fine and coarse perceptual contrast, then dithers
+  whole qualifying areas while preserving each algorithm's normal texture. Sample size
+  controls spatial scale; contrast tolerance controls the accepted colour jump.
+  Large samples can still leave square exclusions around small sharp details.
+  Visual acceptance remains open at https://development.ditherette.mia.cx.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
