@@ -28,8 +28,8 @@ Keep that workflow clear and fast, including large images.
   The development preview compares fine and coarse perceptual contrast, then dithers
   whole qualifying areas while preserving each algorithm's normal texture. Sample size
   controls spatial scale; contrast tolerance controls the accepted colour jump.
-  Large samples can still leave square exclusions around small sharp details.
-  Visual acceptance remains open at https://development.ditherette.mia.cx.
+  Edge/ramp detection is visually accepted. Smooth mask shapes and gradual boundary
+  transitions remain before final acceptance at https://development.ditherette.mia.cx.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
@@ -47,6 +47,7 @@ Website delivery proceeds independently of npm publication holds.
 
 1. Make direct production delivery reliable and keep dependencies secure.
    Correct adaptive placement through whole-area sampling and adjustable contrast tolerance.
+   Smooth mask boundaries while preserving the accepted detector and algorithm textures.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.
