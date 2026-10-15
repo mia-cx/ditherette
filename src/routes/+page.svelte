@@ -181,7 +181,7 @@
 	<a
 		href={resolve('/guides')}
 		data-sveltekit-reload
-		class="px-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+		class="hidden px-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none sm:inline"
 		>Guides</a
 	>
 	<PerformanceDebugPopover />
