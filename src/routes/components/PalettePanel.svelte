@@ -92,10 +92,9 @@
 	const someRowsSelected = $derived(selectedCount > 0 && !allRowsSelected);
 	const alphaLabel = $derived(ALPHA_MODES.find((mode) => mode.id === alpha)?.label ?? 'Alpha');
 	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
-	const matteChoice = $derived(paletteMatteKey(visiblePaletteColors, matteKey));
-	const matteLabel = $derived(
-		visiblePaletteColors.find((color) => color.key === matteChoice)?.name ?? 'Select matte colour'
-	);
+	const matteChoice = $derived(paletteMatteKey(currentPalette.colors, matteKey));
+	const matteColor = $derived(visiblePaletteColors.find((color) => color.key === matteChoice));
+	const matteLabel = $derived(matteColor?.name ?? 'Select matte colour');
 
 	type TagSelectionSource = 'kind' | 'tag';
 	type TagSelection = { source: TagSelectionSource; tag: string };
@@ -208,7 +207,7 @@
 	);
 
 	$effect(() => {
-		if (!visiblePaletteColors.length || matteChoice) return;
+		if (!visiblePaletteColors.length || matteColor) return;
 		matteKey = fallbackMatteKey(matteKey);
 	});
 
@@ -580,7 +579,7 @@
 					<Label for="matte-color">Matte</Label>
 					<div class="flex gap-2">
 						<Select
-							bind:value={() => matteChoice ?? matteKey, (key) => (matteKey = key)}
+							bind:value={() => matteColor?.key ?? matteKey, (key) => (matteKey = key)}
 							type="single"
 							disabled={!visiblePaletteColors.length}
 						>

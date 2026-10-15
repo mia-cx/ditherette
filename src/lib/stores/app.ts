@@ -10,7 +10,8 @@ import {
 	defaultEnabledState,
 	enabledPalette,
 	paletteColorEnabled,
-	paletteEnabledKey
+	paletteEnabledKey,
+	paletteMatteKey
 } from '$lib/palette/wplace';
 import {
 	appendMetricsSample,
@@ -123,6 +124,16 @@ export const activePalette = computed([activePaletteName, customPalettes], (name
 export const selectedPalette = computed([activePalette, paletteEnabled], (palette, enabled) =>
 	enabledPalette(palette, enabled)
 );
+
+/**
+ * `output` as processing applies it to `palette`. The matte key resolves against every colour of
+ * the palette, hidden ones included, so a hidden exact colour keeps the disabled-matte fallback
+ * instead of turning into its corrected Wplace partner.
+ */
+export function paletteOutputSettings(output: OutputSettings, palette: Palette): OutputSettings {
+	const matteKey = paletteMatteKey(palette.colors, output.matteKey);
+	return matteKey && matteKey !== output.matteKey ? { ...output, matteKey } : output;
+}
 
 export type SourceMeta = Omit<SourceImageRecord, 'blob'>;
 

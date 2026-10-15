@@ -288,6 +288,32 @@ describe('matte key across palette switches', () => {
 		await page.getByRole('button', { name: 'Done' }).click();
 	});
 
+	it('keeps the disabled-matte fallback when the exact colour is hidden', async () => {
+		const bothTeals: Palette = {
+			name: 'Both teals',
+			source: 'custom',
+			colors: [
+				{ name: 'Old teal', key: '#10AE82', rgb: { r: 16, g: 174, b: 130 }, kind: 'custom' },
+				{ name: 'Near old teal', key: '#10AE83', rgb: { r: 16, g: 174, b: 131 }, kind: 'custom' },
+				{ name: 'Current teal', key: '#10AEA6', rgb: { r: 16, g: 174, b: 166 }, kind: 'custom' },
+				{ name: 'Transparent', key: 'transparent', kind: 'transparent' }
+			]
+		};
+		customPalettes.set([bothTeals]);
+		activePaletteName.set('Both teals');
+		outputSettings.set({ ...outputSettings.get(), alphaMode: 'matte', matteKey: '#10AE82' });
+		render(PalettePanel);
+		await expect.element(page.getByRole('table'), { timeout: 10_000 }).toBeInTheDocument();
+
+		await page.getByRole('checkbox', { name: 'Visible: Old teal' }).click();
+
+		await expect.poll(() => outputSettings.get().matteKey).toBe('#10AE83');
+		expect(outputSettings.get().matteKey).not.toBe('#10AEA6');
+		await openTransparentSettings();
+		expect(matteText()).toBe('Near old teal');
+		await page.getByRole('button', { name: 'Done' }).click();
+	});
+
 	it('falls back to the colour nearest corrected Teal when it is hidden', async () => {
 		activePaletteName.set(WPLACE_PALETTE_NAME);
 		outputSettings.set({ ...outputSettings.get(), alphaMode: 'matte', matteKey: '#10AE82' });

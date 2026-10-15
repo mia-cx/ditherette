@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WPLACE_PALETTE_NAME } from '$lib/palette/wplace';
 import { packageProcessRequest } from '$lib/processing/package-adapter';
 import type { Palette, ProcessingSettings } from '$lib/processing/types';
 
@@ -59,12 +60,27 @@ async function loadApp(engine: ReturnType<typeof recordingEngine>) {
 
 function requestSettings(app: Awaited<ReturnType<typeof loadApp>>): ProcessingSettings {
 	return {
-		output: app.outputSettings.get(),
+		// Mirror the worker request: the matte key resolves against the whole active palette.
+		output: app.paletteOutputSettings(app.outputSettings.get(), app.activePalette.get()),
 		dither: app.ditherSettings.get(),
 		colorSpace: app.colorSpace.get(),
 		effects: []
 	};
 }
+
+const bothTealsPalette: Palette = {
+	name: 'Both teals',
+	source: 'custom',
+	colors: [
+		{ name: 'Old teal', key: '#10AE82', rgb: { r: 16, g: 174, b: 130 }, kind: 'custom' },
+		{ name: 'Near old teal', key: '#10AE83', rgb: { r: 16, g: 174, b: 131 }, kind: 'custom' },
+		{ name: 'Current teal', key: '#10AEA6', rgb: { r: 16, g: 174, b: 166 }, kind: 'custom' },
+		{ name: 'Transparent', key: 'transparent', kind: 'transparent' }
+	]
+};
+
+const DISABLED_MATTE_WARNING =
+	'Matte colour is disabled; using the nearest enabled visible colour for alpha matte.';
 
 const transparentSource = { width: 1, height: 1, data: new Uint8ClampedArray([0, 0, 0, 0]) };
 
@@ -135,5 +151,51 @@ describe('Wplace Teal key state', () => {
 		const app = await loadApp(engine);
 
 		expect(app.selectedPalette.get().some((color) => color.name === 'Teal')).toBe(false);
+	});
+
+	it('keeps the disabled-matte policy when the exact colour is hidden', async () => {
+		const engine = recordingEngine();
+		engine.storage['ditherette:active-palette'] = JSON.stringify('Both teals');
+		engine.storage['ditherette:custom-palettes'] = JSON.stringify([bothTealsPalette]);
+		engine.storage['ditherette:output'] = JSON.stringify(outputWithMatte('#10AE82'));
+		const app = await loadApp(engine);
+
+		expect(matteAlpha(app).alpha).toEqual({ mode: 'matte', rgb: [16, 174, 130] });
+
+		app.setPaletteColorEnabled('#10AE82', false);
+		const hidden = matteAlpha(app);
+		expect(hidden.alpha).toEqual({ mode: 'matte', rgb: [16, 174, 131] });
+		expect(hidden.warnings).toEqual([DISABLED_MATTE_WARNING]);
+		expect(app.outputSettings.get().matteKey).toBe('#10AE82');
+
+		app.setPaletteColorEnabled('#10AE82', true);
+		const restored = matteAlpha(app);
+		expect(restored.alpha).toEqual({ mode: 'matte', rgb: [16, 174, 130] });
+		expect(restored.warnings).toEqual([]);
+	});
+
+	it('warns and falls back to the nearest enabled colour when Wplace Teal is hidden', async () => {
+		const engine = recordingEngine();
+		engine.storage['ditherette:output'] = JSON.stringify(outputWithMatte('#10AE82'));
+		const app = await loadApp(engine);
+
+		app.setPaletteColorEnabled('#10AEA6', false, WPLACE_PALETTE_NAME);
+
+		const corrected = { r: 16, g: 174, b: 166 };
+		const expected = app.selectedPalette
+			.get()
+			.filter((color) => color.rgb)
+			.reduce((best, color) => {
+				const d = (c: { r: number; g: number; b: number }) =>
+					(c.r - corrected.r) ** 2 + (c.g - corrected.g) ** 2 + (c.b - corrected.b) ** 2;
+				return d(color.rgb!) < d(best.rgb!) ? color : best;
+			}).rgb!;
+
+		const hidden = matteAlpha(app);
+		expect(hidden.alpha).toEqual({
+			mode: 'matte',
+			rgb: [expected.r, expected.g, expected.b]
+		});
+		expect(hidden.warnings).toEqual([DISABLED_MATTE_WARNING]);
 	});
 });
