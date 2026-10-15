@@ -8,6 +8,7 @@ import {
 	setOutputPreview,
 	outputSettings,
 	paletteEnabled,
+	paletteOutputSettings,
 	processedImage,
 	processingError,
 	processingProgress,
@@ -211,7 +212,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 		 */
 		const postProcessRequest = async () => {
 			const settings = {
-				output: outputSettings.get(),
+				output: paletteOutputSettings(outputSettings.get(), activePalette.get()),
 				dither: ditherSettings.get(),
 				colorSpace: colorSpace.get(),
 				effects: activeEffectSteps.get()

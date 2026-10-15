@@ -22,6 +22,8 @@ import {
 	paletteEnabled,
 	previewCustomPaletteImport,
 	processedImage,
+	selectedPalette,
+	setPaletteColorEnabled,
 	sourceImageData,
 	updateOutputSettings
 } from './app';
@@ -152,6 +154,27 @@ describe('custom palette state persistence', () => {
 		deleteCustomPalette('Custom');
 
 		expect(paletteEnabled.get()).not.toHaveProperty(paletteEnabledKey('Custom', '#FF0000'));
+	});
+
+	it('normalizes a Teal visibility saved under the previous key', () => {
+		paletteEnabled.set({ '#10AE82': false });
+
+		importCustomPaletteData(importRecord('Small', [{ name: 'Red', key: '#FF0000' }]));
+
+		expect(paletteEnabled.get()).toHaveProperty('#10AEA6', false);
+		expect(paletteEnabled.get()).not.toHaveProperty('#10AE82');
+		const first = paletteEnabled.get();
+		importCustomPaletteData(importRecord('Small', [{ name: 'Red', key: '#FF0000' }]));
+		expect(paletteEnabled.get()).toEqual(first);
+	});
+
+	it('enables the corrected Teal over a saved previous-key disable', () => {
+		paletteEnabled.set({ '#10AE82': false });
+
+		setPaletteColorEnabled('#10AEA6', true, 'Wplace (Default)');
+
+		const teal = selectedPalette.get().find((color) => color.name === 'Teal');
+		expect(teal).toMatchObject({ key: '#10AEA6', rgb: { r: 16, g: 174, b: 166 } });
 	});
 
 	it('prunes stale color keys when overwriting an imported palette', () => {

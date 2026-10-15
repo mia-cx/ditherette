@@ -7,9 +7,11 @@
 	import { ditherPreview, type DitherPreviewParams } from '$lib/processing/dither-preview';
 	import type { DitherId } from '$lib/processing/types';
 	import {
+		activePalette,
 		colorSpace,
 		ditherSettings,
 		outputSettings,
+		paletteOutputSettings,
 		selectedPalette,
 		uiSettings
 	} from '$lib/stores/app';
@@ -60,7 +62,7 @@
 	function previewParams(option: DitherOption): DitherPreviewParams {
 		return {
 			dither: { ...$ditherSettings, algorithm: option.id },
-			output: $outputSettings,
+			output: paletteOutputSettings($outputSettings, $activePalette),
 			palette: $selectedPalette,
 			colorSpace: $colorSpace
 		};

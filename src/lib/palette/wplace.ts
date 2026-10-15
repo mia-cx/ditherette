@@ -16,7 +16,7 @@ const free = [
 	['Light Green', '#13E67B'],
 	['Mint', '#87FF5E'],
 	['Deep Teal', '#0C816E'],
-	['Teal', '#10AE82'],
+	['Teal', '#10AEA6'],
 	['Cyan', '#13E1BE'],
 	['Aqua', '#60F7F2'],
 	['Blue', '#28509E'],
@@ -103,8 +103,38 @@ export function paletteEnabledKey(paletteName: string, colorKey: string) {
 	return paletteName === WPLACE_PALETTE_NAME ? colorKey : JSON.stringify([paletteName, colorKey]);
 }
 
+/**
+ * Wplace colours whose hex, and so key, was corrected: [previous key, current key]. Saved state
+ * under a previous key still belongs to the corrected colour.
+ */
+const CORRECTED_WPLACE_KEYS = [['#10AE82', '#10AEA6']] as const;
+
+/** The other key of a corrected Wplace colour: the current key for its previous key, and back. */
+function correctionPartner(key: string): string | undefined {
+	for (const [previous, current] of CORRECTED_WPLACE_KEYS) {
+		if (key === previous) return current;
+		if (key === current) return previous;
+	}
+	return undefined;
+}
+
+/**
+ * The key a saved matte names among `colors`: the matte key itself, or else the other key of a
+ * corrected Wplace colour, so a Teal matte stays Teal on either side of the correction.
+ */
+export function paletteMatteKey(
+	colors: readonly { key: string }[],
+	matteKey: string
+): string | undefined {
+	if (colors.some((color) => color.key === matteKey)) return matteKey;
+	const partner = correctionPartner(matteKey);
+	return partner && colors.some((color) => color.key === partner) ? partner : undefined;
+}
+
 function legacyPaletteEnabledKey(paletteName: string, colorKey: string) {
-	return paletteName === WPLACE_PALETTE_NAME ? colorKey : `${paletteName}\u0000${colorKey}`;
+	return paletteName === WPLACE_PALETTE_NAME
+		? (CORRECTED_WPLACE_KEYS.find(([, current]) => current === colorKey)?.[0] ?? colorKey)
+		: `${paletteName}\u0000${colorKey}`;
 }
 
 export function paletteColorEnabled(
