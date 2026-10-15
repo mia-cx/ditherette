@@ -25,9 +25,11 @@ Keep that workflow clear and fast, including large images.
 - Scopes inspect Source, Effects before resize and palette matching, and Output.
   Histograms compare stages and report sampled pure black and pure white clipping.
 - Production Adaptive placement follows local contrast and can halo hard edges.
-  The development preview selects smooth gradients with a minimum-size control.
-  It preserves each dithering algorithm's normal texture inside selected regions;
-  visual acceptance remains open at https://development.ditherette.mia.cx.
+  The development preview preserves each dithering algorithm's normal texture,
+  but its directional mask still fragments smooth areas. Replace it with a two-dimensional
+  contrast test that dithers whole qualifying sample areas. Expose sample size and
+  contrast tolerance; higher tolerance includes less-smooth areas. Visual acceptance
+  remains open at https://development.ditherette.mia.cx.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
@@ -44,7 +46,7 @@ Website delivery proceeds independently of npm publication holds.
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
-   Correct adaptive placement so only sufficiently large smooth gradients dither.
+   Correct adaptive placement through whole-area sampling and adjustable contrast tolerance.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.
