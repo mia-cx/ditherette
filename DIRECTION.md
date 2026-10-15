@@ -24,6 +24,8 @@ Keep that workflow clear and fast, including large images.
   index when effects are toggled off and on.
 - Scopes inspect Source, Effects before resize and palette matching, and Output.
   Histograms compare stages and report sampled pure black and pure white clipping.
+- Adaptive placement currently follows local contrast and can halo hard edges.
+  Its replacement must select extended smooth gradients, with a minimum-size control.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
@@ -40,6 +42,7 @@ Website delivery proceeds independently of npm publication holds.
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
+   Correct adaptive placement so only sufficiently large smooth gradients dither.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.
