@@ -17,7 +17,9 @@
 
 <Seo title="{guide.title} | Ditherette" description={guide.description} path={guidePath(slug)} />
 
-<article class="prose max-w-none prose-zinc dark:prose-invert">
+<article
+	class="prose max-w-none prose-zinc dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight"
+>
 	<h1>{guide.title}</h1>
 	{@render children()}
 
