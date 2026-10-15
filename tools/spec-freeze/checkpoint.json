@@ -2024,6 +2024,53 @@
 				}
 			],
 			"contentSha256": "78369584919c1e82b0909cca71ba67edd43523e831b630517a08f979e553f96e"
+		},
+		{
+			"name": "smooth-gradient-v1",
+			"summary": "Append a palette-independent gradient selector and readable field/diffusion composition without changing legacy recipes",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "4a03062e0aa3302d5da3fadf5261fec32b8104ba5f13a37992c9b8d64268a252"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "8e76e1bdc891de0b9524a9fd87196115d7030cfeddab3c3b57f680f35065885f"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+						"mode": "100644",
+						"sha256": "199834e3a551b27dfa9c47d28c70d97d89b0996836a271a85bc351f757b84a7b"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+						"mode": "100644",
+						"sha256": "d4e79207cd413b8ab66d84b817077fa442bc75229a10385e647c4fe49f72f233"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+						"mode": "100644",
+						"sha256": "b49efdeccdb2ac6cc16d3a4e03bbe44a758259a3586b67c133d034117b0de987"
+					}
+				}
+			],
+			"contentSha256": "4a0e9dc7fa9affd851488f75250d56ebaa549696aae97e62c32cb2dd603aa0ca"
 		}
 	]
 }

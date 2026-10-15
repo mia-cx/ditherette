@@ -68,7 +68,8 @@ test('private field ABI borrows inputs, validates f64 controls and preserves the
 			[2, 7, 19],
 			[3, Infinity, 20],
 			[3, 3.5e38, 20],
-			[4, 2, 21],
+			[4, 2, 43], // Tag 2 is smooth-gradient-v1; its zero minimum is invalid.
+			[4, 3, 21], // Unassigned placement tags still fail at placement.
 			[5, 1, 21]
 		]) {
 			const policy = [...controls];
@@ -77,6 +78,9 @@ test('private field ABI borrows inputs, validates f64 controls and preserves the
 				assert.equal(invoke(bindings, fused, {}, policy).status, 4);
 				assert.equal(bindings.privateErrorPath(), path);
 			}
+		}
+		for (const fused of [false, true]) {
+			assert.equal(invoke(bindings, fused, {}, [0, 2, 0, 1, 2, 4, 0, 0]).status, 0);
 		}
 		for (const fused of [false, true]) {
 			assert.equal(invoke(bindings, fused, {}, [2, 0, 0, 1, 0, 0, 0, 0]).status, 0);

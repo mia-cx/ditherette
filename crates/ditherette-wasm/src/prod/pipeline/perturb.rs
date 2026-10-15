@@ -127,6 +127,14 @@ pub(super) fn validate(policy: PerturbPolicy) -> Result<(), Failure> {
 }
 
 pub(super) fn validate_placement(placement: Placement) -> Result<(), Failure> {
+    if let Placement::SmoothGradientV1 { min_gradient_size } = placement {
+        if !(4..=32768).contains(&min_gradient_size) {
+            return Err(Failure::new(
+                ErrorCode::InvalidSettings,
+                ErrorPath::PerturbMinGradientSize,
+            ));
+        }
+    }
     if let Placement::Adaptive {
         radius,
         threshold,
@@ -271,6 +279,9 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         .as_ref()
         .map_or(0, |plan| plan.additional_capacity());
     call.charge_working_capacity(band_capacity, peak)?;
+    let smooth_capacity =
+        AdaptivePlacementWork::required_for_image(dimensions, request.perturb.placement);
+    call.charge_working_capacity(smooth_capacity, peak)?;
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
     let bands = band_plan
         .as_ref()
@@ -280,18 +291,22 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     call.charge_optional_capacity(band_rows_capacity, peak)?;
     let mut bands = bands.map(|(buffers, _)| buffers);
     let mut placement = if bands.is_none() {
-        AdaptivePlacementWork::try_new(
-            dimensions.width(),
+        AdaptivePlacementWork::try_for_image(
+            dimensions,
             request.perturb.placement,
-            call.available_working_capacity(),
-        )
+            if smooth_capacity > 0 {
+                smooth_capacity
+            } else {
+                call.available_working_capacity()
+            },
+        )?
     } else {
         None
     };
     let placement_capacity = placement
         .as_ref()
         .map_or(0, AdaptivePlacementWork::capacity_bytes);
-    call.charge_optional_capacity(placement_capacity, peak)?;
+    call.charge_optional_capacity(placement_capacity - smooth_capacity, peak)?;
     let bayer = if bands.is_none() {
         BayerBytes::try_new(
             dimensions,

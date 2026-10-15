@@ -309,6 +309,21 @@ fn parse_placement(
             threshold: scalar(threshold, threshold_path)?,
             softness: scalar(softness, softness_path)?,
         },
+        // Append-only private tag. The radius slot carries size only for this versioned mode.
+        2.0 if threshold == 0.0 && softness == 0.0 => {
+            let path = if placement_path == ErrorPath::PerturbPlacement {
+                ErrorPath::PerturbMinGradientSize
+            } else {
+                ErrorPath::DitherMinGradientSize
+            };
+            let size = dimension(radius, MAX_SOURCE_SIDE, ErrorCode::InvalidSettings, path)?;
+            if size < 4 {
+                return Err(invalid(path));
+            }
+            Placement::SmoothGradientV1 {
+                min_gradient_size: size,
+            }
+        }
         _ => return Err(invalid(placement_path)),
     })
 }

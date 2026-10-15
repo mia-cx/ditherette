@@ -53,8 +53,10 @@ pub fn diffuse(
     let fixed = (size_of::<ImageBuf<PaletteIndex8>>()
         + size_of::<DiffusionPolicy>()
         + size_of::<Converter>()) as u64;
+    let smooth_capacity =
+        AdaptivePlacementWork::required_for_image(layout.output, policy.placement);
     let preparation_limit = memory_limit
-        .checked_sub(fixed + count as u64)
+        .checked_sub(fixed + count as u64 + smooth_capacity)
         .ok_or(DiffusionError::Preparation(PreparationError::memory()))?;
     let mut prepared = PreparedDiffusion::try_new(
         layout.source.dimensions().width(),
@@ -71,11 +73,16 @@ pub fn diffuse(
         .reserve(&mut indices, count)
         .map_err(DiffusionError::Preparation)?;
     indices.resize(count, 0);
-    let mut placement = AdaptivePlacementWork::try_new(
-        layout.output.width(),
+    let mut placement = AdaptivePlacementWork::try_for_image(
+        layout.output,
         policy.placement,
-        memory_limit - budget.used,
-    );
+        if smooth_capacity > 0 {
+            smooth_capacity
+        } else {
+            memory_limit - budget.used
+        },
+    )
+    .map_err(DiffusionError::Execution)?;
     execute_with_placement_progress(
         &prepared.quantizer,
         &mut prepared.work,
@@ -121,6 +128,14 @@ impl DiffusionPolicy {
             ));
         };
         nonnegative(strength, ErrorPath::DitherStrength)?;
+        if let Placement::SmoothGradientV1 { min_gradient_size } = placement {
+            if !(4..=32768).contains(&min_gradient_size) {
+                return Err(Failure::new(
+                    ErrorCode::InvalidSettings,
+                    ErrorPath::DitherMinGradientSize,
+                ));
+            }
+        }
         if let Placement::Adaptive {
             radius,
             threshold,
@@ -236,7 +251,8 @@ impl PreparedDiffusion {
         self.quantizer.into_indexed(indices)
     }
 
-    /// Executes without allocation. The source is unchanged and fixed-index pixels remain sinks.
+    /// Executes legacy placement without allocation. The source is unchanged and fixed-index pixels remain sinks.
+    /// SmoothGradientV1 needs full-image analysis; use `diffuse` or the public Processor route.
     pub fn execute(
         &mut self,
         source: ImageView<'_, Rgba8>,
@@ -301,6 +317,18 @@ pub(crate) fn execute_with_placement_progress(
     policy: DiffusionPolicy,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    if matches!(policy.placement, Placement::SmoothGradientV1 { .. })
+        && placement_scratch.len()
+            != source
+                .dimensions()
+                .pixel_count()
+                .expect("validated dimensions")
+    {
+        return Err(Failure::new(
+            ErrorCode::MemoryLimit,
+            ErrorPath::MemoryLimitBytes,
+        ));
+    }
     let rgb_cache = (policy.feedback == DiffusionFeedback::SrgbBytes && !rgb_cache.is_empty())
         .then(|| RgbCache::new(rgb_cache));
     BorrowedDiffusion {
@@ -331,17 +359,27 @@ impl BorrowedDiffusion<'_> {
         assert_eq!(self.work.len(), width * ROWS);
         assert_eq!(indices.len(), width * height);
         let quantizer = self.quantizer;
-        let mut placement_rows = match policy.placement {
-            Placement::Adaptive { radius, .. } if !placement_scratch.is_empty() => {
+        let (mut placement_rows, smooth) = match policy.placement {
+            Placement::Adaptive { radius, .. } if !placement_scratch.is_empty() => (
                 Some(AdaptivePlacementRows::new(
                     source,
                     quantizer.converter(),
                     quantizer.matcher().matching.space(),
                     radius,
                     placement_scratch,
-                ))
+                )),
+                None,
+            ),
+            Placement::SmoothGradientV1 { min_gradient_size } => {
+                crate::prod::dither::smooth_gradient_v1::select(
+                    source,
+                    min_gradient_size,
+                    placement_scratch,
+                    || progress(0),
+                )?;
+                (None, Some(&*placement_scratch))
             }
-            _ => None,
+            _ => (None, None),
         };
         let palette = self.quantizer.palette();
         let fixed_alpha = if palette.visible.is_empty() {
@@ -359,7 +397,15 @@ impl BorrowedDiffusion<'_> {
             let placement_row = placement_rows
                 .as_mut()
                 .map(|rows| rows.prepare_row(y as u32));
-            self.execute_row(source, indices, policy, fixed_alpha, y, placement_row)?;
+            self.execute_row(
+                source,
+                indices,
+                policy,
+                fixed_alpha,
+                y,
+                placement_row,
+                smooth,
+            )?;
             if y + ROWS < height {
                 self.fill_row(source, y + ROWS, policy.feedback);
             }
@@ -378,6 +424,7 @@ impl BorrowedDiffusion<'_> {
         fixed_alpha: Option<(u8, u8)>,
         y: usize,
         placement_row: Option<AdaptivePlacementRow<'_>>,
+        smooth: Option<&[[f32; 3]]>,
     ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
         let height = source.dimensions().height_usize();
@@ -396,6 +443,28 @@ impl BorrowedDiffusion<'_> {
             let offset = y * width + x;
             if let Some((_, index)) = fixed_alpha.filter(|&(cutoff, _)| row[x * 4 + 3] <= cutoff) {
                 indices[offset] = index;
+                continue;
+            }
+            // Smooth placement is an isolation boundary for incoming as well as outgoing error.
+            // Original alpha preparation and nearest matching still apply to excluded pixels.
+            if smooth.is_some_and(|mask| mask[offset][2] == 0.0) {
+                let rgb = match self.quantizer.palette().prepare_pixel([
+                    row[x * 4],
+                    row[x * 4 + 1],
+                    row[x * 4 + 2],
+                    row[x * 4 + 3],
+                ]) {
+                    PalettePixel::Index(index) => {
+                        indices[offset] = index;
+                        continue;
+                    }
+                    PalettePixel::Color(rgb) => rgb,
+                };
+                indices[offset] = self
+                    .quantizer
+                    .nearest_finite(self.quantizer.converter().coordinates(rgb))
+                    .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))?
+                    .index;
                 continue;
             }
             let current = self.work[work_rows[0] + x];
@@ -437,6 +506,7 @@ impl BorrowedDiffusion<'_> {
             };
             indices[offset] = index;
             let mask = match (&placement_row, policy.placement) {
+                (_, Placement::SmoothGradientV1 { .. }) => 1.0,
                 (
                     Some(row),
                     Placement::Adaptive {
@@ -462,6 +532,9 @@ impl BorrowedDiffusion<'_> {
                 };
                 let target_y = y + tap.dy as usize;
                 if target_x >= width || target_y >= height {
+                    continue;
+                }
+                if smooth.is_some_and(|mask| mask[target_y * width + target_x][2] == 0.0) {
                     continue;
                 }
                 if fixed_alpha.is_some_and(|(cutoff, _)| {

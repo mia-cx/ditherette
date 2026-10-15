@@ -143,7 +143,7 @@ pub enum AlphaPolicy {
     },
 }
 
-/// Palette-independent contrast placement. Threshold/softness use the existing 0..100 contrast scale.
+/// Palette-independent placement. Legacy Adaptive retains its 0..100 contrast scale.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Placement {
@@ -152,6 +152,11 @@ pub enum Placement {
         radius: u32,
         threshold: f32,
         softness: f32,
+    },
+    /// Extended smooth runs, measured in working pixels after any resize.
+    SmoothGradientV1 {
+        #[serde(rename = "minGradientSize")]
+        min_gradient_size: u32,
     },
 }
 
@@ -485,6 +490,15 @@ fn nonnegative(value: f32, path: String) -> Result<(), DitheretteError> {
 }
 
 fn validate_placement(placement: Placement, path: &str) -> Result<(), DitheretteError> {
+    if let Placement::SmoothGradientV1 { min_gradient_size } = placement {
+        if !(4..=MAX_SOURCE_SIDE).contains(&min_gradient_size) {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.minGradientSize"),
+                "Minimum gradient size must be between 4 and 32768 pixels.",
+            ));
+        }
+    }
     if let Placement::Adaptive {
         radius,
         threshold,

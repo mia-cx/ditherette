@@ -49,8 +49,12 @@ pub fn dither_yiluoma(
     let quantize = request.quantize;
     let count = layout.output.pixel_count().expect("validated dimensions");
     let fixed = (size_of::<ImageBuf<PaletteIndex8>>() + size_of::<Converter>()) as u64;
+    let smooth_capacity = crate::prod::dither::placement::AdaptivePlacementWork::required_for_image(
+        layout.output,
+        placement,
+    );
     let preparation_limit = memory_limit
-        .checked_sub(fixed + count as u64)
+        .checked_sub(fixed + count as u64 + smooth_capacity)
         .ok_or(QuantizeError::Preparation(PreparationError::memory()))?;
     let prepared = PreparedQuantizer::try_new(
         quantize.palette,
@@ -66,6 +70,28 @@ pub fn dither_yiluoma(
         .reserve(&mut indices, count)
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
+    let mut placement_work = crate::prod::dither::placement::AdaptivePlacementWork::try_for_image(
+        layout.output,
+        placement,
+        if smooth_capacity > 0 {
+            smooth_capacity
+        } else {
+            memory_limit - budget.used
+        },
+    )
+    .map_err(|failure| {
+        QuantizeError::Preparation(PreparationError {
+            code: failure.code,
+            path: if failure.code == ErrorCode::MemoryLimit {
+                "memoryLimitBytes"
+            } else {
+                "wasm"
+            },
+        })
+    })?;
+    if let Some(work) = &placement_work {
+        budget.used += work.capacity_bytes();
+    }
     let levels = (size.width() * size.width()) as u32;
     let (index, mut mixes) =
         allocate_mix_work(&prepared, count, levels, memory_limit - budget.used);
@@ -75,7 +101,10 @@ pub fn dither_yiluoma(
         &mut indices,
         size,
         placement,
-        &mut [],
+        placement_work.as_mut().map_or(
+            &mut [],
+            crate::prod::dither::placement::AdaptivePlacementWork::scratch,
+        ),
         &mut mixes,
         index.as_ref(),
         |_| Ok(()),
@@ -121,13 +150,22 @@ pub fn dither_yiluoma_into(
     size: BayerSize,
     placement: Placement,
 ) {
+    let mut work = crate::prod::dither::placement::AdaptivePlacementWork::try_for_image(
+        source.dimensions(),
+        placement,
+        u64::MAX,
+    )
+    .expect("unbounded native placement scratch allocation");
     dither_yiluoma_with_progress(
         source,
         prepared,
         indices,
         size,
         placement,
-        &mut [],
+        work.as_mut().map_or(
+            &mut [],
+            crate::prod::dither::placement::AdaptivePlacementWork::scratch,
+        ),
         &mut [],
         |_| Ok(()),
     )
@@ -216,11 +254,27 @@ pub(super) fn dither_yiluoma_band_with_progress(
     let matcher = prepared.matcher();
     let levels = (size.width() * size.width()) as u32;
     let converter = Converter::new(PackedSpace::from_working(space));
-    let mut rows = match placement {
-        Placement::Adaptive { radius, .. } if !placement_rows.is_empty() => Some(
-            AdaptivePlacementRows::new(source, &converter, space, radius, placement_rows),
+    let (mut rows, smooth) = match placement {
+        Placement::Adaptive { radius, .. } if !placement_rows.is_empty() => (
+            Some(AdaptivePlacementRows::new(
+                source,
+                &converter,
+                space,
+                radius,
+                placement_rows,
+            )),
+            None,
         ),
-        _ => None,
+        Placement::SmoothGradientV1 { min_gradient_size } => {
+            crate::prod::dither::smooth_gradient_v1::select(
+                source,
+                min_gradient_size,
+                placement_rows,
+                || progress(0),
+            )?;
+            (None, Some(&*placement_rows))
+        }
+        _ => (None, None),
     };
     let (mut source_mixes, mut nearest_mixes) = match placement {
         Placement::Everywhere {} if !mixes.is_empty() => (Some(MixCache::new(mixes, levels)), None),
@@ -242,6 +296,12 @@ pub(super) fn dither_yiluoma_band_with_progress(
             *index = match palette.prepare_pixel([pixel[0], pixel[1], pixel[2], pixel[3]]) {
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
+                    if smooth.is_some_and(|mask| {
+                        mask[y as usize * dimensions.width_usize() + x as usize][2] == 0.0
+                    }) {
+                        *index = matcher.nearest(converter.coordinates(rgb)).index;
+                        continue;
+                    }
                     let search = || {
                         let coordinates = converter.coordinates(rgb);
                         mix_index.map_or_else(
@@ -251,6 +311,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
                     };
                     // Everywhere has mask 1, so the target is the source and nearest is unused.
                     let mix = match placement {
+                        Placement::SmoothGradientV1 { .. } => search(),
                         Placement::Everywhere {} => match &mut source_mixes {
                             Some(mixes) => mixes.mix(rgb, search),
                             None => search(),

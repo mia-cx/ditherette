@@ -1,0 +1,523 @@
+//! Proves gradient-only placement leaves hard boundaries clean through actual render calls.
+use ditherette_wasm::{
+    image::{contracts::PaletteEntry, ImageDimensions},
+    prod::{
+        contract::{failure::Failure, request::*},
+        pipeline::{
+            processor::{InputBoundary, Processor},
+            quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
+        },
+    },
+};
+
+struct Boundary<'a>(&'a [u8]);
+impl InputBoundary for Boundary<'_> {
+    fn input_len(&mut self) -> Result<usize, Failure> {
+        Ok(self.0.len())
+    }
+    fn copy_input(&mut self, bytes: &mut [u8]) -> Result<(), Failure> {
+        bytes.copy_from_slice(self.0);
+        Ok(())
+    }
+}
+impl QuantizeBoundary for Boundary<'_> {
+    type Output = Vec<u8>;
+    fn complete(
+        &mut self,
+        indices: &[u8],
+        _: ImageDimensions,
+        _: IndexedMetadataRef<'_>,
+    ) -> Result<Vec<u8>, Failure> {
+        Ok(indices.to_vec())
+    }
+}
+impl ditherette_wasm::prod::pipeline::processor::Boundary for Boundary<'_> {
+    type Output = Vec<u8>;
+    fn complete(&mut self, rgba: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
+        Ok(rgba.to_vec())
+    }
+}
+
+const WIDTH: u32 = 96;
+const HEIGHT: u32 = 64;
+fn render(data: &[u8], dither: DitherPolicy) -> Vec<u8> {
+    let palette = [64, 96, 160, 192].map(|value| PaletteEntry::Color { rgb: [value; 3] });
+    Processor::new(1 << 24, 0)
+        .unwrap()
+        .dither_and_quantize(
+            QuantizeRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                palette: &palette,
+                alpha: AlphaPolicy::Premultiplied {},
+                matching: MatchPolicy::OklabEuclidean,
+            },
+            dither,
+            &mut Boundary(data),
+        )
+        .unwrap()
+}
+
+#[test]
+fn extended_render_matches_reference_across_spaces_alpha_and_feedback() {
+    use ditherette_wasm::prod::pipeline::perturb::PerturbRequest;
+    use ditherette_wasm::{image::ImageView, spec};
+    let width = 64;
+    let height = 9;
+    let data: Vec<_> = (0..height)
+        .flat_map(|y| {
+            (0..width).flat_map(move |x| {
+                let value = if x < 48 { 64 + x * 2 } else { 80 };
+                [
+                    value as u8,
+                    (value + 16) as u8,
+                    (208 - value) as u8,
+                    (x * 37 + y * 13) as u8,
+                ]
+            })
+        })
+        .collect();
+    let dimensions = ImageDimensions::new(width, height).unwrap();
+    let source = ImageView::packed(&data, dimensions).unwrap();
+    let entries = [64, 96, 160, 192].map(|v| PaletteEntry::Color { rgb: [v; 3] });
+    let placement = Placement::SmoothGradientV1 {
+        min_gradient_size: 24,
+    };
+    let mut processor = Processor::new(1 << 24, 0).unwrap();
+    for space in [
+        WorkingSpace::Srgb,
+        WorkingSpace::LinearRgb,
+        WorkingSpace::Oklab,
+        WorkingSpace::Oklch,
+        WorkingSpace::Cielab,
+        WorkingSpace::Cielch,
+        WorkingSpace::Ycbcr,
+    ] {
+        let ref_space = serde_json::from_value(serde_json::to_value(space).unwrap()).unwrap();
+        let policy = PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Sixteen,
+            },
+            space,
+            strength: 0.3,
+            placement,
+        };
+        let expected =
+            spec::smooth_gradient_v1::render::perturb(source, ref_space, 0.3, 24, |x, y, _| {
+                spec::dither::ordered::bayer_noise_at(
+                    x,
+                    y,
+                    spec::dither::ordered::BayerSize::Sixteen,
+                )
+            });
+        let actual = processor
+            .perturb(
+                PerturbRequest {
+                    source_width: width,
+                    source_height: height,
+                    perturb: policy,
+                },
+                &mut Boundary(&data),
+            )
+            .unwrap();
+        assert_eq!(actual, expected.data(), "{space:?} RGBA8 boundary");
+    }
+    for matching in [
+        MatchPolicy::SrgbEuclidean,
+        MatchPolicy::OklabEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchHueArc,
+        MatchPolicy::LinearRgbEuclidean,
+        MatchPolicy::YcbcrEuclidean,
+    ] {
+        for alpha in [
+            AlphaPolicy::Premultiplied {},
+            AlphaPolicy::Preserve { threshold: 127.5 },
+            AlphaPolicy::Matte { rgb: [32, 80, 144] },
+        ] {
+            for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+                let quantize = QuantizeRequest {
+                    source_width: width,
+                    source_height: height,
+                    palette: &entries,
+                    alpha,
+                    matching,
+                };
+                let dither = DitherPolicy::Diffusion {
+                    kernel: Diffusion::Sierra,
+                    feedback,
+                    strength: 0.3,
+                    serpentine: true,
+                    placement,
+                };
+                let reference = spec::smooth_gradient_v1::render::diffuse(
+                    spec::contract::request::QuantizeRequest {
+                        version: 1,
+                        source: spec::contract::request::Source {
+                            width,
+                            height,
+                            data: &data,
+                        },
+                        palette: &entries,
+                        alpha: serde_json::from_value(serde_json::to_value(alpha).unwrap())
+                            .unwrap(),
+                        matching: serde_json::from_value(serde_json::to_value(matching).unwrap())
+                            .unwrap(),
+                    },
+                    spec::dither_modes::diffusion::DiffusionPolicy {
+                        kernel: spec::dither_modes::diffusion::Kernel::Sierra,
+                        strength: 0.3,
+                        placement: spec::contract::request::Placement::Everywhere {},
+                        serpentine: true,
+                        feedback: serde_json::from_value(serde_json::to_value(feedback).unwrap())
+                            .unwrap(),
+                    },
+                    24,
+                )
+                .unwrap();
+                let actual = processor
+                    .dither_and_quantize(quantize, dither, &mut Boundary(&data))
+                    .unwrap();
+                assert_eq!(
+                    actual,
+                    reference.indices.data(),
+                    "{matching:?} {alpha:?} {feedback:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_sources() {
+    use ditherette_wasm::prod::{
+        contract::{
+            error::ErrorCode,
+            lifecycle::{Progress, Stage},
+        },
+        pipeline::{
+            perturb::PerturbRequest, process::ProcessRequest, processor::Boundary as RgbaBoundary,
+            progress::Callback,
+        },
+    };
+    #[path = "support/budget.rs"]
+    mod budget;
+    struct Observed<'a> {
+        data: &'a [u8],
+        cancel: bool,
+        enabled: bool,
+        zeros: usize,
+        completed: usize,
+        clock: u64,
+    }
+    impl Callback for Observed<'_> {
+        fn now_ms(&mut self) -> Result<u64, Failure> {
+            self.clock += 60;
+            Ok(self.clock)
+        }
+        fn report(&mut self, event: Progress) -> Result<(), ()> {
+            if matches!(event.stage, Stage::Perturb | Stage::DitherAndQuantize)
+                && event.completed == Some(0)
+            {
+                self.zeros += 1;
+                if self.cancel && self.zeros == 3 {
+                    return Err(());
+                }
+            }
+            Ok(())
+        }
+    }
+    impl InputBoundary for Observed<'_> {
+        fn progress(&mut self) -> Option<&mut dyn Callback> {
+            if self.enabled {
+                Some(self)
+            } else {
+                None
+            }
+        }
+        fn input_len(&mut self) -> Result<usize, Failure> {
+            Ok(self.data.len())
+        }
+        fn copy_input(&mut self, bytes: &mut [u8]) -> Result<(), Failure> {
+            bytes.copy_from_slice(self.data);
+            Ok(())
+        }
+    }
+    impl RgbaBoundary for Observed<'_> {
+        type Output = Vec<u8>;
+        fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
+            self.completed += 1;
+            Ok(bytes.to_vec())
+        }
+    }
+    impl QuantizeBoundary for Observed<'_> {
+        type Output = Vec<u8>;
+        fn complete(
+            &mut self,
+            bytes: &[u8],
+            dims: ImageDimensions,
+            _: IndexedMetadataRef<'_>,
+        ) -> Result<Vec<u8>, Failure> {
+            RgbaBoundary::complete(self, bytes, dims)
+        }
+    }
+    fn run(
+        processor: &mut Processor,
+        boundary: &mut Observed<'_>,
+        kind: u32,
+        minimum: u32,
+    ) -> Result<Vec<u8>, Failure> {
+        let placement = Placement::SmoothGradientV1 {
+            min_gradient_size: minimum,
+        };
+        let perturb = PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Sixteen,
+            },
+            space: WorkingSpace::Srgb,
+            strength: 0.3,
+            placement,
+        };
+        if kind == 0 {
+            return processor.perturb(
+                PerturbRequest {
+                    source_width: 70,
+                    source_height: 12,
+                    perturb,
+                },
+                boundary,
+            );
+        }
+        let dither = if kind % 2 == 1 {
+            DitherPolicy::Separable { perturb }
+        } else {
+            DitherPolicy::Diffusion {
+                kernel: Diffusion::FloydSteinberg,
+                feedback: DiffusionFeedback::SrgbBytes,
+                strength: 0.3,
+                serpentine: true,
+                placement,
+            }
+        };
+        let palette = [64, 96, 160, 192].map(|v| PaletteEntry::Color { rgb: [v; 3] });
+        let alpha = AlphaPolicy::Premultiplied {};
+        let matching = MatchPolicy::OklabEuclidean;
+        if kind < 3 {
+            return processor.dither_and_quantize(
+                QuantizeRequest {
+                    source_width: 70,
+                    source_height: 12,
+                    palette: &palette,
+                    alpha,
+                    matching,
+                },
+                dither,
+                boundary,
+            );
+        }
+        processor.process(
+            ProcessRequest {
+                source_width: 70,
+                source_height: 12,
+                palette: &palette,
+                recipe: RecipeV1 {
+                    version: 1,
+                    output: Output {
+                        width: 35,
+                        height: 6,
+                        resize: ResizePolicy::Nearest {
+                            anchor: Anchor::Center,
+                        },
+                    },
+                    alpha,
+                    matching,
+                    dither,
+                },
+            },
+            boundary,
+        )
+    }
+    let data: Vec<_> = (0..12)
+        .flat_map(|_| (0..70).flat_map(|x| [80 + x as u8, 80 + x as u8, 80 + x as u8, 255]))
+        .collect();
+    fn observe(data: &[u8]) -> Observed<'_> {
+        Observed {
+            data,
+            cancel: false,
+            enabled: false,
+            zeros: 0,
+            completed: 0,
+            clock: 0,
+        }
+    }
+    for kind in 0..5 {
+        let mut roomy = Processor::new(1 << 20, 0).unwrap();
+        let expected = run(&mut roomy, &mut observe(&data), kind, 24).unwrap();
+        let peak = roomy.peak_capacity_bytes();
+        let minimum = budget::minimum(peak, |limit| {
+            Processor::new(limit, 0)
+                .and_then(|mut p| run(&mut p, &mut observe(&data), kind, 24))
+                .is_ok()
+        });
+        eprintln!(
+            "kind{kind} peak{peak} minimum{minimum} analysis{} source{}",
+            if kind < 3 { 70 * 12 * 12 } else { 35 * 6 * 12 },
+            data.len()
+        );
+        let failure = Processor::new(minimum - 1, 0)
+            .and_then(|mut p| run(&mut p, &mut observe(&data), kind, 24))
+            .unwrap_err();
+        assert_eq!(failure.code, ErrorCode::MemoryLimit);
+        let mut processor = Processor::new(minimum, 0).unwrap();
+        let mut observer = observe(&data);
+        observer.enabled = true;
+        observer.cancel = true;
+        assert_eq!(
+            run(&mut processor, &mut observer, kind, 24)
+                .unwrap_err()
+                .code,
+            ErrorCode::Callback
+        );
+        assert_eq!(observer.zeros, 3, "cancel during selector lines");
+        assert_eq!(observer.completed, 0);
+        observer.cancel = false;
+        assert_eq!(
+            run(&mut processor, &mut observer, kind, 24).unwrap(),
+            expected
+        );
+        assert!(processor.peak_capacity_bytes() <= minimum);
+        let flat: Vec<_> = (0..70 * 12).flat_map(|_| [80, 80, 80, 255]).collect();
+        let actual = run(&mut roomy, &mut observe(&flat), kind, 24).unwrap();
+        let fresh = run(
+            &mut Processor::new(1 << 20, 0).unwrap(),
+            &mut observe(&flat),
+            kind,
+            32768,
+        )
+        .unwrap();
+        assert_eq!(
+            actual, fresh,
+            "kind{kind}: no analysis retained across source changes"
+        );
+        let excluded = run(&mut roomy, &mut observe(&data), kind, 32768).unwrap();
+        assert_ne!(
+            excluded, expected,
+            "kind{kind}: size participates in processing identity"
+        );
+        assert_eq!(
+            run(&mut roomy, &mut observe(&data), kind, 24).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn reported_bayer_and_diffusion_keep_edges_clean_and_select_broad_ramps() {
+    let placement = Placement::SmoothGradientV1 {
+        min_gradient_size: 24,
+    };
+    let mut failures = Vec::new();
+    for (name, kind) in [
+        ("vertical", 0),
+        ("horizontal", 1),
+        ("diagonal", 2),
+        ("long ramp", 3),
+        ("short ramp", 4),
+        ("flat", 5),
+        ("ramp at hard boundary", 6),
+    ] {
+        let mut data = Vec::new();
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                let value = match kind {
+                    0 => {
+                        if x < 48 {
+                            80
+                        } else {
+                            176
+                        }
+                    }
+                    1 => {
+                        if y < 32 {
+                            80
+                        } else {
+                            176
+                        }
+                    }
+                    2 => {
+                        if x + y < 80 {
+                            80
+                        } else {
+                            176
+                        }
+                    }
+                    3 => 80 + x,
+                    4 => 80 + x.saturating_sub(40).min(8) * 12,
+                    6 => {
+                        if x < 64 {
+                            80 + x * 3 / 2
+                        } else {
+                            80
+                        }
+                    }
+                    _ => 80,
+                } as u8;
+                data.extend_from_slice(&[value, value, value, 255]);
+            }
+        }
+        let plain = render(&data, DitherPolicy::None {});
+        for (family, dither) in [
+            (
+                "Bayer16x16",
+                DitherPolicy::Separable {
+                    perturb: PerturbPolicy {
+                        field: Field::Bayer {
+                            size: BayerSize::Sixteen,
+                        },
+                        space: WorkingSpace::Srgb,
+                        strength: 0.3,
+                        placement,
+                    },
+                },
+            ),
+            (
+                "Floyd-Steinberg",
+                DitherPolicy::Diffusion {
+                    kernel: Diffusion::FloydSteinberg,
+                    feedback: DiffusionFeedback::SrgbBytes,
+                    strength: 0.3,
+                    serpentine: true,
+                    placement,
+                },
+            ),
+        ] {
+            let actual = render(&data, dither);
+            let changed = actual.iter().zip(&plain).filter(|(a, b)| a != b).count();
+            eprintln!("{family} {name}: {changed} changed pixels");
+            if ([3, 6].contains(&kind) && changed == 0) || (![3, 6].contains(&kind) && changed != 0)
+            {
+                failures.push(format!("{family} {name}: {changed}"));
+            }
+            if kind == 6 {
+                use ditherette_wasm::{image::ImageView, spec::smooth_gradient_v1::select};
+                let source =
+                    ImageView::packed(&data, ImageDimensions::new(WIDTH, HEIGHT).unwrap()).unwrap();
+                let mut mask = vec![[0.0; 3]; plain.len()];
+                select(source, 24, &mut mask, || Ok::<_, ()>(())).unwrap();
+                for (i, cell) in mask.iter().enumerate() {
+                    if cell[2] == 0.0 {
+                        assert_eq!(
+                            actual[i], plain[i],
+                            "{family} leaked into excluded pixel{i}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "gradient-only selection violations: {failures:?}"
+    );
+}
