@@ -13,19 +13,15 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	const PLACEMENT_RADIUS_MIN = 1;
-	const PLACEMENT_RADIUS_MAX = 32;
-	const PLACEMENT_PERCENT_MIN = 0;
-	const PLACEMENT_PERCENT_MAX = 100;
+	const PLACEMENT_MIN_GRADIENT_MIN = 4;
+	const PLACEMENT_MIN_GRADIENT_MAX = 512;
 	const initial = ditherSettings.get();
 	let algorithm = $state(initial.algorithm);
 	let strength = $state<number>(initial.strength);
 	let placement = $state(
 		initial.placement ?? (initial.coverage === 'full' ? 'everywhere' : 'adaptive')
 	);
-	let placementRadius = $state(initial.placementRadius ?? 3);
-	let placementThreshold = $state(initial.placementThreshold ?? 12);
-	let placementSoftness = $state(initial.placementSoftness ?? 8);
+	let placementMinGradientSize = $state(initial.placementMinGradientSize ?? 24);
 	let serpentine = $state(initial.serpentine);
 	let seed = $state(initial.seed);
 	let useColorSpace = $state(initial.useColorSpace ?? false);
@@ -44,9 +40,7 @@
 			algorithm = settings.algorithm;
 			strength = settings.strength;
 			placement = settings.placement ?? (settings.coverage === 'full' ? 'everywhere' : 'adaptive');
-			placementRadius = settings.placementRadius ?? 3;
-			placementThreshold = settings.placementThreshold ?? 12;
-			placementSoftness = settings.placementSoftness ?? 8;
+			placementMinGradientSize = settings.placementMinGradientSize ?? 24;
 			serpentine = settings.serpentine;
 			seed = settings.seed;
 			useColorSpace = settings.useColorSpace ?? false;
@@ -58,9 +52,7 @@
 			algorithm,
 			strength,
 			placement,
-			placementRadius,
-			placementThreshold,
-			placementSoftness,
+			placementMinGradientSize,
 			serpentine,
 			seed,
 			useColorSpace
@@ -119,14 +111,10 @@
 
 		<AdaptivePlacementControls
 			bind:placement
-			bind:placementRadius
-			bind:placementThreshold
-			bind:placementSoftness
+			bind:placementMinGradientSize
 			{supportsPlacement}
-			placementRadiusMin={PLACEMENT_RADIUS_MIN}
-			placementRadiusMax={PLACEMENT_RADIUS_MAX}
-			placementPercentMin={PLACEMENT_PERCENT_MIN}
-			placementPercentMax={PLACEMENT_PERCENT_MAX}
+			placementMinGradientSizeMin={PLACEMENT_MIN_GRADIENT_MIN}
+			placementMinGradientSizeMax={PLACEMENT_MIN_GRADIENT_MAX}
 		/>
 
 		<Separator />

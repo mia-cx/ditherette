@@ -7,26 +7,18 @@
 
 	type Props = {
 		placement: DitherPlacement;
-		placementRadius: number;
-		placementThreshold: number;
-		placementSoftness: number;
+		placementMinGradientSize: number;
 		supportsPlacement: boolean;
-		placementRadiusMin: number;
-		placementRadiusMax: number;
-		placementPercentMin: number;
-		placementPercentMax: number;
+		placementMinGradientSizeMin: number;
+		placementMinGradientSizeMax: number;
 	};
 
 	let {
 		placement = $bindable(),
-		placementRadius = $bindable(),
-		placementThreshold = $bindable(),
-		placementSoftness = $bindable(),
+		placementMinGradientSize = $bindable(),
 		supportsPlacement,
-		placementRadiusMin,
-		placementRadiusMax,
-		placementPercentMin,
-		placementPercentMax
+		placementMinGradientSizeMin,
+		placementMinGradientSizeMax
 	}: Props = $props();
 
 	const placementLabel = $derived(
@@ -39,9 +31,11 @@
 	}
 
 	function clampPlacementControls() {
-		placementRadius = clampNumber(placementRadius, placementRadiusMin, placementRadiusMax);
-		placementThreshold = clampNumber(placementThreshold, placementPercentMin, placementPercentMax);
-		placementSoftness = clampNumber(placementSoftness, placementPercentMin, placementPercentMax);
+		placementMinGradientSize = clampNumber(
+			placementMinGradientSize,
+			placementMinGradientSizeMin,
+			placementMinGradientSizeMax
+		);
 	}
 </script>
 
@@ -58,25 +52,27 @@
 </div>
 
 <div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-	<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label>
+	<Label for="dither-placement-min-gradient" class="text-xs text-muted-foreground"
+		>Min gradient</Label
+	>
 	<Slider
 		type="single"
-		bind:value={placementRadius}
-		min={placementRadiusMin}
-		max={placementRadiusMax}
+		bind:value={placementMinGradientSize}
+		min={placementMinGradientSizeMin}
+		max={placementMinGradientSizeMax}
 		step={1}
 		disabled={!supportsPlacement || placement !== 'adaptive'}
-		aria-label="Adaptive dither radius"
+		aria-label="Minimum gradient length"
 	/>
 	<div class="relative">
 		<input
-			id="dither-placement-radius"
+			id="dither-placement-min-gradient"
 			class="h-8 w-full border border-input bg-background px-2 pr-7 text-right font-mono text-xs tabular-nums"
 			type="number"
-			min={placementRadiusMin}
-			max={placementRadiusMax}
+			min={placementMinGradientSizeMin}
+			max={placementMinGradientSizeMax}
 			step="1"
-			bind:value={placementRadius}
+			bind:value={placementMinGradientSize}
 			disabled={!supportsPlacement || placement !== 'adaptive'}
 			onblur={clampPlacementControls}
 			onchange={clampPlacementControls}
@@ -84,68 +80,6 @@
 		<span
 			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
 			>px</span
-		>
-	</div>
-</div>
-
-<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-	<Label for="dither-placement-threshold" class="text-xs text-muted-foreground">Threshold</Label>
-	<Slider
-		type="single"
-		bind:value={placementThreshold}
-		min={placementPercentMin}
-		max={placementPercentMax}
-		step={1}
-		disabled={!supportsPlacement || placement !== 'adaptive'}
-		aria-label="Adaptive dither threshold"
-	/>
-	<div class="relative">
-		<input
-			id="dither-placement-threshold"
-			class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
-			type="number"
-			min={placementPercentMin}
-			max={placementPercentMax}
-			step="1"
-			bind:value={placementThreshold}
-			disabled={!supportsPlacement || placement !== 'adaptive'}
-			onblur={clampPlacementControls}
-			onchange={clampPlacementControls}
-		/>
-		<span
-			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
-			>%</span
-		>
-	</div>
-</div>
-
-<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-	<Label for="dither-placement-softness" class="text-xs text-muted-foreground">Softness</Label>
-	<Slider
-		type="single"
-		bind:value={placementSoftness}
-		min={placementPercentMin}
-		max={placementPercentMax}
-		step={1}
-		disabled={!supportsPlacement || placement !== 'adaptive'}
-		aria-label="Adaptive dither softness"
-	/>
-	<div class="relative">
-		<input
-			id="dither-placement-softness"
-			class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
-			type="number"
-			min={placementPercentMin}
-			max={placementPercentMax}
-			step="1"
-			bind:value={placementSoftness}
-			disabled={!supportsPlacement || placement !== 'adaptive'}
-			onblur={clampPlacementControls}
-			onchange={clampPlacementControls}
-		/>
-		<span
-			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
-			>%</span
 		>
 	</div>
 </div>

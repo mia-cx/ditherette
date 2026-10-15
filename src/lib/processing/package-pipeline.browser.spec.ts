@@ -8,7 +8,13 @@ import {
 	validateWorkerRequest,
 	validateWorkerResponse
 } from './schemas';
-import type { ColorSpaceId, DitherId, ProcessedImage, ProcessingSettings } from './types';
+import type {
+	ColorSpaceId,
+	DitherId,
+	EnabledPaletteColor,
+	ProcessedImage,
+	ProcessingSettings
+} from './types';
 import { compileEffects } from 'ditherette';
 import { initializePackageProcessor, ProcessorWorkerPipeline } from './worker-pipeline';
 
@@ -63,9 +69,7 @@ const settings: ProcessingSettings = {
 		algorithm: 'none',
 		strength: 100,
 		placement: 'everywhere',
-		placementRadius: 3,
-		placementThreshold: 12,
-		placementSoftness: 8,
+		placementMinGradientSize: 24,
 		serpentine: true,
 		seed: 1,
 		useColorSpace: false
@@ -334,5 +338,173 @@ describe('installed package website integration', () => {
 				() => undefined
 			)
 		).rejects.toThrow(/fractional crop/);
+	});
+});
+
+describe('smooth-gradient adaptive placement', () => {
+	// 192x16, identical rows: flat | hard step | flat | 16px ramp | flat | 96px ramp.
+	const WIDTH = 192;
+	const HEIGHT = 16;
+	function rampSource() {
+		const data = new Uint8ClampedArray(WIDTH * HEIGHT * 4);
+		for (let y = 0; y < HEIGHT; y++) {
+			for (let x = 0; x < WIDTH; x++) {
+				const offset = (y * WIDTH + x) * 4;
+				let r: number;
+				let g: number;
+				let b: number;
+				if (x < 32) {
+					r = 20;
+					g = 20;
+					b = 30;
+				} else if (x < 64) {
+					r = 0;
+					g = 128;
+					b = 128;
+				} else if (x < 80) {
+					r = g = b = 60 + (x - 64) * 6;
+				} else if (x < 96) {
+					r = g = b = 150;
+				} else {
+					r = g = b = Math.round(((x - 96) * 255) / 95);
+				}
+				data[offset] = r;
+				data[offset + 1] = g;
+				data[offset + 2] = b;
+				data[offset + 3] = 255;
+			}
+		}
+		return new ImageData(data, WIDTH, HEIGHT);
+	}
+
+	const rampPalette: EnabledPaletteColor[] = [0, 64, 128, 192, 255].map((level) => {
+		const key = `#${level.toString(16).padStart(2, '0').repeat(3)}`;
+		return {
+			name: `Grey ${level}`,
+			key,
+			rgb: { r: level, g: level, b: level },
+			kind: 'custom',
+			enabled: true
+		};
+	});
+	rampPalette.push({
+		name: 'Teal',
+		key: '#008080',
+		rgb: { r: 0, g: 128, b: 128 },
+		kind: 'custom',
+		enabled: true
+	});
+
+	const rampOutput = {
+		...settings.output,
+		width: WIDTH,
+		height: HEIGHT,
+		crop: undefined
+	};
+	const rampSettings = (dither: Partial<ProcessingSettings['dither']>, useColorSpace = false) =>
+		({
+			...settings,
+			colorSpace: 'oklab',
+			output: rampOutput,
+			dither: {
+				...settings.dither,
+				strength: 30,
+				useColorSpace,
+				...dither
+			}
+		}) satisfies ProcessingSettings;
+
+	function region(indices: Uint8Array, x0: number, x1: number) {
+		const pixels = new Uint8Array((x1 - x0 + 1) * HEIGHT);
+		for (let y = 0; y < HEIGHT; y++) {
+			pixels.set(indices.subarray(y * WIDTH + x0, y * WIDTH + x1 + 1), y * (x1 - x0 + 1));
+		}
+		return pixels;
+	}
+
+	let requestId = 1;
+	async function run(
+		pipeline: ProcessorWorkerPipeline,
+		sourceId: string,
+		dither: Partial<ProcessingSettings['dither']>,
+		useColorSpace = false
+	) {
+		const response = await pipeline.handleAsync(
+			{
+				id: ++requestId,
+				type: 'process',
+				sourceId,
+				settings: rampSettings(dither, useColorSpace),
+				palette: rampPalette,
+				settingsHash: `ramp-${sourceId}-${JSON.stringify(dither)}-${useColorSpace}`
+			},
+			() => undefined
+		);
+		if (response?.type !== 'complete') throw new Error('Expected ramp output.');
+		return response.image.indices;
+	}
+
+	it('Adaptive dithers long smooth ramps only, and a larger minimum excludes a shorter ramp', async () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle({
+			id: 1,
+			type: 'load-source',
+			sourceId: 'ramp',
+			source: rampSource()
+		});
+		const baseline = await run(pipeline, 'ramp', { algorithm: 'none' });
+
+		// x 0..63 covers both flats and the hard step with a one-pixel margin; x 80..95 is flat.
+		function expectFlatsUnchanged(indices: Uint8Array) {
+			expect(region(indices, 0, 63)).toEqual(region(baseline, 0, 63));
+			expect(region(indices, 80, 95)).toEqual(region(baseline, 80, 95));
+		}
+		function expectLongRampDithered(indices: Uint8Array) {
+			expect(region(indices, 96, 191)).not.toEqual(region(baseline, 96, 191));
+		}
+		function expectShortRampClean(indices: Uint8Array) {
+			expect(region(indices, 64, 79)).toEqual(region(baseline, 64, 79));
+		}
+		function expectShortRampDithered(indices: Uint8Array) {
+			expect(region(indices, 64, 79)).not.toEqual(region(baseline, 64, 79));
+		}
+
+		for (const algorithm of ['bayer-16', 'floyd-steinberg'] as const) {
+			const min24 = await run(pipeline, 'ramp', {
+				algorithm,
+				placement: 'adaptive',
+				placementMinGradientSize: 24
+			});
+			expectFlatsUnchanged(min24);
+			expectLongRampDithered(min24);
+			expectShortRampClean(min24);
+
+			const min8 = await run(pipeline, 'ramp', {
+				algorithm,
+				placement: 'adaptive',
+				placementMinGradientSize: 8
+			});
+			expectFlatsUnchanged(min8);
+			expectShortRampDithered(min8);
+		}
+
+		const colorSpaceMin24 = await run(
+			pipeline,
+			'ramp',
+			{ algorithm: 'bayer-16', placement: 'adaptive', placementMinGradientSize: 24 },
+			true
+		);
+		expectFlatsUnchanged(colorSpaceMin24);
+		expectLongRampDithered(colorSpaceMin24);
+		expectShortRampClean(colorSpaceMin24);
+
+		const colorSpaceMin8 = await run(
+			pipeline,
+			'ramp',
+			{ algorithm: 'bayer-16', placement: 'adaptive', placementMinGradientSize: 8 },
+			true
+		);
+		expectFlatsUnchanged(colorSpaceMin8);
+		expectShortRampDithered(colorSpaceMin8);
 	});
 });

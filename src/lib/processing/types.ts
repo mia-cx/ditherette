@@ -115,9 +115,8 @@ export type DitherSettings = {
 	algorithm: DitherId;
 	strength: number;
 	placement: DitherPlacement;
-	placementRadius: number;
-	placementThreshold: number;
-	placementSoftness: number;
+	/** Minimum smooth-gradient length in output pixels that Adaptive dithers. */
+	placementMinGradientSize: number;
 	serpentine: boolean;
 	seed: number;
 	useColorSpace: boolean;

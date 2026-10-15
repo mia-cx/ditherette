@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { paletteEnabledKey } from '$lib/palette/wplace';
+import { settingsHash } from '$lib/processing/hash';
 import type {
 	DitherSettings,
 	OutputSettings,
@@ -25,7 +26,8 @@ import {
 	selectedPalette,
 	setPaletteColorEnabled,
 	sourceImageData,
-	updateOutputSettings
+	updateOutputSettings,
+	normalizeDitherSettings
 } from './app';
 
 const customPalette: Palette = {
@@ -71,13 +73,38 @@ const ditherFixture: DitherSettings = {
 	algorithm: 'none',
 	strength: 100,
 	placement: 'everywhere',
-	placementRadius: 3,
-	placementThreshold: 12,
-	placementSoftness: 8,
+	placementMinGradientSize: 24,
 	serpentine: true,
 	seed: 0xc0ffee42,
 	useColorSpace: false
 };
+
+describe('normalizeDitherSettings', () => {
+	it('rewrites legacy adaptive settings and changes their processing identity', () => {
+		const legacy = {
+			algorithm: 'bayer-16',
+			strength: 30,
+			placement: 'adaptive',
+			placementRadius: 6,
+			placementThreshold: 12,
+			placementSoftness: 12,
+			serpentine: true,
+			seed: 1,
+			useColorSpace: false
+		};
+		const normalized = normalizeDitherSettings(legacy);
+		expect(normalized).toEqual({
+			algorithm: 'bayer-16',
+			strength: 30,
+			placement: 'adaptive',
+			placementMinGradientSize: 24,
+			serpentine: true,
+			seed: 1,
+			useColorSpace: false
+		});
+		expect(settingsHash(normalized)).not.toBe(settingsHash(legacy));
+	});
+});
 
 describe('processing scheduler delays', () => {
 	it('debounces slider-only output changes', () => {
@@ -99,9 +126,9 @@ describe('processing scheduler delays', () => {
 
 	it('debounces slider-only dither changes', () => {
 		expect(ditherProcessingDelay(ditherFixture, { ...ditherFixture, strength: 80 })).toBe(180);
-		expect(ditherProcessingDelay(ditherFixture, { ...ditherFixture, placementThreshold: 20 })).toBe(
-			180
-		);
+		expect(
+			ditherProcessingDelay(ditherFixture, { ...ditherFixture, placementMinGradientSize: 40 })
+		).toBe(180);
 	});
 
 	it('runs A/B dither toggles immediately', () => {

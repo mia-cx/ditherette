@@ -27,9 +27,7 @@ const settings: ProcessingSettings = {
 		algorithm: 'none',
 		strength: 100,
 		placement: 'everywhere',
-		placementRadius: 3,
-		placementThreshold: 12,
-		placementSoftness: 8,
+		placementMinGradientSize: 24,
 		serpentine: true,
 		seed: 1,
 		useColorSpace: false
@@ -203,7 +201,7 @@ describe('website package request', () => {
 			});
 		}
 	);
-	it('normalizes random seed and adaptive radius while retaining placement percentage points', () => {
+	it('normalizes the random seed', () => {
 		const { recipe } = packageProcessRequest(
 			source,
 			palette,
@@ -213,8 +211,7 @@ describe('website package request', () => {
 					...settings.dither,
 					algorithm: 'random',
 					seed: -1,
-					placement: 'adaptive',
-					placementRadius: 0.4
+					placement: 'adaptive'
 				}
 			},
 			settings.output
@@ -225,27 +222,42 @@ describe('website package request', () => {
 				field: { algorithm: 'random', seed: 4294967295 },
 				space: 'srgb',
 				strength: 96 / 63.75,
-				placement: { mode: 'adaptive', radius: 1, threshold: 12, softness: 8 }
+				placement: { mode: 'smooth-gradient-v1', minGradientSize: 24 }
 			}
 		});
 	});
-	it.each(['floyd-steinberg', 'sierra', 'sierra-lite', 'random'] as const)(
-		'caps persisted adaptive radii for %s',
+	it.each(['bayer-16', 'floyd-steinberg'] as const)(
+		'maps the website minimum gradient to smooth-gradient placement for %s',
 		(algorithm) => {
-			for (const placementRadius of [32767.6, 32768, 40000, Number.MAX_VALUE]) {
+			for (const [placementMinGradientSize, minGradientSize] of [
+				[24, 24],
+				[3.6, 4],
+				[40000, 32768]
+			] as const) {
 				const { recipe } = packageProcessRequest(
 					source,
 					palette,
 					{
 						...settings,
-						dither: { ...settings.dither, algorithm, placement: 'adaptive', placementRadius }
+						dither: {
+							...settings.dither,
+							algorithm,
+							placement: 'adaptive',
+							placementMinGradientSize
+						}
 					},
 					settings.output
 				).request;
 				expect(recipe.dither).toMatchObject(
-					algorithm === 'random'
-						? { perturb: { placement: { radius: 32768 } } }
-						: { placement: { radius: 32768 } }
+					algorithm === 'floyd-steinberg'
+						? {
+								placement: { mode: 'smooth-gradient-v1', minGradientSize }
+							}
+						: {
+								perturb: {
+									placement: { mode: 'smooth-gradient-v1', minGradientSize }
+								}
+							}
 				);
 			}
 		}

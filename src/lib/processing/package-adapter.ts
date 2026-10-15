@@ -102,7 +102,6 @@ const ORDERED_TILE: Partial<Record<DitherId, Extract<Field, { algorithm: 'ordere
 // Match the current website byte scale to the public normalized field's 255 / 4.
 const RGB_DITHER_NOISE_SCALE = 96;
 const BYTE_FIELD_STRENGTH_RATIO = RGB_DITHER_NOISE_SCALE / 63.75;
-const MAX_ADAPTIVE_RADIUS = 32768;
 
 /** The part of `source` that processing reads: the whole image, or the crop, borrowing bytes when contiguous. */
 export function croppedSource(
@@ -161,10 +160,8 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 		dither.placement === 'everywhere'
 			? { mode: 'everywhere' }
 			: {
-					mode: 'adaptive',
-					radius: Math.min(MAX_ADAPTIVE_RADIUS, Math.max(1, Math.round(dither.placementRadius))),
-					threshold: dither.placementThreshold,
-					softness: dither.placementSoftness
+					mode: 'smooth-gradient-v1',
+					minGradientSize: Math.min(32768, Math.max(4, Math.round(dither.placementMinGradientSize)))
 				};
 	// Yliluoma places whole palette colors, so it has no strength to turn down.
 	switch (dither.algorithm) {
