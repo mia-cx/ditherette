@@ -2191,6 +2191,39 @@
 				}
 			],
 			"contentSha256": "6829540f6a7cae4378b10757b4d74b41095d44d5eed73f4eed78af0439633db4"
+		},
+		{
+			"name": "smooth-area-scale-v1",
+			"summary": "Account for spatial tightness with an amplitude-preserving fine/coarse Oklab residual",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "e31e10d0fbefb70c1454cf86475f377f4399e6e4759428ca742b4876dc066407"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "3a4d0900024ef292f9c447114c6c07ac5dfa59c726e555426f9c2a934404cbb9"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "6f862f6d2e64f43e306a92722a3d436db8da304d4acb31af4afdb68bafd11a1f"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "8903f1e1daf2cf2c091232b17fed89a4d0b8f05faad05945a0636db645cf9be9"
+					}
+				}
+			],
+			"contentSha256": "8e53447f8a526fa0ccc9271ff195fd8681b351139fb58e74a03337a190254598"
 		}
 	]
 }

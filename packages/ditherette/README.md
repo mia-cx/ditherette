@@ -387,16 +387,18 @@ Zero strength preserves every source byte. Placement preserves alpha and hidden 
 `{ mode: 'smooth-area-v1', sampleSize: 64, contrastThreshold: 0.12 }` selects complete smooth areas.
 `sampleSize` is an integer square side from 4 through 32,768 working pixels after any `process` resize.
 Direct APIs measure source pixels. The square clips to smaller image dimensions.
-`contrastThreshold` is finite from 0 through 1. It bounds the largest immediate source Oklab distance
-inside each square, including a fixed one-pixel read halo. Higher tolerance only adds selection.
+`sampleSize / 2` sets the radius of a symmetric square box mean in source Oklab.
+`contrastThreshold` is finite from 0 through 1. It bounds the largest immediate-neighbour Oklab
+distance and twice the distance to the coarse mean inside each square. Higher tolerance only adds selection.
 Total colour change across a broad ramp is unrestricted. A steep edge fails even when its total change
-equals that ramp. All overlapping qualifying squares contribute their complete footprint, including
+equals that ramp. Increasing sample size can reject compact transitions whose one-pixel jumps remain small.
+Lower-contrast compact transitions can still qualify. All overlapping qualifying squares contribute their complete footprint, including
 quantized plateaus and flat fills. There is no directional run fitting or per-pixel flat veto.
 Distance uses Euclidean D65 Oklab, with 1 approximately the black-to-white lightness difference,
 and clips distances above 1. Zero tolerance admits flat areas; one admits the entire image.
 Low-contrast texture can qualify. The [reference](../../crates/ditherette-wasm/src/spec/smooth_area_v1.md)
 defines the exact regional criterion. Legacy Adaptive and Everywhere remain unchanged.
-Analysis needs twelve bytes per working pixel plus twelve bytes times max(2 × width, height) and fixed
+Analysis needs twelve bytes per working pixel plus twelve bytes times max(3 × width, height) and fixed
 call bookkeeping, all within the existing memory limit.
 
 `ditherAndQuantize` quantizes that completed RGBA8 result, with the same indices, palette, and warnings as `quantize(perturb(...))`.

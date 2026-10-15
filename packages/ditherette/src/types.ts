@@ -147,9 +147,9 @@ export type Placement =
 	  }
 	| {
 			readonly mode: 'smooth-area-v1';
-			/** Square side, integer 4..32768 working pixels after resize. Editor default: 64. */
+			/** Spatial scale and square side, integer 4..32768 working pixels. Editor default: 64. */
 			readonly sampleSize: number;
-			/** Max neighbouring Oklab distance, clipped to 1. Finite 0..1. Editor default: 0.12. */
+			/** Max fine/coarse Oklab contrast, clipped to 1. Finite 0..1. Editor default: 0.12. */
 			readonly contrastThreshold: number;
 	  };
 

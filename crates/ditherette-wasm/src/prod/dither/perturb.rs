@@ -242,7 +242,7 @@ pub(crate) fn perturb_by_field_with_scratch(
 /// Output row zero corresponds to `rows.y_start()`; field coordinates remain absolute.
 /// Adaptive placement reuses converted rows when `scratch` holds three source-width rows;
 /// empty scratch keeps the allocation-free per-pixel neighbor conversion.
-/// SmoothAreaV1 requires full-image records and a larger-side line queue instead.
+/// SmoothAreaV1 requires the full-image `smooth_area_v1::scratch_len` records instead.
 pub fn perturb_by_field_band_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
