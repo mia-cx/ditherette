@@ -16,19 +16,19 @@ visibility and a saved Teal matte must follow the corrected colour.
 
 ## Acceptance criteria
 
-- [ ] Built-in Teal is `#10AEA6` / rgb(16, 174, 166); the other 62 colours, split and order are unchanged.
-- [ ] Saved Teal visibility under `#10AE82` applies to corrected Teal; a stored `#10AEA6` value wins.
-- [ ] A saved matte of `#10AE82` follows to `#10AEA6` unless the active palette has `#10AE82` itself.
-- [ ] The selected palette and the processing request use rgb(16, 174, 166).
-- [ ] Custom palettes, including ones holding `#10AE82`, keep their colours and own visibility.
-- [ ] Labelled before/after screenshots of the palette table, matte control and output preview.
+- [x] Built-in Teal is `#10AEA6` / rgb(16, 174, 166); the other 62 colours, split and order are unchanged.
+- [x] Saved Teal visibility under `#10AE82` applies to corrected Teal; a stored `#10AEA6` value wins.
+- [x] A saved matte of `#10AE82` follows to `#10AEA6` unless the active palette has `#10AE82` itself.
+- [x] The selected palette and the processing request use rgb(16, 174, 166).
+- [x] Custom palettes, including ones holding `#10AE82`, keep their colours and own visibility.
+- [x] Labelled before/after screenshots of the palette table, matte control and output preview.
 
 ## TODOs
 
-- [ ] Correct Teal and read saved state under its previous key (`wplace.ts`, `wplace.spec.ts`).
-- [ ] Carry a saved Teal matte to the corrected key on load (`app.ts`, migration spec).
-- [ ] Add a changeset.
-- [ ] Capture before/after media; run focused tests, check, lint and build.
+- [x] Correct Teal and read saved state under its previous key (`wplace.ts`, `wplace.spec.ts`).
+- [x] Carry a saved Teal matte to the corrected key on load (`app.ts`, migration spec).
+- [x] Add a changeset.
+- [x] Capture before/after media; run focused tests, check, lint and build.
 
 ## Notes
 
@@ -39,3 +39,8 @@ visibility and a saved Teal matte must follow the corrected colour.
   and processing warns and uses the colour nearest to the old Teal (Green).
 - Out of scope, reported to the parent: `SPEC.md` lists `#10ae82` in the Wplace free palette,
   and `crates/ditherette-bench/examples/recolour_evaluation.rs` hard-codes `0x10AE82`.
+- Validation: server vitest for `wplace.spec.ts`, `app.spec.ts`, `wplace-teal-migration.spec.ts`,
+  `package-adapter.spec.ts`, `event.spec.ts`; client `history.browser.spec.ts`; `pnpm check`,
+  `pnpm lint`, `pnpm build:web`. All exited 0.
+- Captures: Chromium headless, `--disable-gpu`, CDP focus emulation, telemetry off, desktop light
+  and dark plus phone. Before and after agree on hidden Teal and the Teal matte; only the colour moves.
