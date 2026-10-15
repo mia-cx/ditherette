@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { compiledEffects, currentEffectsKey, effectsIndex } from '$lib/processing/live-effects';
 import { colorSpace, sourceImageData } from '$lib/stores/app';
 import {
@@ -186,17 +186,28 @@ describe('effectsStage', () => {
 	});
 
 	it('forgets the retained image once nobody listens', () => {
-		const first = image(4, 4);
-		sourceImageData.set(first);
-		layer = addEffect('exposure');
-		publish(first);
-		const before = effectsStage.get()!.image;
-		unsubscribe();
-		// A new source while unsubscribed: re-subscribing must never return the old image.
-		sourceImageData.set(image(4, 4, [9, 9, 9, 255]));
-		effectsStage.subscribe(() => {})();
-		expect(effectsStage.get()!.image).not.toBe(before);
-		unsubscribe = effectsStage.subscribe(() => {});
+		vi.useFakeTimers();
+		try {
+			const first = image(4, 4);
+			sourceImageData.set(first);
+			layer = addEffect('exposure');
+			publish(first);
+			expect(effectsStage.value?.image).toBeDefined();
+			const off = unsubscribe;
+			unsubscribe = () => {};
+			off();
+			vi.advanceTimersByTime(1000);
+			// `.value`, not `.get()`: get mounts briefly and would hide the leak.
+			expect(effectsStage.value).toBeUndefined();
+			sourceImageData.set(undefined);
+			effectsIndex.set(undefined);
+			compiledEffects.set(undefined);
+			const resubscribe = effectsStage.subscribe(() => {});
+			expect(effectsStage.get()).toBeUndefined();
+			resubscribe();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('returns the identical object when an unrelated store changes', () => {

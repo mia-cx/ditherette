@@ -159,9 +159,27 @@ describe('formatShare', () => {
 		[0.02, '2%'],
 		[0.021, '2.1%'],
 		[0.5, '50%'],
+		[0.994, '99%'],
+		[0.995, '99.5%'],
+		[0.998, '99.8%'],
+		[0.999, '99.9%'],
 		[0.9995, '>99.9%'],
+		[0.99999, '>99.9%'],
 		[1, '100%']
 	])('formats %f as %s', (share, text) => {
 		expect(formatShare(share)).toBe(text);
+	});
+
+	it('never reports a partial share as 0% or 100%', () => {
+		for (const [from, to] of [
+			[0.0001, 0.1],
+			[0.9, 0.9999]
+		]) {
+			for (let share = from; share <= to; share += 0.0001) {
+				const label = formatShare(share);
+				expect(label).not.toBe('0%');
+				expect(label).not.toBe('100%');
+			}
+		}
 	});
 });

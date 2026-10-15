@@ -1,4 +1,4 @@
-import { computed, onStop, type ReadableAtom } from 'nanostores';
+import { atom, onMount, type ReadableAtom } from 'nanostores';
 import { compiledEffects, currentEffectsKey, effectsIndex } from '$lib/processing/live-effects';
 import { colorSpace, outputSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
 import { activeEffectSteps } from '$lib/stores/effects';
@@ -36,21 +36,27 @@ function sameImage(a: EffectsImage | undefined, b: EffectsImage | undefined): bo
 /**
  * The effects stage: each source pixel's colour through the effects worker's current results.
  * With no enabled step it is the source itself; while newer settings are still compiling it
- * keeps the older results as a dimmed stand-in, marked not current.
+ * keeps the older results as a dimmed stand-in, marked not current. Derived while someone
+ * listens, and empty otherwise, so a closed Scopes keeps no image buffers.
  */
 export const effectsStage: ReadableAtom<EffectsStage | undefined> = (() => {
-	let previous: EffectsStage | undefined;
-	const stage = computed(
-		[
-			sourceImageData,
-			activeEffectSteps,
-			effectsIndex,
-			compiledEffects,
-			selectedPalette,
-			colorSpace,
-			outputSettings
-		],
-		(source, steps, index, compiled): EffectsStage | undefined => {
+	const INPUTS = [
+		sourceImageData,
+		activeEffectSteps,
+		effectsIndex,
+		compiledEffects,
+		selectedPalette,
+		colorSpace,
+		outputSettings
+	] as const;
+	const stage = atom<EffectsStage | undefined>();
+	onMount(stage, () => {
+		const update = () => {
+			const source = sourceImageData.get();
+			const steps = activeEffectSteps.get();
+			const index = effectsIndex.get();
+			const compiled = compiledEffects.get();
+			const previous = stage.value;
 			let image: EffectsImage | undefined;
 			let current = false;
 			if (!source) {
@@ -71,13 +77,23 @@ export const effectsStage: ReadableAtom<EffectsStage | undefined> = (() => {
 			// Reuse the previous image when its references are unchanged, so an edit that
 			// only flips currentness, or touches none of it, never triggers a resample.
 			if (sameImage(image, previous?.image)) image = previous!.image;
-			if (previous && previous.current === current && previous.image === image) return previous;
-			return (previous = image ? { image, current } : source ? { current } : undefined);
-		}
-	);
-	// The retained image can hold a whole source index, so drop it when nobody listens.
-	onStop(stage, () => {
-		previous = undefined;
+			const next =
+				previous && previous.current === current && previous.image === image
+					? previous
+					: image
+						? { image, current }
+						: source
+							? { current }
+							: undefined;
+			stage.set(next);
+		};
+		const unbinds = INPUTS.map((input) => input.listen(update));
+		update();
+		return () => {
+			for (const unbind of unbinds) unbind();
+			// Nothing else holds the stage's inputs, so a closed Scopes keeps no image buffers.
+			stage.set(undefined);
+		};
 	});
 	return stage;
 })();

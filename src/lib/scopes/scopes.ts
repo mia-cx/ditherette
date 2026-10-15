@@ -124,14 +124,16 @@ export function clipping({ count, rgb }: Samples): { black: number; white: numbe
 	return { black: black / count, white: white / count };
 }
 
-/** A share as a short percentage: "0%", "<0.1%", "2%", "2.1%", "50%", ">99.9%", "100%". */
+/** A share as a short percentage: "0%", "<0.1%", "2%", "2.1%", "50%", "99.9%", ">99.9%", "100%". */
 export function formatShare(share: number): string {
 	if (share <= 0) return '0%';
 	if (share >= 1) return '100%';
 	if (share < 0.001) return '<0.1%';
 	if (share > 0.999) return '>99.9%';
 	if (share < 0.1) return `${Number((share * 100).toFixed(1))}%`;
-	return `${Math.round(share * 100)}%`;
+	const percent = share * 100;
+	// One decimal near either end, so a partial share never rounds to 0% or 100%.
+	return `${Number(percent.toFixed(percent < 10 || percent >= 99.5 ? 1 : 0))}%`;
 }
 
 /** Visits each sample's normalised coordinates in `model`, with how much its hue counts. */
