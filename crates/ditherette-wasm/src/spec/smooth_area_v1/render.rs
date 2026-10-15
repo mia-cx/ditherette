@@ -18,8 +18,8 @@ use crate::{
     },
 };
 
-/// Applies a supplied frozen field to complete qualifying square footprints.
-/// The mask is binary, so masking the field retains the frozen f32/f64 reconstruction boundaries.
+/// Applies full ordinary field pixels with smoothly varying regional coverage.
+/// Coverage never scales a selected pixel's field, preserving phase and reconstruction boundaries.
 pub fn perturb(
     source: ImageView<'_, Rgba8>,
     space: WorkingSpace,
@@ -41,7 +41,14 @@ pub fn perturb(
         strength,
         Placement::Everywhere {},
         RowBand::new(0, source.dimensions().height()).unwrap(),
-        |x, y, i| field(x, y, i) * mask[i as usize][2],
+        |x, y, i| {
+            let value = field(x, y, i);
+            if super::covers(mask[i as usize][2], x, y) {
+                value
+            } else {
+                0.0
+            }
+        },
     );
     output
 }
@@ -130,7 +137,7 @@ pub fn diffuse(
                     (selected, error)
                 }
             };
-            indices.data_mut()[offset] = if mask[offset][2] == 0.0 {
+            indices.data_mut()[offset] = if !super::covers(mask[offset][2], x as u32, y as u32) {
                 nearest(&matcher, rgb8_to_coordinates(rgb, space))?.index
             } else {
                 selected.index

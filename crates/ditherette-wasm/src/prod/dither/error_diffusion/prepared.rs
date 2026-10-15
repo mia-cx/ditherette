@@ -495,7 +495,9 @@ impl BorrowedDiffusion<'_> {
             };
             // Placement controls visible output, not the kernel's continuous recurrence.
             // Skipping masked work depletes feedback and destroys the selected Sierra texture.
-            indices[offset] = if smooth.is_some_and(|mask| mask[offset][2] == 0.0) {
+            indices[offset] = if smooth.is_some_and(|mask| {
+                !crate::prod::dither::smooth_area_v1::covers(mask[offset][2], x as u32, y as u32)
+            }) {
                 match self.quantizer.palette().prepare_pixel([
                     row[x * 4],
                     row[x * 4 + 1],

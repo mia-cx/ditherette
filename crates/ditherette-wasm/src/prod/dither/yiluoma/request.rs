@@ -301,7 +301,11 @@ pub(super) fn dither_yiluoma_band_with_progress(
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
                     if smooth.is_some_and(|mask| {
-                        mask[y as usize * dimensions.width_usize() + x as usize][2] == 0.0
+                        !crate::prod::dither::smooth_area_v1::covers(
+                            mask[y as usize * dimensions.width_usize() + x as usize][2],
+                            x,
+                            y,
+                        )
                     }) {
                         *index = matcher.nearest(converter.coordinates(rgb)).index;
                         continue;

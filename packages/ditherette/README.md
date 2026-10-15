@@ -392,8 +392,12 @@ Direct APIs measure source pixels. The square clips to smaller image dimensions.
 distance and twice the distance to the coarse mean inside each square. Higher tolerance only adds selection.
 Total colour change across a broad ramp is unrestricted. A steep edge fails even when its total change
 equals that ramp. Increasing sample size can reject compact transitions whose one-pixel jumps remain small.
-Lower-contrast compact transitions can still qualify. All overlapping qualifying squares contribute their complete footprint, including
-quantized plateaus and flat fills. There is no directional run fitting or per-pixel flat veto.
+Lower-contrast compact transitions can still qualify. Overlapping qualifying squares seed smooth regions,
+including quantized plateaus and flat fills. Source-aware reconstruction rounds their contours and
+feathers dither density at regional boundaries. Small isolated patches are suppressed. Smooth coverage
+can reach the gradient side of lineart, while source-colour barriers preserve the line itself.
+There is no directional run fitting or per-pixel flat veto. Selected pixels retain the ordinary
+algorithm's full pixel and phase; fractional coverage never blends palette colours.
 Distance uses Euclidean D65 Oklab, with 1 approximately the black-to-white lightness difference,
 and clips distances above 1. Zero tolerance admits flat areas; one admits the entire image.
 Low-contrast texture can qualify. The [reference](../../crates/ditherette-wasm/src/spec/smooth_area_v1.md)

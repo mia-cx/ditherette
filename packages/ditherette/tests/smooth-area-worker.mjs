@@ -1,4 +1,4 @@
-import { areaChecks, areaBudgetChecks } from './smooth-area-fixture.mjs';
+import { areaChecks, areaBudgetChecks, featherChecks } from './smooth-area-fixture.mjs';
 
 Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
 self.onmessage = async ({ data: { moduleUrl } }) => {
@@ -19,6 +19,8 @@ self.onmessage = async ({ data: { moduleUrl } }) => {
 			actual = areaChecks(threaded);
 		if (JSON.stringify(expected) !== JSON.stringify(actual))
 			throw Error('Scalar/threaded area output differs.');
+		if (JSON.stringify(featherChecks(scalar)) !== JSON.stringify(featherChecks(threaded)))
+			throw Error('Scalar/threaded boundary coverage differs.');
 		if (workers === 0) throw Error('Required threaded route started no workers.');
 		const wasm = await WebAssembly.compile(
 			await (

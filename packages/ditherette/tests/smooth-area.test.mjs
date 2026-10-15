@@ -2,7 +2,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createDitherette } from '../dist/index.js';
-import { areaChecks, areaBudgetChecks } from './smooth-area-fixture.mjs';
+import { areaChecks, areaBudgetChecks, featherChecks } from './smooth-area-fixture.mjs';
+
+// Proves soft boundaries, gradient-side edge coverage, texture isolation and unchanged algorithm output.
+test('regional boundaries feather density without losing the gradient side of lineart', async (t) => {
+	const wasm = await WebAssembly.compile(
+		await readFile(new URL('../dist/wasm/scalar/ditherette_wasm_bg.wasm', import.meta.url))
+	);
+	const processor = await createDitherette({ wasm });
+	try {
+		t.diagnostic(JSON.stringify(featherChecks(processor)));
+	} finally {
+		processor.dispose();
+	}
+});
 
 // Proves spatial scale rejects compact transitions independently of their perceptual magnitude.
 test('spatial scale distinguishes a compact transition from the same broad ramp', async (t) => {

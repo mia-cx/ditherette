@@ -1,4 +1,4 @@
-//! Proves complete 2D footprints distinguish broad colour change from concentrated edges.
+//! Proves regional fine/coarse contrast, source boundaries and exact spec/production coverage.
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, Rgba8, RowStride},
     spec::smooth_area_v1,
@@ -97,6 +97,7 @@ fn area_domain_table_matches_complete_square_definition() {
         }
         // Literal square enumeration is an independent oracle for the linear sliding implementation.
         let mut expected = vec![false; (w * h) as usize];
+        let mut qualified = vec![false; (w * h) as usize];
         let colors: Vec<_> = bytes
             .chunks_exact(4)
             .map(|p| ditherette_wasm::spec::color::oklab::rgb8_to_oklab([p[0], p[1], p[2]]))
@@ -155,6 +156,7 @@ fn area_domain_table_matches_complete_square_definition() {
                     }
                 }
                 if sharpness <= tolerance {
+                    qualified[(top * w + left) as usize] = true;
                     for y in top..top + sh {
                         for x in left..left + sw {
                             expected[(y * w + x) as usize] = true;
@@ -163,6 +165,14 @@ fn area_domain_table_matches_complete_square_definition() {
                 }
             }
         }
+        let centres: Vec<_> = (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
+                let left = x.saturating_sub((sw - 1) / 2).min(w - sw);
+                let top = y.saturating_sub((sh - 1) / 2).min(h - sh);
+                qualified[(top * w + left) as usize]
+            })
+            .collect();
         if kind == 1 || kind == 8 || kind == 10 {
             assert!(
                 expected.iter().all(|v| *v),
@@ -195,9 +205,27 @@ fn area_domain_table_matches_complete_square_definition() {
             || Ok::<_, ()>(()),
         )
         .unwrap();
-        for (i, wanted) in expected.iter().enumerate() {
-            assert_eq!(reference[i][2] > 0.0, *wanted, "{name}/{i}");
+        for i in 0..expected.len() {
+            assert!(
+                (0.0..=1.0).contains(&reference[i][2]),
+                "{name}/{i}: finite coverage"
+            );
+            if centres.len() == expected.len() {
+                assert_eq!(reference[i][2], 1.0, "{name}: coherent interior");
+            }
+            if centres.is_empty() {
+                assert_eq!(reference[i][2], 0.0, "{name}: no qualifying region");
+            }
             assert_eq!(production[i][2], reference[i][2], "{name} parity/{i}");
+        }
+        if kind == 5 {
+            let centre = ((h / 2) * w + w / 2) as usize;
+            assert_eq!(reference[centre][2], 0.0, "hard detail remains plain");
+            assert_eq!(
+                reference[centre - 1][2],
+                1.0,
+                "smooth side reaches the hard boundary"
+            );
         }
         smooth_area_v1::select(view, size, 1.0, &mut production, || Ok::<_, ()>(())).unwrap();
         assert!(
@@ -224,9 +252,10 @@ fn area_domain_table_matches_complete_square_definition() {
         .unwrap();
         for x in 0..w {
             for y in 0..h {
-                assert_eq!(
-                    production[(x * h + y) as usize][2],
-                    reference[(y * w + x) as usize][2],
+                assert!(
+                    (production[(x * h + y) as usize][2] - reference[(y * w + x) as usize][2])
+                        .abs()
+                        <= 1e-6,
                     "{name}: transpose"
                 );
             }
