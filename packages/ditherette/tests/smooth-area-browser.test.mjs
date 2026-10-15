@@ -2,21 +2,20 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { installedBrowserChecks } from './installed-browser.mjs';
 
-test('installed package preserves gradient placement across actual scalar/threaded worker routes', (t) =>
+test('installed package preserves complete area footprints across scalar/threaded worker routes', (t) =>
 	installedBrowserChecks(
 		t,
 		undefined,
 		{
-			publicCases: 14,
+			publicCases: 54,
 			exactScalarThreaded: true,
-			repeatedPlateaus: true,
-			actualWorkers: true,
-			coloredTextureCases: 75
+			completeFootprints: true,
+			actualWorkers: true
 		},
 		{
 			isolated: true,
 			assets: Object.fromEntries(
-				['smooth-gradient-worker.mjs', 'smooth-gradient-fixture.mjs'].map((name) => [
+				['smooth-area-worker.mjs', 'smooth-area-fixture.mjs'].map((name) => [
 					`__tests__/${name}`,
 					fileURLToPath(new URL(name, import.meta.url))
 				])
@@ -26,7 +25,7 @@ test('installed package preserves gradient placement across actual scalar/thread
 				const result = await page.evaluate(
 					(input) =>
 						new Promise((resolve, reject) => {
-							const worker = new Worker('/__tests__/smooth-gradient-worker.mjs', {
+							const worker = new Worker('/__tests__/smooth-area-worker.mjs', {
 								type: 'module'
 							});
 							worker.onerror = (event) => {

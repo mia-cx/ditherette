@@ -15,5 +15,5 @@ pub mod palette;
 pub mod pipeline;
 pub mod quantize;
 pub mod resize;
-pub mod smooth_gradient_v1;
+pub mod smooth_area_v1;
 pub mod tiling;

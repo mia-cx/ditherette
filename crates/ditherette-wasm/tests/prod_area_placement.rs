@@ -1,4 +1,4 @@
-//! Proves gradient-only placement leaves hard boundaries clean through actual render calls.
+//! Proves area placement preserves real render arithmetic, capacity and cancellation contracts.
 use ditherette_wasm::{
     image::{contracts::PaletteEntry, ImageDimensions},
     prod::{
@@ -80,8 +80,9 @@ fn extended_render_matches_reference_across_spaces_alpha_and_feedback() {
     let dimensions = ImageDimensions::new(width, height).unwrap();
     let source = ImageView::packed(&data, dimensions).unwrap();
     let entries = [64, 96, 160, 192].map(|v| PaletteEntry::Color { rgb: [v; 3] });
-    let placement = Placement::SmoothGradientV1 {
-        min_gradient_size: 24,
+    let placement = Placement::SmoothAreaV1 {
+        sample_size: 24,
+        contrast_threshold: 0.2,
     };
     let mut processor = Processor::new(1 << 24, 0).unwrap();
     for space in [
@@ -103,7 +104,7 @@ fn extended_render_matches_reference_across_spaces_alpha_and_feedback() {
             placement,
         };
         let expected =
-            spec::smooth_gradient_v1::render::perturb(source, ref_space, 0.3, 24, |x, y, _| {
+            spec::smooth_area_v1::render::perturb(source, ref_space, 0.3, 24, 0.2, |x, y, _| {
                 spec::dither::ordered::bayer_noise_at(
                     x,
                     y,
@@ -151,7 +152,7 @@ fn extended_render_matches_reference_across_spaces_alpha_and_feedback() {
                     serpentine: true,
                     placement,
                 };
-                let reference = spec::smooth_gradient_v1::render::diffuse(
+                let reference = spec::smooth_area_v1::render::diffuse(
                     spec::contract::request::QuantizeRequest {
                         version: 1,
                         source: spec::contract::request::Source {
@@ -174,6 +175,7 @@ fn extended_render_matches_reference_across_spaces_alpha_and_feedback() {
                             .unwrap(),
                     },
                     24,
+                    0.2,
                 )
                 .unwrap();
                 let actual = processor
@@ -190,7 +192,7 @@ fn extended_render_matches_reference_across_spaces_alpha_and_feedback() {
 }
 
 #[test]
-fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_sources() {
+fn public_area_calls_budget_analysis_cancel_and_invalidate_it_between_sources() {
     use ditherette_wasm::prod::{
         contract::{
             error::ErrorCode,
@@ -268,8 +270,9 @@ fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_source
         kind: u32,
         minimum: u32,
     ) -> Result<Vec<u8>, Failure> {
-        let placement = Placement::SmoothGradientV1 {
-            min_gradient_size: minimum,
+        let placement = Placement::SmoothAreaV1 {
+            sample_size: minimum,
+            contrast_threshold: 0.2,
         };
         let perturb = PerturbPolicy {
             field: Field::Bayer {
@@ -339,7 +342,12 @@ fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_source
         )
     }
     let data: Vec<_> = (0..12)
-        .flat_map(|_| (0..70).flat_map(|x| [80 + x as u8, 80 + x as u8, 80 + x as u8, 255]))
+        .flat_map(|_| {
+            (0..70).flat_map(|x| {
+                let v = if x < 40 { 80 + x as u8 } else { 200 };
+                [v, v, v, 255]
+            })
+        })
         .collect();
     fn observe(data: &[u8]) -> Observed<'_> {
         Observed {
@@ -353,20 +361,24 @@ fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_source
     }
     for kind in 0..5 {
         let mut roomy = Processor::new(1 << 20, 0).unwrap();
-        let expected = run(&mut roomy, &mut observe(&data), kind, 24).unwrap();
+        let expected = run(&mut roomy, &mut observe(&data), kind, 8).unwrap();
         let peak = roomy.peak_capacity_bytes();
         let minimum = budget::minimum(peak, |limit| {
             Processor::new(limit, 0)
-                .and_then(|mut p| run(&mut p, &mut observe(&data), kind, 24))
+                .and_then(|mut p| run(&mut p, &mut observe(&data), kind, 8))
                 .is_ok()
         });
         eprintln!(
             "kind{kind} peak{peak} minimum{minimum} analysis{} source{}",
-            if kind < 3 { 70 * 12 * 12 } else { 35 * 6 * 12 },
+            if kind < 3 {
+                (70 * 12 + 2 * 70) * 12
+            } else {
+                (35 * 6 + 2 * 35) * 12
+            },
             data.len()
         );
         let failure = Processor::new(minimum - 1, 0)
-            .and_then(|mut p| run(&mut p, &mut observe(&data), kind, 24))
+            .and_then(|mut p| run(&mut p, &mut observe(&data), kind, 8))
             .unwrap_err();
         assert_eq!(failure.code, ErrorCode::MemoryLimit);
         let mut processor = Processor::new(minimum, 0).unwrap();
@@ -374,7 +386,7 @@ fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_source
         observer.enabled = true;
         observer.cancel = true;
         assert_eq!(
-            run(&mut processor, &mut observer, kind, 24)
+            run(&mut processor, &mut observer, kind, 8)
                 .unwrap_err()
                 .code,
             ErrorCode::Callback
@@ -383,12 +395,12 @@ fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_source
         assert_eq!(observer.completed, 0);
         observer.cancel = false;
         assert_eq!(
-            run(&mut processor, &mut observer, kind, 24).unwrap(),
+            run(&mut processor, &mut observer, kind, 8).unwrap(),
             expected
         );
         assert!(processor.peak_capacity_bytes() <= minimum);
         let flat: Vec<_> = (0..70 * 12).flat_map(|_| [80, 80, 80, 255]).collect();
-        let actual = run(&mut roomy, &mut observe(&flat), kind, 24).unwrap();
+        let actual = run(&mut roomy, &mut observe(&flat), kind, 8).unwrap();
         let fresh = run(
             &mut Processor::new(1 << 20, 0).unwrap(),
             &mut observe(&flat),
@@ -406,118 +418,81 @@ fn public_gradient_calls_budget_analysis_cancel_and_invalidate_it_between_source
             "kind{kind}: size participates in processing identity"
         );
         assert_eq!(
-            run(&mut roomy, &mut observe(&data), kind, 24).unwrap(),
+            run(&mut roomy, &mut observe(&data), kind, 8).unwrap(),
             expected
         );
     }
 }
 
 #[test]
-fn reported_bayer_and_diffusion_keep_edges_clean_and_select_broad_ramps() {
-    let placement = Placement::SmoothGradientV1 {
-        min_gradient_size: 24,
-    };
-    let mut failures = Vec::new();
-    for (name, kind) in [
-        ("vertical", 0),
-        ("horizontal", 1),
-        ("diagonal", 2),
-        ("long ramp", 3),
-        ("short ramp", 4),
-        ("flat", 5),
-        ("ramp at hard boundary", 6),
+fn complete_smooth_areas_preserve_bayer_and_sierra_and_reject_strong_boundaries() {
+    let smooth: Vec<_> = (0..HEIGHT)
+        .flat_map(|y| {
+            (0..WIDTH).flat_map(move |x| {
+                let value = 32 + (223 * x / (WIDTH - 1)) as u8;
+                [value, value.saturating_sub((y % 2) as u8), value, 255]
+            })
+        })
+        .collect();
+    let edge: Vec<_> = (0..HEIGHT)
+        .flat_map(|_| {
+            (0..WIDTH).flat_map(|x| {
+                let v = if x < WIDTH / 2 { 0 } else { 255 };
+                [v, v, v, 255]
+            })
+        })
+        .collect();
+    for (name, data, qualifies) in [
+        ("broad high-contrast ramp", smooth, true),
+        ("same-contrast step", edge, false),
     ] {
-        let mut data = Vec::new();
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                let value = match kind {
-                    0 => {
-                        if x < 48 {
-                            80
-                        } else {
-                            176
-                        }
-                    }
-                    1 => {
-                        if y < 32 {
-                            80
-                        } else {
-                            176
-                        }
-                    }
-                    2 => {
-                        if x + y < 80 {
-                            80
-                        } else {
-                            176
-                        }
-                    }
-                    3 => 80 + x,
-                    4 => 80 + x.saturating_sub(40).min(8) * 12,
-                    6 => {
-                        if x < 64 {
-                            80 + x * 3 / 2
-                        } else {
-                            80
-                        }
-                    }
-                    _ => 80,
-                } as u8;
-                data.extend_from_slice(&[value, value, value, 255]);
-            }
-        }
-        let plain = render(&data, DitherPolicy::None {});
-        for (family, dither) in [
-            (
-                "Bayer16x16",
-                DitherPolicy::Separable {
-                    perturb: PerturbPolicy {
-                        field: Field::Bayer {
-                            size: BayerSize::Sixteen,
-                        },
-                        space: WorkingSpace::Srgb,
-                        strength: 0.3,
+        for (family, diffusion) in [("Bayer16", false), ("Sierra", true)] {
+            let policy = |placement| {
+                if diffusion {
+                    DitherPolicy::Diffusion {
+                        kernel: Diffusion::Sierra,
+                        feedback: DiffusionFeedback::Matching,
+                        strength: 1.0,
+                        serpentine: true,
                         placement,
-                    },
-                },
-            ),
-            (
-                "Floyd-Steinberg",
-                DitherPolicy::Diffusion {
-                    kernel: Diffusion::FloydSteinberg,
-                    feedback: DiffusionFeedback::SrgbBytes,
-                    strength: 0.3,
-                    serpentine: true,
-                    placement,
-                },
-            ),
-        ] {
-            let actual = render(&data, dither);
-            let changed = actual.iter().zip(&plain).filter(|(a, b)| a != b).count();
-            eprintln!("{family} {name}: {changed} changed pixels");
-            if ([3, 6].contains(&kind) && changed == 0) || (![3, 6].contains(&kind) && changed != 0)
-            {
-                failures.push(format!("{family} {name}: {changed}"));
-            }
-            if kind == 6 {
-                use ditherette_wasm::{image::ImageView, spec::smooth_gradient_v1::select};
-                let source =
-                    ImageView::packed(&data, ImageDimensions::new(WIDTH, HEIGHT).unwrap()).unwrap();
-                let mut mask = vec![[0.0; 3]; plain.len()];
-                select(source, 24, &mut mask, || Ok::<_, ()>(())).unwrap();
-                for (i, cell) in mask.iter().enumerate() {
-                    if cell[2] == 0.0 {
-                        assert_eq!(
-                            actual[i], plain[i],
-                            "{family} leaked into excluded pixel{i}"
-                        );
+                    }
+                } else {
+                    DitherPolicy::Separable {
+                        perturb: PerturbPolicy {
+                            field: Field::Bayer {
+                                size: BayerSize::Sixteen,
+                            },
+                            space: WorkingSpace::Oklab,
+                            strength: 1.0,
+                            placement,
+                        },
                     }
                 }
-            }
+            };
+            let plain = render(&data, DitherPolicy::None {});
+            let normal = render(&data, policy(Placement::Everywhere {}));
+            let actual = render(
+                &data,
+                policy(Placement::SmoothAreaV1 {
+                    sample_size: 114,
+                    contrast_threshold: 0.12,
+                }),
+            );
+            assert_eq!(
+                actual,
+                if qualifies { normal.clone() } else { plain },
+                "{name}/{family}"
+            );
+            assert_eq!(
+                render(
+                    &data,
+                    policy(Placement::SmoothAreaV1 {
+                        sample_size: 114,
+                        contrast_threshold: 1.0
+                    })
+                ),
+                normal
+            );
         }
     }
-    assert!(
-        failures.is_empty(),
-        "gradient-only selection violations: {failures:?}"
-    );
 }

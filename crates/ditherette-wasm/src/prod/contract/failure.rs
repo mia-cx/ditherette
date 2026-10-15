@@ -49,8 +49,10 @@ pub enum ErrorPath {
     ContextPalette = 40,
     ContextSpace = 41,
     Mask = 42,
-    PerturbMinGradientSize = 43,
-    DitherMinGradientSize = 44,
+    PerturbSampleSize = 43,
+    DitherSampleSize = 44,
+    PerturbContrastThreshold = 45,
+    DitherContrastThreshold = 46,
 }
 
 /// A small value usable even when Rust cannot allocate an error string.

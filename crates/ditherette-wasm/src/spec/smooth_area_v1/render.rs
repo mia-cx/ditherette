@@ -18,17 +18,21 @@ use crate::{
     },
 };
 
-/// Applies a supplied frozen field only where the original image contains eligible gradients.
+/// Applies a supplied frozen field to complete qualifying square footprints.
 /// The mask is binary, so masking the field retains the frozen f32/f64 reconstruction boundaries.
 pub fn perturb(
     source: ImageView<'_, Rgba8>,
     space: WorkingSpace,
     strength: f32,
-    min_gradient_size: u32,
+    sample_size: u32,
+    contrast_threshold: f32,
     field: impl Fn(u32, u32, u64) -> f32,
 ) -> ImageBuf<Rgba8> {
-    let mut mask = vec![[0.0; 3]; source.dimensions().pixel_count().unwrap()];
-    super::select(source, min_gradient_size, &mut mask, || Ok::<_, ()>(())).unwrap();
+    let mut mask = vec![[0.0; 3]; super::scratch_len(source.dimensions())];
+    super::select(source, sample_size, contrast_threshold, &mut mask, || {
+        Ok::<_, ()>(())
+    })
+    .unwrap();
     let mut output = ImageBuf::new_packed(source.dimensions()).unwrap();
     perturb_by_field_rows_into(
         source,
@@ -47,7 +51,8 @@ pub fn perturb(
 pub fn diffuse(
     quantize: QuantizeRequest<'_>,
     policy: DiffusionPolicy,
-    min_gradient_size: u32,
+    sample_size: u32,
+    contrast_threshold: f32,
 ) -> Result<IndexedImage, DitheretteError> {
     let layout = Request::DitherAndQuantize(DitherQuantizeRequest {
         quantize,
@@ -79,10 +84,14 @@ pub fn diffuse(
             },
         })
         .collect();
-    let mut mask = vec![[0.0; 3]; pixels.len()];
-    super::select(layout.source, min_gradient_size, &mut mask, || {
-        Ok::<_, ()>(())
-    })
+    let mut mask = vec![[0.0; 3]; super::scratch_len(layout.source.dimensions())];
+    super::select(
+        layout.source,
+        sample_size,
+        contrast_threshold,
+        &mut mask,
+        || Ok::<_, ()>(()),
+    )
     .unwrap();
     let mut indices = ImageBuf::<PaletteIndex8>::new_packed(layout.output).unwrap();
     let width = layout.output.width_usize();

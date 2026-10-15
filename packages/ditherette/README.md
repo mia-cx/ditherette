@@ -384,16 +384,20 @@ Radius is an integer from 1 through 32,768. Strength, threshold, and softness ac
 The implementation rounds these controls to f32, but reconstructs perturbed coordinates with wide arithmetic before final RGB clipping and byte rounding.
 Zero strength preserves every source byte. Placement preserves alpha and hidden RGB processing.
 
-`{ mode: 'smooth-gradient-v1', minGradientSize: 24 }` selects extended smooth gradients.
-`minGradientSize` is an integer from 4 through 32,768 in working pixels, after any `process` resize.
-Direct `perturb` and `ditherAndQuantize` calls measure source pixels. Larger values exclude shorter gradients.
-This versioned selector reads original encoded RGB independently of palette and working space.
-It allows repeated RGB8 values within a gradient and rejects hard boundaries, flat fills and short texture runs.
-Its fixed smoothness criterion permits byte quantization and gradual nonlinear ramps; it excludes channel reversals,
-steps over eight byte levels per pixel and signals smaller than four byte levels.
-Long smooth monotone portions of a texture can qualify. The [reference](../../crates/ditherette-wasm/src/spec/smooth_gradient_v1.md)
-records its complete criterion and projection limits. Legacy `adaptive` recipes keep their original contrast behavior.
-Analysis needs twelve bytes per working pixel plus fixed call bookkeeping, within the existing memory limit.
+`{ mode: 'smooth-area-v1', sampleSize: 64, contrastThreshold: 0.12 }` selects complete smooth areas.
+`sampleSize` is an integer square side from 4 through 32,768 working pixels after any `process` resize.
+Direct APIs measure source pixels. The square clips to smaller image dimensions.
+`contrastThreshold` is finite from 0 through 1. It bounds the largest immediate source Oklab distance
+inside each square, including a fixed one-pixel read halo. Higher tolerance only adds selection.
+Total colour change across a broad ramp is unrestricted. A steep edge fails even when its total change
+equals that ramp. All overlapping qualifying squares contribute their complete footprint, including
+quantized plateaus and flat fills. There is no directional run fitting or per-pixel flat veto.
+Distance uses Euclidean D65 Oklab, with 1 approximately the black-to-white lightness difference,
+and clips distances above 1. Zero tolerance admits flat areas; one admits the entire image.
+Low-contrast texture can qualify. The [reference](../../crates/ditherette-wasm/src/spec/smooth_area_v1.md)
+defines the exact regional criterion. Legacy Adaptive and Everywhere remain unchanged.
+Analysis needs twelve bytes per working pixel plus twelve bytes times max(2 × width, height) and fixed
+call bookkeeping, all within the existing memory limit.
 
 `ditherAndQuantize` quantizes that completed RGBA8 result, with the same indices, palette, and warnings as `quantize(perturb(...))`.
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
@@ -449,7 +453,7 @@ const indexed = processor.ditherAndQuantize({
 
 Matrix sizes are `'2'`, `'4'`, `'8'`, and `'16'`. Adaptive placement uses the controls shown above.
 Yliluoma searches every ordered palette pair and matrix ratio. A zero adaptive mask still searches mixtures of the nearest color.
-Smooth gradient placement uses the original nearest palette entry at excluded pixels.
+Smooth area placement uses the original nearest palette entry at excluded pixels.
 It allocates source and index storage without an RGBA8 intermediate or mixture table.
 Exact outputs follow the frozen Wasm reference; native floating-point math can select different mixtures near ties.
 

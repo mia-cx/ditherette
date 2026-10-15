@@ -128,11 +128,21 @@ impl DiffusionPolicy {
             ));
         };
         nonnegative(strength, ErrorPath::DitherStrength)?;
-        if let Placement::SmoothGradientV1 { min_gradient_size } = placement {
-            if !(4..=32768).contains(&min_gradient_size) {
+        if let Placement::SmoothAreaV1 {
+            sample_size,
+            contrast_threshold,
+        } = placement
+        {
+            if !(4..=32768).contains(&sample_size) {
                 return Err(Failure::new(
                     ErrorCode::InvalidSettings,
-                    ErrorPath::DitherMinGradientSize,
+                    ErrorPath::DitherSampleSize,
+                ));
+            }
+            if !contrast_threshold.is_finite() || !(0.0..=1.0).contains(&contrast_threshold) {
+                return Err(Failure::new(
+                    ErrorCode::InvalidSettings,
+                    ErrorPath::DitherContrastThreshold,
                 ));
             }
         }
@@ -252,7 +262,7 @@ impl PreparedDiffusion {
     }
 
     /// Executes legacy placement without allocation. The source is unchanged and fixed-index pixels remain sinks.
-    /// SmoothGradientV1 needs full-image analysis; use `diffuse` or the public Processor route.
+    /// SmoothAreaV1 needs full-image analysis; use `diffuse` or the public Processor route.
     pub fn execute(
         &mut self,
         source: ImageView<'_, Rgba8>,
@@ -317,12 +327,9 @@ pub(crate) fn execute_with_placement_progress(
     policy: DiffusionPolicy,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    if matches!(policy.placement, Placement::SmoothGradientV1 { .. })
+    if matches!(policy.placement, Placement::SmoothAreaV1 { .. })
         && placement_scratch.len()
-            != source
-                .dimensions()
-                .pixel_count()
-                .expect("validated dimensions")
+            != crate::prod::dither::smooth_area_v1::scratch_len(source.dimensions())
     {
         return Err(Failure::new(
             ErrorCode::MemoryLimit,
@@ -370,10 +377,14 @@ impl BorrowedDiffusion<'_> {
                 )),
                 None,
             ),
-            Placement::SmoothGradientV1 { min_gradient_size } => {
-                crate::prod::dither::smooth_gradient_v1::select(
+            Placement::SmoothAreaV1 {
+                sample_size,
+                contrast_threshold,
+            } => {
+                crate::prod::dither::smooth_area_v1::select(
                     source,
-                    min_gradient_size,
+                    sample_size,
+                    contrast_threshold,
                     placement_scratch,
                     || progress(0),
                 )?;
@@ -503,7 +514,7 @@ impl BorrowedDiffusion<'_> {
                 index
             };
             let mask = match (&placement_row, policy.placement) {
-                (_, Placement::SmoothGradientV1 { .. }) => 1.0,
+                (_, Placement::SmoothAreaV1 { .. }) => 1.0,
                 (
                     Some(row),
                     Placement::Adaptive {

@@ -121,7 +121,8 @@ pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
                         ErrorPath::PerturbRadius => ErrorPath::DitherRadius,
                         ErrorPath::PerturbThreshold => ErrorPath::DitherThreshold,
                         ErrorPath::PerturbSoftness => ErrorPath::DitherSoftness,
-                        ErrorPath::PerturbMinGradientSize => ErrorPath::DitherMinGradientSize,
+                        ErrorPath::PerturbSampleSize => ErrorPath::DitherSampleSize,
+                        ErrorPath::PerturbContrastThreshold => ErrorPath::DitherContrastThreshold,
                         _ => ErrorPath::DitherPlacement,
                     },
                 )

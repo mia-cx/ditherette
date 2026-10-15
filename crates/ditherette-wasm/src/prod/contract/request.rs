@@ -153,10 +153,12 @@ pub enum Placement {
         threshold: f32,
         softness: f32,
     },
-    /// Extended smooth runs, measured in working pixels after any resize.
-    SmoothGradientV1 {
-        #[serde(rename = "minGradientSize")]
-        min_gradient_size: u32,
+    /// Overlapping perceptually smooth squares, measured in working pixels after resize.
+    SmoothAreaV1 {
+        #[serde(rename = "sampleSize")]
+        sample_size: u32,
+        #[serde(rename = "contrastThreshold")]
+        contrast_threshold: f32,
     },
 }
 
@@ -490,12 +492,23 @@ fn nonnegative(value: f32, path: String) -> Result<(), DitheretteError> {
 }
 
 fn validate_placement(placement: Placement, path: &str) -> Result<(), DitheretteError> {
-    if let Placement::SmoothGradientV1 { min_gradient_size } = placement {
-        if !(4..=MAX_SOURCE_SIDE).contains(&min_gradient_size) {
+    if let Placement::SmoothAreaV1 {
+        sample_size,
+        contrast_threshold,
+    } = placement
+    {
+        if !(4..=MAX_SOURCE_SIDE).contains(&sample_size) {
             return Err(DitheretteError::new(
                 ErrorCode::InvalidSettings,
-                format!("{path}.minGradientSize"),
-                "Minimum gradient size must be between 4 and 32768 pixels.",
+                format!("{path}.sampleSize"),
+                "Square sample size must be between 4 and 32768 pixels.",
+            ));
+        }
+        if !contrast_threshold.is_finite() || !(0.0..=1.0).contains(&contrast_threshold) {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.contrastThreshold"),
+                "Contrast threshold must be finite from 0 through 1.",
             ));
         }
     }

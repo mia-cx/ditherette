@@ -104,7 +104,7 @@ fn contrast_with_converter(
 
 /// Returns an everywhere or adaptive mask in [0,1] for a validated placement request.
 /// Adaptive threshold and softness use normalized contrast percentage points.
-/// SmoothGradientV1 uses full-image `smooth_gradient_v1::select` scratch instead.
+/// SmoothAreaV1 uses full-image `smooth_area_v1::select` scratch instead.
 pub fn placement_mask_at(
     source: ImageView<'_, Rgba8>,
     x: u32,
@@ -129,7 +129,7 @@ pub(crate) fn placement_mask_with_converter(
     converter: &Converter,
 ) -> f32 {
     assert!(
-        !matches!(placement, Placement::SmoothGradientV1 { .. }),
+        !matches!(placement, Placement::SmoothAreaV1 { .. }),
         "smooth placement requires precomputed source analysis"
     );
     let Placement::Adaptive {
@@ -156,7 +156,7 @@ fn adaptive_mask(contrast: f64, threshold: f32, softness: f32) -> f32 {
     (t * t * (3.0 - 2.0 * t)) as f32
 }
 
-/// Call-owned legacy coordinate rows or mandatory smooth-gradient analysis.
+/// Call-owned legacy coordinate rows or mandatory smooth-area analysis.
 /// Only legacy row storage can fall back after a reservation miss.
 pub(crate) struct AdaptivePlacementWork {
     coordinates: Vec<[f32; 3]>,
@@ -168,15 +168,16 @@ impl AdaptivePlacementWork {
         dimensions: crate::image::ImageDimensions,
         placement: Placement,
     ) -> u64 {
-        if !matches!(placement, Placement::SmoothGradientV1 { .. }) {
+        if !matches!(placement, Placement::SmoothAreaV1 { .. }) {
             return 0;
         }
         Self::RECORD_BYTES
             + SMOOTH_WORKING_BYTES
-            + dimensions.pixel_count().expect("validated dimensions") as u64
+            + super::smooth_area_v1::scratch_len(dimensions) as u64
                 * std::mem::size_of::<[f32; 3]>() as u64
     }
-    /// Smooth placement needs one call-owned record per working pixel. No analysis is cached.
+    /// Area placement owns pixel records plus max(2 * width, height) line records.
+    /// Two source colour rows become one line queue after local analysis. No analysis is cached.
     /// A conservative 4 KiB fixed reserve covers the serial selector's live scalar records.
     /// Legacy row storage remains optional; smooth storage fails before execution when it cannot fit.
     pub(crate) fn try_for_image(
@@ -184,7 +185,7 @@ impl AdaptivePlacementWork {
         placement: Placement,
         available: u64,
     ) -> Result<Option<Self>, crate::prod::contract::failure::Failure> {
-        if !matches!(placement, Placement::SmoothGradientV1 { .. }) {
+        if !matches!(placement, Placement::SmoothAreaV1 { .. }) {
             return Ok(Self::try_new(dimensions.width(), placement, available));
         }
         use crate::prod::contract::{
@@ -195,9 +196,7 @@ impl AdaptivePlacementWork {
         let heap = available
             .checked_sub(Self::RECORD_BYTES + SMOOTH_WORKING_BYTES)
             .ok_or_else(failure)?;
-        let count = dimensions
-            .pixel_count()
-            .expect("validated image dimensions");
+        let count = super::smooth_area_v1::scratch_len(dimensions);
         let mut coordinates =
             crate::prod::resize::common::allocation::CapacityBudget::new(heap).vector(count)?;
         coordinates.resize(count, [0.0; 3]);
