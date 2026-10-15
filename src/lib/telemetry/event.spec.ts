@@ -20,7 +20,8 @@ const dither: DitherSettings = {
 	algorithm: 'floyd-steinberg',
 	strength: 100,
 	placement: 'everywhere',
-	placementMinGradientSize: 24,
+	placementSampleSize: 64,
+	placementContrastThreshold: 12,
 	serpentine: true,
 	seed: 1,
 	useColorSpace: true

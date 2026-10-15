@@ -209,9 +209,13 @@ function validateDitherSettings(value: unknown): DitherSettings {
 		algorithm: assertOneOf(value.algorithm, DITHER_IDS, 'Worker dither algorithm'),
 		strength: assertFiniteNonNegativeNumber(value.strength, 'Worker dither strength'),
 		placement: assertOneOf(value.placement, PLACEMENT_MODES, 'Worker dither placement'),
-		placementMinGradientSize: assertFiniteNonNegativeNumber(
-			value.placementMinGradientSize,
-			'Worker dither minimum gradient size'
+		placementSampleSize: assertFiniteNonNegativeNumber(
+			value.placementSampleSize,
+			'Worker dither sample size'
+		),
+		placementContrastThreshold: assertFiniteNonNegativeNumber(
+			value.placementContrastThreshold,
+			'Worker dither contrast tolerance'
 		),
 		serpentine: assertBoolean(value.serpentine, 'Worker dither serpentine flag'),
 		seed: assertFiniteNumber(value.seed, 'Worker dither seed'),

@@ -7,18 +7,24 @@
 
 	type Props = {
 		placement: DitherPlacement;
-		placementMinGradientSize: number;
+		placementSampleSize: number;
+		placementContrastThreshold: number;
 		supportsPlacement: boolean;
-		placementMinGradientSizeMin: number;
-		placementMinGradientSizeMax: number;
+		placementSampleSizeMin: number;
+		placementSampleSizeMax: number;
+		placementPercentMin: number;
+		placementPercentMax: number;
 	};
 
 	let {
 		placement = $bindable(),
-		placementMinGradientSize = $bindable(),
+		placementSampleSize = $bindable(),
+		placementContrastThreshold = $bindable(),
 		supportsPlacement,
-		placementMinGradientSizeMin,
-		placementMinGradientSizeMax
+		placementSampleSizeMin,
+		placementSampleSizeMax,
+		placementPercentMin,
+		placementPercentMax
 	}: Props = $props();
 
 	const placementLabel = $derived(
@@ -31,10 +37,15 @@
 	}
 
 	function clampPlacementControls() {
-		placementMinGradientSize = clampNumber(
-			placementMinGradientSize,
-			placementMinGradientSizeMin,
-			placementMinGradientSizeMax
+		placementSampleSize = clampNumber(
+			placementSampleSize,
+			placementSampleSizeMin,
+			placementSampleSizeMax
+		);
+		placementContrastThreshold = clampNumber(
+			placementContrastThreshold,
+			placementPercentMin,
+			placementPercentMax
 		);
 	}
 </script>
@@ -52,27 +63,26 @@
 </div>
 
 <div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-	<Label for="dither-placement-min-gradient" class="text-xs text-muted-foreground"
-		>Min gradient</Label
+	<Label for="dither-placement-sample-size" class="text-xs text-muted-foreground">Sample size</Label
 	>
 	<Slider
 		type="single"
-		bind:value={placementMinGradientSize}
-		min={placementMinGradientSizeMin}
-		max={placementMinGradientSizeMax}
+		bind:value={placementSampleSize}
+		min={placementSampleSizeMin}
+		max={placementSampleSizeMax}
 		step={1}
 		disabled={!supportsPlacement || placement !== 'adaptive'}
-		aria-label="Minimum gradient length"
+		aria-label="Adaptive sample size"
 	/>
 	<div class="relative">
 		<input
-			id="dither-placement-min-gradient"
+			id="dither-placement-sample-size"
 			class="h-8 w-full border border-input bg-background px-2 pr-7 text-right font-mono text-xs tabular-nums"
 			type="number"
-			min={placementMinGradientSizeMin}
-			max={placementMinGradientSizeMax}
+			min={placementSampleSizeMin}
+			max={placementSampleSizeMax}
 			step="1"
-			bind:value={placementMinGradientSize}
+			bind:value={placementSampleSize}
 			disabled={!supportsPlacement || placement !== 'adaptive'}
 			onblur={clampPlacementControls}
 			onchange={clampPlacementControls}
@@ -80,6 +90,39 @@
 		<span
 			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
 			>px</span
+		>
+	</div>
+</div>
+
+<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
+	<Label for="dither-placement-contrast-tolerance" class="text-xs text-muted-foreground"
+		>Contrast tolerance</Label
+	>
+	<Slider
+		type="single"
+		bind:value={placementContrastThreshold}
+		min={placementPercentMin}
+		max={placementPercentMax}
+		step={1}
+		disabled={!supportsPlacement || placement !== 'adaptive'}
+		aria-label="Adaptive contrast tolerance"
+	/>
+	<div class="relative">
+		<input
+			id="dither-placement-contrast-tolerance"
+			class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
+			type="number"
+			min={placementPercentMin}
+			max={placementPercentMax}
+			step="1"
+			bind:value={placementContrastThreshold}
+			disabled={!supportsPlacement || placement !== 'adaptive'}
+			onblur={clampPlacementControls}
+			onchange={clampPlacementControls}
+		/>
+		<span
+			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+			>%</span
 		>
 	</div>
 </div>

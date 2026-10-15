@@ -47,7 +47,8 @@ const DEFAULT_DITHER_SETTINGS: DitherSettings = {
 	algorithm: 'none',
 	strength: 100,
 	placement: 'everywhere',
-	placementMinGradientSize: 24,
+	placementSampleSize: 64,
+	placementContrastThreshold: 12,
 	serpentine: true,
 	seed: 0xc0ffee42,
 	useColorSpace: false
@@ -55,16 +56,17 @@ const DEFAULT_DITHER_SETTINGS: DitherSettings = {
 
 /**
  * Shape a persisted dither object into current settings. Keys from removed settings are dropped,
- * `placement` falls back to the legacy `coverage` split like the panel once did, and a missing or
- * non-finite `placementMinGradientSize` becomes the default. The result always differs in identity
- * from anything saved before smooth gradients, so stale adaptive outputs are regenerated.
+ * `placement` falls back to the legacy `coverage` split like the panel once did, and missing or
+ * non-finite area-placement controls become the defaults. The result always differs in identity
+ * from anything saved before area placement, so stale adaptive outputs are regenerated.
  */
 export function normalizeDitherSettings(value: unknown): DitherSettings {
 	const stored: Record<string, unknown> =
 		typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 	const coverage = stored.coverage;
 	const placement = stored.placement;
-	const minGradient = stored.placementMinGradientSize;
+	const sampleSize = stored.placementSampleSize;
+	const contrast = stored.placementContrastThreshold;
 	return {
 		...DEFAULT_DITHER_SETTINGS,
 		...(typeof stored.algorithm === 'string'
@@ -77,10 +79,14 @@ export function normalizeDitherSettings(value: unknown): DitherSettings {
 				: coverage === 'full'
 					? 'everywhere'
 					: 'adaptive',
-		placementMinGradientSize:
-			typeof minGradient === 'number' && Number.isFinite(minGradient)
-				? Math.min(512, Math.max(4, Math.round(minGradient)))
-				: DEFAULT_DITHER_SETTINGS.placementMinGradientSize,
+		placementSampleSize:
+			typeof sampleSize === 'number' && Number.isFinite(sampleSize)
+				? Math.min(512, Math.max(4, Math.round(sampleSize)))
+				: DEFAULT_DITHER_SETTINGS.placementSampleSize,
+		placementContrastThreshold:
+			typeof contrast === 'number' && Number.isFinite(contrast)
+				? Math.min(100, Math.max(0, contrast))
+				: DEFAULT_DITHER_SETTINGS.placementContrastThreshold,
 		...(typeof stored.serpentine === 'boolean' ? { serpentine: stored.serpentine } : {}),
 		...(typeof stored.seed === 'number' ? { seed: stored.seed } : {}),
 		...(typeof stored.useColorSpace === 'boolean' ? { useColorSpace: stored.useColorSpace } : {}),

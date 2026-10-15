@@ -115,8 +115,11 @@ export type DitherSettings = {
 	algorithm: DitherId;
 	strength: number;
 	placement: DitherPlacement;
-	/** Minimum smooth-gradient length in output pixels that Adaptive dithers. */
-	placementMinGradientSize: number;
+	/** Side of the square area Adaptive samples, in output pixels. */
+	placementSampleSize: number;
+	/** Highest local sharpness, in percent, that Adaptive still treats as smooth.
+	 * Gradual colour changes qualify; sharp edges and fine detail don't. */
+	placementContrastThreshold: number;
 	serpentine: boolean;
 	seed: number;
 	useColorSpace: boolean;

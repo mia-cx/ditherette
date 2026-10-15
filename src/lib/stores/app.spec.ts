@@ -73,7 +73,8 @@ const ditherFixture: DitherSettings = {
 	algorithm: 'none',
 	strength: 100,
 	placement: 'everywhere',
-	placementMinGradientSize: 24,
+	placementSampleSize: 64,
+	placementContrastThreshold: 12,
 	serpentine: true,
 	seed: 0xc0ffee42,
 	useColorSpace: false
@@ -88,19 +89,21 @@ describe('normalizeDitherSettings', () => {
 			placementRadius: 6,
 			placementThreshold: 12,
 			placementSoftness: 12,
-			serpentine: true,
-			seed: 1,
-			useColorSpace: false
+			placementMinGradientSize: 40,
+			serpentine: false,
+			seed: 7,
+			useColorSpace: true
 		};
 		const normalized = normalizeDitherSettings(legacy);
 		expect(normalized).toEqual({
 			algorithm: 'bayer-16',
 			strength: 30,
 			placement: 'adaptive',
-			placementMinGradientSize: 24,
-			serpentine: true,
-			seed: 1,
-			useColorSpace: false
+			placementSampleSize: 64,
+			placementContrastThreshold: 12,
+			serpentine: false,
+			seed: 7,
+			useColorSpace: true
 		});
 		expect(settingsHash(normalized)).not.toBe(settingsHash(legacy));
 	});
@@ -127,7 +130,7 @@ describe('processing scheduler delays', () => {
 	it('debounces slider-only dither changes', () => {
 		expect(ditherProcessingDelay(ditherFixture, { ...ditherFixture, strength: 80 })).toBe(180);
 		expect(
-			ditherProcessingDelay(ditherFixture, { ...ditherFixture, placementMinGradientSize: 40 })
+			ditherProcessingDelay(ditherFixture, { ...ditherFixture, placementSampleSize: 96 })
 		).toBe(180);
 	});
 

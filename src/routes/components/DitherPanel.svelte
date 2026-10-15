@@ -13,15 +13,18 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	const PLACEMENT_MIN_GRADIENT_MIN = 4;
-	const PLACEMENT_MIN_GRADIENT_MAX = 512;
+	const PLACEMENT_SAMPLE_SIZE_MIN = 4;
+	const PLACEMENT_SAMPLE_SIZE_MAX = 512;
+	const PLACEMENT_PERCENT_MIN = 0;
+	const PLACEMENT_PERCENT_MAX = 100;
 	const initial = ditherSettings.get();
 	let algorithm = $state(initial.algorithm);
 	let strength = $state<number>(initial.strength);
 	let placement = $state(
 		initial.placement ?? (initial.coverage === 'full' ? 'everywhere' : 'adaptive')
 	);
-	let placementMinGradientSize = $state(initial.placementMinGradientSize ?? 24);
+	let placementSampleSize = $state(initial.placementSampleSize ?? 64);
+	let placementContrastThreshold = $state(initial.placementContrastThreshold ?? 12);
 	let serpentine = $state(initial.serpentine);
 	let seed = $state(initial.seed);
 	let useColorSpace = $state(initial.useColorSpace ?? false);
@@ -40,7 +43,8 @@
 			algorithm = settings.algorithm;
 			strength = settings.strength;
 			placement = settings.placement ?? (settings.coverage === 'full' ? 'everywhere' : 'adaptive');
-			placementMinGradientSize = settings.placementMinGradientSize ?? 24;
+			placementSampleSize = settings.placementSampleSize ?? 64;
+			placementContrastThreshold = settings.placementContrastThreshold ?? 12;
 			serpentine = settings.serpentine;
 			seed = settings.seed;
 			useColorSpace = settings.useColorSpace ?? false;
@@ -52,7 +56,8 @@
 			algorithm,
 			strength,
 			placement,
-			placementMinGradientSize,
+			placementSampleSize,
+			placementContrastThreshold,
 			serpentine,
 			seed,
 			useColorSpace
@@ -111,10 +116,13 @@
 
 		<AdaptivePlacementControls
 			bind:placement
-			bind:placementMinGradientSize
+			bind:placementSampleSize
+			bind:placementContrastThreshold
 			{supportsPlacement}
-			placementMinGradientSizeMin={PLACEMENT_MIN_GRADIENT_MIN}
-			placementMinGradientSizeMax={PLACEMENT_MIN_GRADIENT_MAX}
+			placementSampleSizeMin={PLACEMENT_SAMPLE_SIZE_MIN}
+			placementSampleSizeMax={PLACEMENT_SAMPLE_SIZE_MAX}
+			placementPercentMin={PLACEMENT_PERCENT_MIN}
+			placementPercentMax={PLACEMENT_PERCENT_MAX}
 		/>
 
 		<Separator />

@@ -69,7 +69,8 @@ const settings: ProcessingSettings = {
 		algorithm: 'none',
 		strength: 100,
 		placement: 'everywhere',
-		placementMinGradientSize: 24,
+		placementSampleSize: 64,
+		placementContrastThreshold: 12,
 		serpentine: true,
 		seed: 1,
 		useColorSpace: false
@@ -341,36 +342,19 @@ describe('installed package website integration', () => {
 	});
 });
 
-describe('smooth-gradient adaptive placement', () => {
-	// 192x16, identical rows: flat | hard step | flat | 16px ramp | flat | 96px ramp.
+describe('smooth-area adaptive placement', () => {
+	// 192x48, identical rows: 1px black/white checkerboard | gentle 1-level/px grey ramp.
 	const WIDTH = 192;
-	const HEIGHT = 16;
+	const HEIGHT = 48;
 	function rampSource() {
 		const data = new Uint8ClampedArray(WIDTH * HEIGHT * 4);
 		for (let y = 0; y < HEIGHT; y++) {
 			for (let x = 0; x < WIDTH; x++) {
 				const offset = (y * WIDTH + x) * 4;
-				let r: number;
-				let g: number;
-				let b: number;
-				if (x < 32) {
-					r = 20;
-					g = 20;
-					b = 30;
-				} else if (x < 64) {
-					r = 0;
-					g = 128;
-					b = 128;
-				} else if (x < 80) {
-					r = g = b = 60 + (x - 64) * 6;
-				} else if (x < 96) {
-					r = g = b = 150;
-				} else {
-					r = g = b = Math.round(((x - 96) * 255) / 95);
-				}
-				data[offset] = r;
-				data[offset + 1] = g;
-				data[offset + 2] = b;
+				const value = x < 64 ? ((x + y) & 1) * 255 : 64 + (x - 64);
+				data[offset] = value;
+				data[offset + 1] = value;
+				data[offset + 2] = value;
 				data[offset + 3] = 255;
 			}
 		}
@@ -387,28 +371,22 @@ describe('smooth-gradient adaptive placement', () => {
 			enabled: true
 		};
 	});
-	rampPalette.push({
-		name: 'Teal',
-		key: '#008080',
-		rgb: { r: 0, g: 128, b: 128 },
-		kind: 'custom',
-		enabled: true
-	});
 
-	const rampOutput = {
+	const areaOutput = {
 		...settings.output,
 		width: WIDTH,
 		height: HEIGHT,
 		crop: undefined
 	};
-	const rampSettings = (dither: Partial<ProcessingSettings['dither']>, useColorSpace = false) =>
+	const areaSettings = (dither: Partial<ProcessingSettings['dither']>, useColorSpace = false) =>
 		({
 			...settings,
 			colorSpace: 'oklab',
-			output: rampOutput,
+			output: areaOutput,
 			dither: {
 				...settings.dither,
 				strength: 30,
+				placementSampleSize: 16,
 				useColorSpace,
 				...dither
 			}
@@ -420,6 +398,14 @@ describe('smooth-gradient adaptive placement', () => {
 			pixels.set(indices.subarray(y * WIDTH + x0, y * WIDTH + x1 + 1), y * (x1 - x0 + 1));
 		}
 		return pixels;
+	}
+
+	function diffSet(indices: Uint8Array, baseline: Uint8Array) {
+		const set = new Set<number>();
+		for (let i = 0; i < indices.length; i++) {
+			if (indices[i] !== baseline[i]) set.add(i);
+		}
+		return set;
 	}
 
 	let requestId = 1;
@@ -434,77 +420,62 @@ describe('smooth-gradient adaptive placement', () => {
 				id: ++requestId,
 				type: 'process',
 				sourceId,
-				settings: rampSettings(dither, useColorSpace),
+				settings: areaSettings(dither, useColorSpace),
 				palette: rampPalette,
-				settingsHash: `ramp-${sourceId}-${JSON.stringify(dither)}-${useColorSpace}`
+				settingsHash: `area-${sourceId}-${JSON.stringify(dither)}-${useColorSpace}`
 			},
 			() => undefined
 		);
-		if (response?.type !== 'complete') throw new Error('Expected ramp output.');
+		if (response?.type !== 'complete') throw new Error('Expected area output.');
 		return response.image.indices;
 	}
 
-	it('Adaptive dithers long smooth ramps only, and a larger minimum excludes a shorter ramp', async () => {
+	it('Adaptive dithers gradual areas, leaves sharp detail clean, and widens with tolerance', async () => {
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle({
 			id: 1,
 			type: 'load-source',
-			sourceId: 'ramp',
+			sourceId: 'area',
 			source: rampSource()
 		});
-		const baseline = await run(pipeline, 'ramp', { algorithm: 'none' });
+		const baseline = await run(pipeline, 'area', { algorithm: 'none' });
 
-		// x 0..63 covers both flats and the hard step with a one-pixel margin; x 80..95 is flat.
-		function expectFlatsUnchanged(indices: Uint8Array) {
-			expect(region(indices, 0, 63)).toEqual(region(baseline, 0, 63));
-			expect(region(indices, 80, 95)).toEqual(region(baseline, 80, 95));
-		}
-		function expectLongRampDithered(indices: Uint8Array) {
-			expect(region(indices, 96, 191)).not.toEqual(region(baseline, 96, 191));
-		}
-		function expectShortRampClean(indices: Uint8Array) {
-			expect(region(indices, 64, 79)).toEqual(region(baseline, 64, 79));
-		}
-		function expectShortRampDithered(indices: Uint8Array) {
-			expect(region(indices, 64, 79)).not.toEqual(region(baseline, 64, 79));
+		// Interior regions stay at least 16px (one sample) from the x=64 boundary.
+		function expectAreas(indices: Uint8Array) {
+			expect(region(indices, 0, 47)).toEqual(region(baseline, 0, 47));
+			expect(region(indices, 80, 191)).not.toEqual(region(baseline, 80, 191));
 		}
 
-		for (const algorithm of ['bayer-16', 'floyd-steinberg'] as const) {
-			const min24 = await run(pipeline, 'ramp', {
-				algorithm,
-				placement: 'adaptive',
-				placementMinGradientSize: 24
-			});
-			expectFlatsUnchanged(min24);
-			expectLongRampDithered(min24);
-			expectShortRampClean(min24);
+		const bayer12 = await run(pipeline, 'area', {
+			algorithm: 'bayer-16',
+			placement: 'adaptive',
+			placementContrastThreshold: 12
+		});
+		expectAreas(bayer12);
 
-			const min8 = await run(pipeline, 'ramp', {
-				algorithm,
-				placement: 'adaptive',
-				placementMinGradientSize: 8
-			});
-			expectFlatsUnchanged(min8);
-			expectShortRampDithered(min8);
-		}
+		// Ordered dither is pointwise: everything tolerance 12 admits, tolerance 100 admits too.
+		const bayer100 = await run(pipeline, 'area', {
+			algorithm: 'bayer-16',
+			placement: 'adaptive',
+			placementContrastThreshold: 100
+		});
+		const lowDiff = diffSet(bayer12, baseline);
+		for (const i of diffSet(bayer100, baseline)) lowDiff.delete(i);
+		expect(lowDiff.size).toBe(0);
 
-		const colorSpaceMin24 = await run(
+		const diffusion12 = await run(pipeline, 'area', {
+			algorithm: 'floyd-steinberg',
+			placement: 'adaptive',
+			placementContrastThreshold: 12
+		});
+		expectAreas(diffusion12);
+
+		const colorSpace12 = await run(
 			pipeline,
-			'ramp',
-			{ algorithm: 'bayer-16', placement: 'adaptive', placementMinGradientSize: 24 },
+			'area',
+			{ algorithm: 'bayer-16', placement: 'adaptive', placementContrastThreshold: 12 },
 			true
 		);
-		expectFlatsUnchanged(colorSpaceMin24);
-		expectLongRampDithered(colorSpaceMin24);
-		expectShortRampClean(colorSpaceMin24);
-
-		const colorSpaceMin8 = await run(
-			pipeline,
-			'ramp',
-			{ algorithm: 'bayer-16', placement: 'adaptive', placementMinGradientSize: 8 },
-			true
-		);
-		expectFlatsUnchanged(colorSpaceMin8);
-		expectShortRampDithered(colorSpaceMin8);
+		expectAreas(colorSpace12);
 	});
 });

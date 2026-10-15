@@ -160,8 +160,9 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 		dither.placement === 'everywhere'
 			? { mode: 'everywhere' }
 			: {
-					mode: 'smooth-gradient-v1',
-					minGradientSize: Math.min(32768, Math.max(4, Math.round(dither.placementMinGradientSize)))
+					mode: 'smooth-area-v1',
+					sampleSize: Math.min(32768, Math.max(4, Math.round(dither.placementSampleSize))),
+					contrastThreshold: Math.min(1, Math.max(0, dither.placementContrastThreshold / 100))
 				};
 	// Yliluoma places whole palette colors, so it has no strength to turn down.
 	switch (dither.algorithm) {

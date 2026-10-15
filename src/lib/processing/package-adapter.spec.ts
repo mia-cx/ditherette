@@ -27,7 +27,8 @@ const settings: ProcessingSettings = {
 		algorithm: 'none',
 		strength: 100,
 		placement: 'everywhere',
-		placementMinGradientSize: 24,
+		placementSampleSize: 64,
+		placementContrastThreshold: 12,
 		serpentine: true,
 		seed: 1,
 		useColorSpace: false
@@ -222,17 +223,22 @@ describe('website package request', () => {
 				field: { algorithm: 'random', seed: 4294967295 },
 				space: 'srgb',
 				strength: 96 / 63.75,
-				placement: { mode: 'smooth-gradient-v1', minGradientSize: 24 }
+				placement: { mode: 'smooth-area-v1', sampleSize: 64, contrastThreshold: 0.12 }
 			}
 		});
 	});
 	it.each(['bayer-16', 'floyd-steinberg'] as const)(
-		'maps the website minimum gradient to smooth-gradient placement for %s',
+		'maps website sample size and contrast tolerance to smooth-area placement for %s',
 		(algorithm) => {
-			for (const [placementMinGradientSize, minGradientSize] of [
-				[24, 24],
-				[3.6, 4],
-				[40000, 32768]
+			for (const [
+				placementSampleSize,
+				placementContrastThreshold,
+				sampleSize,
+				contrastThreshold
+			] of [
+				[64, 12, 64, 0.12],
+				[3.6, 0, 4, 0],
+				[40000, 150, 32768, 1]
 			] as const) {
 				const { recipe } = packageProcessRequest(
 					source,
@@ -243,7 +249,8 @@ describe('website package request', () => {
 							...settings.dither,
 							algorithm,
 							placement: 'adaptive',
-							placementMinGradientSize
+							placementSampleSize,
+							placementContrastThreshold
 						}
 					},
 					settings.output
@@ -251,11 +258,11 @@ describe('website package request', () => {
 				expect(recipe.dither).toMatchObject(
 					algorithm === 'floyd-steinberg'
 						? {
-								placement: { mode: 'smooth-gradient-v1', minGradientSize }
+								placement: { mode: 'smooth-area-v1', sampleSize, contrastThreshold }
 							}
 						: {
 								perturb: {
-									placement: { mode: 'smooth-gradient-v1', minGradientSize }
+									placement: { mode: 'smooth-area-v1', sampleSize, contrastThreshold }
 								}
 							}
 				);
