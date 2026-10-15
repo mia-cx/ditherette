@@ -330,7 +330,15 @@ fn perturb_rows(
             let threshold = field(x, y, global_index);
             let mask = match (&cached_row, placement) {
                 (_, Placement::SmoothAreaV1 { .. }) => {
-                    smooth.expect("prepared mask")[global_index as usize][2]
+                    if super::smooth_area_v1::covers(
+                        smooth.expect("prepared mask")[global_index as usize][2],
+                        x,
+                        y,
+                    ) {
+                        1.0
+                    } else {
+                        0.0
+                    }
                 }
                 (
                     Some(row),

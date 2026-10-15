@@ -5,13 +5,16 @@ pub mod render;
 use crate::image::{ImageDimensions, ImageView, Rgba8};
 use crate::spec::color::oklab::rgb8_to_oklab;
 
+const EDGE_PROBE_RADIUS: usize = 4;
+const MINIMUM_REGION_DIVISOR: usize = 16;
+
 /// Pixel records plus three source colour rows, reused as one line queue.
 pub fn scratch_len(dimensions: ImageDimensions) -> usize {
     dimensions.pixel_count().expect("validated dimensions")
         + (3 * dimensions.width_usize()).max(dimensions.height_usize())
 }
 
-/// Selects complete squares bounded by fine contrast and scale-dependent Oklab residual.
+/// Reconstructs feathered, source-aware regions from squares meeting fine/coarse Oklab contrast.
 /// Total colour change across a smooth ramp is unrestricted. Flat plateaus stay included.
 pub fn select<E>(
     source: ImageView<'_, Rgba8>,
@@ -41,6 +44,7 @@ pub fn select<E>(
         }
         check()?;
     }
+    mark_boundaries(dimensions, cells, &mut check)?;
     // The coarse colour is a symmetric 2D box mean. A compact transition differs
     // from its coarse colour; a broad locally linear ramp largely cancels out.
     for y in 0..height {
@@ -71,13 +75,21 @@ pub fn select<E>(
         for x in 0..width {
             let center = queue[(y % 3) * width + x];
             // Twice the residual uses the full jump magnitude at a symmetric step.
-            let mut contrast = (2.0 * color_distance(center, cells[y * width + x])).min(1.0);
+            let mut contrast =
+                (2.0 * color_distance(center, unsigned(cells[y * width + x]))).min(1.0);
+            let mut fine = 0.0_f32;
             for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
                 let row = &queue[(ny % 3) * width..(ny % 3 + 1) * width];
                 for nx in x.saturating_sub(1)..=(x + 1).min(width - 1) {
-                    contrast = contrast.max(color_distance(center, row[nx]).min(1.0));
+                    fine = fine.max(color_distance(center, row[nx]).min(1.0));
                 }
             }
+            contrast = contrast.max(fine);
+            cells[y * width + x][1] = if cells[y * width + x][0].is_sign_negative() {
+                -contrast - 1.0
+            } else {
+                contrast
+            };
             cells[y * width + x][2] = contrast;
         }
         check()?;
@@ -90,27 +102,301 @@ pub fn select<E>(
         maximum_line(dimensions, true, x, sample_height, cells, queue);
         check()?;
     }
-    // Dilate anchors horizontally, then vertically. Complete interval unions
-    // need no overlap counter, so large images cannot overflow coverage counts.
+    // Qualifying centres remain the accepted detector's seeds. Small unsupported
+    // components are removed before source-aware reconstruction, rather than expanded.
     for y in 0..height {
-        let mut right = 0;
+        let top = y.saturating_sub((sample_height - 1) / 2).min(rows - 1);
         for x in 0..width {
-            let cell = &mut cells[y * width + x];
-            if y < rows && x < columns && cell[2] <= contrast_threshold {
-                right = x + sample_width;
-            }
-            cell[0] = if x < right { 1.0 } else { 0.0 };
+            let left = x.saturating_sub((sample_width - 1) / 2).min(columns - 1);
+            cells[y * width + x][0] = if cells[top * width + left][2] <= contrast_threshold {
+                1.0
+            } else {
+                0.0
+            };
         }
         check()?;
     }
-    for x in 0..width {
-        let mut bottom = 0;
-        for y in 0..height {
-            let cell = &mut cells[y * width + x];
-            if cell[0] == 1.0 {
-                bottom = y + sample_height;
+    // A coarse test that reads across lineart can reject its smooth side.
+    // Only this hard-edge shadow may bypass local rejection; source-colour
+    // barriers below still prevent coverage from crossing the line itself.
+    let edge_radius = (sample_size as f32 / 2.0).max(1.0);
+    for row in cells.chunks_exact_mut(width) {
+        for cell in row {
+            cell[2] = if cell[1] < 0.0 {
+                0.0
+            } else {
+                edge_radius + 1.0
+            };
+        }
+        check()?;
+    }
+    geometric_distance(dimensions, cells, &mut check)?;
+    for row in cells.chunks_exact_mut(width) {
+        for cell in row {
+            let contrast = if cell[1] < 0.0 {
+                -cell[1] - 1.0
+            } else {
+                cell[1]
+            };
+            let allowed = contrast <= contrast_threshold || cell[2] <= edge_radius;
+            cell[1] = if allowed { 1.0 } else { -1.0 };
+            cell[2] = if allowed { edge_radius } else { 0.0 };
+        }
+        check()?;
+    }
+    // Feather genuine regional/texture rejection, rather than eroding the
+    // gradient side of a hard source boundary.
+    geometric_distance(dimensions, cells, &mut check)?;
+    for row in cells.chunks_exact_mut(width) {
+        for cell in row {
+            if cell[1] >= 0.0 {
+                let t = (cell[2] / edge_radius).clamp(0.0, 1.0);
+                cell[1] = t * t * (3.0 - 2.0 * t);
             }
-            cell[2] = if y < bottom { 1.0 } else { 0.0 };
+        }
+        check()?;
+    }
+    let reach = sample_size as f32;
+    retain_regions(
+        dimensions,
+        (sample_width * sample_height).div_ceil(MINIMUM_REGION_DIVISOR),
+        reach * 2.0,
+        cells,
+        &mut check,
+    )?;
+    for direction in [(false, false), (true, true), (false, true), (true, false)] {
+        spread(
+            source,
+            contrast_threshold,
+            reach,
+            direction,
+            cells,
+            queue,
+            &rgb8_to_oklab,
+            &mut check,
+        )?;
+    }
+    for row in cells.chunks_exact_mut(width) {
+        for cell in row {
+            let t = ((2.0 * reach - cell[2]) / reach).clamp(0.0, 1.0);
+            cell[2] = if cell[1] < 0.0 {
+                0.0
+            } else {
+                cell[1] * t * t * (3.0 - 2.0 * t)
+            };
+        }
+        check()?;
+    }
+    Ok(())
+}
+
+/// Fixed blue-noise coverage keeps each chosen algorithm's complete pixel and phase.
+/// Zero coverage remains plain; full coverage retains the ordinary field or diffusion output.
+pub fn covers(mask: f32, x: u32, y: u32) -> bool {
+    // Separate coverage from the blue-noise field itself.
+    const OFFSET: [u32; 2] = [11, 17];
+    mask > crate::spec::dither::blue_noise::blue_noise_at(
+        y.wrapping_add(OFFSET[0]),
+        x.wrapping_add(OFFSET[1]),
+    ) + 0.5
+}
+
+// Queue indices occupy one dead lane as u32 bits, never floating arithmetic.
+// Validated dimensions have at most 2^30 pixels; their index bit patterns are finite.
+fn retain_regions<E>(
+    dimensions: ImageDimensions,
+    minimum: usize,
+    limit: f32,
+    cells: &mut [[f32; 3]],
+    check: &mut impl FnMut() -> Result<(), E>,
+) -> Result<(), E> {
+    let width = dimensions.width_usize();
+    let height = dimensions.height_usize();
+    for row in cells.chunks_exact_mut(width) {
+        for cell in row {
+            cell[2] = if cell[0] == 1.0 { 1.0 } else { -1.0 };
+        }
+        check()?;
+    }
+    for y in 0..height {
+        for x in 0..width {
+            if cells[y * width + x][2] != 1.0 {
+                continue;
+            }
+            cells[y * width + x][2] = -2.0;
+            cells[0][0] = f32::from_bits((y * width + x) as u32);
+            let mut head = 0;
+            let mut tail = 1;
+            while head < tail {
+                let point = cells[head][0].to_bits() as usize;
+                let cx = point % width;
+                let cy = point / width;
+                head += 1;
+                for ny in cy.saturating_sub(1)..=(cy + 1).min(height - 1) {
+                    for nx in cx.saturating_sub(1)..=(cx + 1).min(width - 1) {
+                        if cells[ny * width + nx][2] != 1.0 {
+                            continue;
+                        }
+                        cells[ny * width + nx][2] = -2.0;
+                        cells[tail][0] = f32::from_bits((ny * width + nx) as u32);
+                        tail += 1;
+                    }
+                }
+                if head % width == 0 {
+                    check()?;
+                }
+            }
+            let tag = if tail >= minimum { -3.0 } else { -1.0 };
+            for p in 0..tail {
+                let point = cells[p][0].to_bits() as usize;
+                cells[point][2] = tag;
+                if p % width == 0 {
+                    check()?;
+                }
+            }
+        }
+        check()?;
+    }
+    for row in cells.chunks_exact_mut(width) {
+        for cell in row {
+            cell[2] = if cell[1] < 0.0 {
+                -1.0
+            } else if cell[2] == -3.0 {
+                0.0
+            } else {
+                limit
+            };
+        }
+        check()?;
+    }
+    Ok(())
+}
+
+// Source-independent eight-neighbour distance is used only to identify an edge
+// shadow and soften regional boundaries. Image borders are not rejection sites.
+fn geometric_distance<E>(
+    dimensions: ImageDimensions,
+    cells: &mut [[f32; 3]],
+    check: &mut impl FnMut() -> Result<(), E>,
+) -> Result<(), E> {
+    let width = dimensions.width_usize();
+    let height = dimensions.height_usize();
+    for reverse in [false, true] {
+        for sy in 0..height {
+            let y = if reverse { height - 1 - sy } else { sy };
+            for sx in 0..width {
+                let x = if reverse { width - 1 - sx } else { sx };
+                let mut value = cells[y * width + x][2];
+                for (dx, dy) in [(-1_isize, 0_isize), (-1, -1), (0, -1), (1, -1)] {
+                    let Some(nx) = x.checked_add_signed(if reverse { -dx } else { dx }) else {
+                        continue;
+                    };
+                    let Some(ny) = y.checked_add_signed(if reverse { -dy } else { dy }) else {
+                        continue;
+                    };
+                    if nx >= width || ny >= height {
+                        continue;
+                    }
+                    let step = if dx != 0 && dy != 0 {
+                        std::f32::consts::SQRT_2
+                    } else {
+                        1.0
+                    };
+                    value = value.min(cells[ny * width + nx][2] + step);
+                }
+                cells[y * width + x][2] = value;
+            }
+            check()?;
+        }
+    }
+    Ok(())
+}
+
+// Four bounded chamfer sweeps reconstruct rounded contours along smooth source
+// colours. Hard colour jumps are barriers; local variation makes texture costly.
+#[allow(clippy::too_many_arguments)]
+fn spread<E>(
+    source: ImageView<'_, Rgba8>,
+    tolerance: f32,
+    reach: f32,
+    (reverse_y, reverse_x): (bool, bool),
+    cells: &mut [[f32; 3]],
+    rows: &mut [[f32; 3]],
+    convert: &impl Fn([u8; 3]) -> [f32; 3],
+    check: &mut impl FnMut() -> Result<(), E>,
+) -> Result<(), E> {
+    let width = source.dimensions().width_usize();
+    let height = source.dimensions().height_usize();
+    let mut tags = [usize::MAX; 3];
+    for step_y in 0..height {
+        let y = if reverse_y {
+            height - 1 - step_y
+        } else {
+            step_y
+        };
+        for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
+            if tags[ny % 3] == ny {
+                continue;
+            }
+            let input = source.row(ny as u32).expect("validated row");
+            for (pixel, target) in input
+                .chunks_exact(4)
+                .zip(&mut rows[(ny % 3) * width..(ny % 3 + 1) * width])
+            {
+                *target = convert([pixel[0], pixel[1], pixel[2]]);
+            }
+            tags[ny % 3] = ny;
+            check()?;
+        }
+        for step_x in 0..width {
+            let x = if reverse_x {
+                width - 1 - step_x
+            } else {
+                step_x
+            };
+            if cells[y * width + x][2] < 0.0 {
+                continue;
+            }
+            let centre = rows[(y % 3) * width + x];
+            let mut distance = cells[y * width + x][2];
+            for (dx, dy) in [(-1_isize, 0_isize), (-1, -1), (0, -1), (1, -1)] {
+                let Some(nx) = x.checked_add_signed(if reverse_x { -dx } else { dx }) else {
+                    continue;
+                };
+                let Some(ny) = y.checked_add_signed(if reverse_y { -dy } else { dy }) else {
+                    continue;
+                };
+                if nx >= width || ny >= height {
+                    continue;
+                }
+                if cells[ny * width + nx][2] < 0.0 {
+                    continue;
+                }
+                let jump = color_distance(centre, rows[(ny % 3) * width + nx]).min(1.0);
+                if jump > tolerance {
+                    continue;
+                }
+                let diagonal = dx != 0 && dy != 0;
+                if diagonal
+                    && (color_distance(centre, rows[(y % 3) * width + nx]).min(1.0) > tolerance
+                        || color_distance(centre, rows[(ny % 3) * width + x]).min(1.0) > tolerance)
+                {
+                    continue;
+                }
+                let step = if diagonal {
+                    std::f32::consts::SQRT_2
+                } else {
+                    1.0
+                };
+                let variation = if tolerance == 0.0 {
+                    0.0
+                } else {
+                    jump / (step * tolerance)
+                };
+                let cost = step * (1.0 + reach * variation * variation);
+                distance = distance.min(cells[ny * width + nx][2] + cost);
+            }
+            cells[y * width + x][2] = distance;
         }
         check()?;
     }
@@ -120,6 +406,62 @@ pub fn select<E>(
 fn color_distance(left: [f32; 3], right: [f32; 3]) -> f32 {
     let [dl, da, db] = std::array::from_fn(|c| left[c] - right[c]);
     (dl * dl + da * da + db * db).sqrt()
+}
+
+fn unsigned([l, a, b]: [f32; 3]) -> [f32; 3] {
+    [l.abs(), a, b]
+}
+
+// A concentrated one/two-pixel jump supplies a boundary witness. This support
+// test is independent of tolerance, preserving monotonic inclusion as tolerance
+// rises. The sign of nonnegative Oklab L carries the bit through coarse means.
+fn mark_boundaries<E>(
+    dimensions: ImageDimensions,
+    cells: &mut [[f32; 3]],
+    check: &mut impl FnMut() -> Result<(), E>,
+) -> Result<(), E> {
+    let width = dimensions.width_usize();
+    let height = dimensions.height_usize();
+    for y in 0..height {
+        for x in 0..width {
+            let centre = unsigned(cells[y * width + x]);
+            let mut minimum = centre;
+            let mut maximum = centre;
+            let mut fine = 0.0_f32;
+            for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
+                for nx in x.saturating_sub(1)..=(x + 1).min(width - 1) {
+                    let color = unsigned(cells[ny * width + nx]);
+                    fine = fine.max(color_distance(centre, color));
+                    for c in 0..3 {
+                        minimum[c] = minimum[c].min(color[c]);
+                        maximum[c] = maximum[c].max(color[c]);
+                    }
+                }
+            }
+            for ny in [
+                y.saturating_sub(EDGE_PROBE_RADIUS),
+                y,
+                (y + EDGE_PROBE_RADIUS).min(height - 1),
+            ] {
+                for nx in [
+                    x.saturating_sub(EDGE_PROBE_RADIUS),
+                    x,
+                    (x + EDGE_PROBE_RADIUS).min(width - 1),
+                ] {
+                    let color = unsigned(cells[ny * width + nx]);
+                    for c in 0..3 {
+                        minimum[c] = minimum[c].min(color[c]);
+                        maximum[c] = maximum[c].max(color[c]);
+                    }
+                }
+            }
+            if fine > 0.0 && 2.0 * fine >= color_distance(minimum, maximum) {
+                cells[y * width + x][0] = -centre[0];
+            }
+        }
+        check()?;
+    }
+    Ok(())
 }
 
 // Symmetrically shrink the box at image boundaries, so truncation cannot create
@@ -146,7 +488,7 @@ fn average_line(
         }
     };
     for position in 0..length {
-        queue[position] = cells[index(position)];
+        queue[position] = unsigned(cells[index(position)]);
     }
     let mut sum = [0.0_f64; 3];
     let mut left = 0;
@@ -167,7 +509,12 @@ fn average_line(
             }
             left += 1;
         }
-        cells[index(position)] = sum.map(|v| (v / (end - start) as f64) as f32);
+        let marked = cells[index(position)][0].is_sign_negative();
+        let mut mean = sum.map(|v| (v / (end - start) as f64) as f32);
+        if marked {
+            mean[0] = -mean[0];
+        }
+        cells[index(position)] = mean;
     }
 }
 

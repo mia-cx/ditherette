@@ -1,3 +1,146 @@
+/** Proves boundary density, gradient-side coverage, isolated texture and exact output choices. */
+export function featherChecks(processor) {
+	const field = { algorithm: 'bayer', size: '16' };
+	const palette = [
+		[0, 0, 0],
+		[64, 80, 96],
+		[128, 112, 144],
+		[144, 160, 176],
+		[255, 255, 255]
+	].map((rgb) => ({ kind: 'color', rgb }));
+	const cases = [
+		{
+			name: 'boundary',
+			width: 384,
+			height: 384,
+			size: 64,
+			tolerance: 0.12,
+			pixel(x, y) {
+				const r = Math.hypot(x - 191.5, y - 191.5);
+				const wave =
+					r <= 72 ? 0 : 64 * Math.sin(((r - 72) * Math.PI) / 16) * Math.min(1, (r - 72) / 12);
+				const v = Math.round(128 + wave);
+				return [v - 16, v, v + 16];
+			}
+		},
+		{
+			name: 'lineart',
+			width: 384,
+			height: 128,
+			size: 20,
+			tolerance: 0.06,
+			pixel(x, y) {
+				if (x < 300) {
+					const v = 80 + Math.floor(x / 4);
+					return [v - 8, v, v + 8];
+				}
+				if (x < 312) return [16, 16, 24];
+				return (x + y) % 2 ? [16, 24, 40] : [224, 232, 240];
+			}
+		},
+		{
+			name: 'island',
+			width: 128,
+			height: 128,
+			size: 20,
+			tolerance: 0.06,
+			pixel(x, y) {
+				return x >= 52 && x < 76 && y >= 52 && y < 76
+					? [112, 128, 144]
+					: (x + y) % 2
+						? [16, 24, 40]
+						: [224, 232, 240];
+			}
+		}
+	];
+	const summary = {},
+		failures = [];
+	for (const item of cases) {
+		const { width, height } = item,
+			data = new Uint8Array(width * height * 4);
+		for (let y = 0; y < height; y++)
+			for (let x = 0; x < width; x++) data.set([...item.pixel(x, y), 255], (y * width + x) * 4);
+		const source = { width, height, data };
+		const placement = {
+			mode: 'smooth-area-v1',
+			sampleSize: item.size,
+			contrastThreshold: item.tolerance
+		};
+		const marked = processor.perturb({
+			version: 1,
+			source,
+			perturb: { field, space: 'srgb', strength: 8, placement }
+		});
+		const mask = Array.from(
+			{ length: width * height },
+			(_, i) => marked.data[i * 4] !== data[i * 4]
+		);
+		if (item.name === 'boundary') {
+			const profile = [];
+			for (let start = 232; start < 324; start += 4) {
+				let n = 0;
+				for (let y = 184; y < 200; y++)
+					for (let x = start; x < start + 4; x++) n += Number(mask[y * width + x]);
+				profile.push(n / 64);
+			}
+			summary.profile = profile;
+			if (profile.filter((v) => v > 1 / 64 && v < 63 / 64).length < 3)
+				failures.push('Hard regional cutoff');
+			if (!mask[192 * width + 192]) throw Error('Coherent ramp interior lost its full field.');
+			if (mask[192 * width + 340]) throw Error('Dither reached distant paint texture.');
+		}
+		if (item.name === 'lineart') {
+			let edge = 0,
+				line = 0;
+			for (let y = 32; y < 96; y++) {
+				edge += Number(mask[y * width + 299]);
+				line += Number(mask[y * width + 300]);
+			}
+			summary.gradientSide = edge;
+			summary.lineart = line;
+			if (edge !== 64 || line !== 0) failures.push('Gradient-side fringe or lineart leak');
+		}
+		if (item.name === 'island') {
+			summary.island = mask.filter(Boolean).length;
+			if (summary.island !== 0) failures.push('Unsupported isolated region');
+		}
+		const base = {
+			version: 1,
+			source,
+			palette,
+			alpha: { mode: 'premultiplied' },
+			matching: 'oklab-euclidean'
+		};
+		const plain = processor.quantize(base);
+		for (const ordinary of [
+			{
+				family: 'separable',
+				perturb: { field, space: 'oklab', strength: 0.3, placement: { mode: 'everywhere' } }
+			},
+			{
+				family: 'diffusion',
+				kernel: 'sierra',
+				feedback: 'matching',
+				serpentine: true,
+				strength: 0.3,
+				placement: { mode: 'everywhere' }
+			}
+		]) {
+			const normal = processor.ditherAndQuantize({ ...base, dither: ordinary });
+			const dither =
+				ordinary.family === 'separable'
+					? { ...ordinary, perturb: { ...ordinary.perturb, placement } }
+					: { ...ordinary, placement };
+			const actual = processor.ditherAndQuantize({ ...base, dither });
+			for (let i = 0; i < mask.length; i++)
+				if (actual.indices[i] !== (mask[i] ? normal.indices[i] : plain.indices[i]))
+					throw Error(`Texture/recurrence changed: ${item.name}/${ordinary.family}/${i}`);
+		}
+	}
+	if (failures.length) throw Error(JSON.stringify({ summary, failures }));
+	return summary;
+}
+
 /** Proves coherent 2D areas retain Bayer/Sierra texture at large sample sizes. */
 export function areaChecks(processor) {
 	const width = 128,
@@ -7,7 +150,7 @@ export function areaChecks(processor) {
 		for (let y = 0; y < height; y++)
 			for (let x = 0; x < width; x++) {
 				let rgb;
-				if (kind === 'step') rgb = Array(3).fill(x < 64 ? 40 : 208);
+				if (kind === 'step') rgb = Array(3).fill(x < 63 ? 40 : x > 64 ? 208 : 4);
 				else if (kind === 'wide-ramp')
 					rgb = [
 						Math.round((255 * x) / 127),
