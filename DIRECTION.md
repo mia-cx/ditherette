@@ -28,8 +28,9 @@ Keep that workflow clear and fast, including large images.
   The development preview compares fine and coarse perceptual contrast, then dithers
   whole qualifying areas while preserving each algorithm's normal texture. Sample size
   controls spatial scale; contrast tolerance controls the accepted colour jump.
-  Edge/ramp detection is visually accepted. Smooth mask shapes and gradual boundary
-  transitions remain before final acceptance at https://development.ditherette.mia.cx.
+  Edge/ramp detection is visually accepted. Preserve brush texture and lineart while
+  bringing dithered gradients right up to their edges. Smooth mask contours and remove
+  isolated dither patches before final acceptance at https://development.ditherette.mia.cx.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
