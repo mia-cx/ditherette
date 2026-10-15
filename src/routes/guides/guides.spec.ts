@@ -27,9 +27,7 @@ describe('guide pages', () => {
 			const canonicals = head.match(/<link rel="canonical"/g) ?? [];
 			expect(canonicals, path).toHaveLength(1);
 			const canonical = canonicalUrl(path);
-			expect(head, path).toMatch(
-				new RegExp(`<link rel="canonical" href="${canonical.replace(/[/.:]/g, '\\$&')}"/?>`)
-			);
+			expect(head, path).toContain(`<link rel="canonical" href="${canonical}"`);
 			expect(metaContent(head, 'og:url', 'property')).toBe(canonical);
 			expect(metaContent(head, 'description')?.length, path).toBeGreaterThan(0);
 		}
