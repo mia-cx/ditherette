@@ -6,7 +6,13 @@ test('installed package preserves gradient placement across actual scalar/thread
 	installedBrowserChecks(
 		t,
 		undefined,
-		{ publicCases: 14, exactScalarThreaded: true, repeatedPlateaus: true, actualWorkers: true },
+		{
+			publicCases: 14,
+			exactScalarThreaded: true,
+			repeatedPlateaus: true,
+			actualWorkers: true,
+			coloredTextureCases: 75
+		},
 		{
 			isolated: true,
 			assets: Object.fromEntries(

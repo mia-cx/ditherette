@@ -13,7 +13,7 @@ The [reference](../../crates/ditherette-wasm/src/spec/smooth_gradient_v1.md) def
 ## Work
 
 - [x] Reproduce edge selection and missing ramp output through actual Bayer and diffusion calls.
-- [x] Add the append-only reference, production selector, capacity preflight and diffusion isolation.
+- [x] Add the append-only reference, production selector, capacity preflight and visible diffusion masking.
 - [x] Prove quantized/nonlinear/oblique gradients, flat tails, exact parity, cancellation and bounded native calls.
 - [x] Validate actual scalar/threaded package requests, validation and historical frozen conformance.
 - [x] Record the append-only freeze extension for parent review and UI integration.
@@ -28,10 +28,19 @@ Broad-ramp contrast activates only weakly enough that reconstruction rounds the 
 Legacy diffusion masks outgoing error after matching an already contaminated pixel.
 
 With the new selector, the same hard steps, eight-pixel ramp and flat fill change zero pixels.
-The 96px ramp changes 632 Bayer pixels and 629 Floyd-Steinberg pixels.
-A 2048px repeated-byte ramp selects 99.32%; the quadratic ramp selects 83.30% at minimum256.
+The initial extension's 96px ramp changed 632 Bayer pixels and 629 Floyd-Steinberg pixels.
+A 2048px repeated-byte ramp selects 99.32%; the quadratic ramp selects 93.60% at minimum256.
 The oblique fixture selects 100%. Short ramps with long flat tails and tested texture select zero.
 Every mathematical fixture also preserves selection when transposed. Equal slopes use the longer support.
+
+The supplied Celeste original later exposed sparse bands in Bayer and Sierra at minimum4.
+Its smooth sky contains one- and two-byte channel reversals, which the first selector treated as texture.
+A generated two-byte-quantized coloured plane reproduced the same selection failure without retaining the image.
+The selector now tolerates two-byte fitting error and bounded channel backtracking. Sharp steps, true flat
+tails and the existing texture controls remain excluded. The fixed guard remains one pixel wide.
+Diffusion now keeps the ordinary kernel recurrence and masks only the visible result. Selected indices
+equal Everywhere; excluded indices equal plain matching. The first implementation's incoming/outgoing
+gates depleted the recurrence at mask holes and changed Sierra's texture even inside selected regions.
 
 ## Capacity and ownership
 
@@ -49,8 +58,9 @@ Source changes recompute analysis; minimum-size changes affect processing identi
 
 ## Validation scope
 
-Synthetic fixtures prove the defect and controls; supplied screenshots are output, not original source images.
-They cannot establish exact original-image reproduction. Developer builds use supported task-specific
+Initial screenshots were output, so initial synthetic evidence did not reproduce the original image.
+The subsequent Celeste original supports exact input controls and sky before/after evidence. Private image
+bytes stay outside the repository. Developer builds use supported task-specific
 temporary compiler targets because the root filesystem lacks space. They are not release qualification,
 timed performance evidence, GPU hardware evidence or permission to publish.
 Reference content, compiler, build configuration and resolved dependencies pass local checks.

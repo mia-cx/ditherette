@@ -425,7 +425,8 @@ Kernels are `floyd-steinberg`, `sierra`, `sierra-lite`, `atkinson`, `jarvis-judi
 Sierra3 is `sierra`, and Sierra-2-4A (Filter Lite) is `sierra-lite`.
 `srgb-bytes` feedback rounds and clips before matching. `matching` feedback keeps unrounded coordinates in the selected matching space.
 Serpentine scanning reverses alternate rows. Adaptive placement uses the unchanged source and the matching space.
-Smooth gradient placement isolates excluded pixels from incoming and outgoing error, so flat fills stay equal to direct matching.
+Smooth gradient placement keeps the ordinary kernel recurrence and masks its visible output.
+Selected pixels equal Everywhere dithering; excluded pixels equal direct matching, so flat fills stay clean.
 Preserved transparent pixels discard incoming error and emit none. Palette order, duplicates, and warnings follow direct quantization.
 Diffusion stays scalar and reserves three work rows. Recurrence scratch scales with width; smooth-gradient analysis uses the full-image storage described above.
 Owned source and index buffers also count toward the limit.

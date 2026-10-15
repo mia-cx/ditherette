@@ -3,10 +3,12 @@ use crate::image::{ImageView, Rgba8};
 
 pub mod render;
 
-const FIT_ERROR: f64 = 1.0;
+// Two-byte colour quantization can shift each endpoint by one byte in opposite directions.
+const FIT_ERROR: f64 = 2.0;
 const CHUNK_CHANGE: i16 = 4;
 const MAX_STEP: i16 = 8;
 const MAX_SLOPE_RATIO: f64 = 4.0;
+const QUANTIZATION_BACKTRACK: i16 = 2;
 
 /// Writes horizontal support, horizontal slope, and the final binary mask into caller-owned scratch.
 /// The two scans are linear in pixel count, independent of the requested minimum size.
@@ -117,6 +119,7 @@ fn scan_line(
     let mut lower = [f64::NEG_INFINITY; 3];
     let mut upper = [f64::INFINITY; 3];
     let mut direction = [0; 3];
+    let mut extreme = pixel(0);
     let mut previous_slope: Option<[f64; 3]> = None;
     let finish = |start: usize,
                   first: Option<usize>,
@@ -134,6 +137,7 @@ fn scan_line(
         emit(begin, last, slope as f32);
     };
     for i in 1..length {
+        let color = pixel(i);
         let step = difference(pixel(i), pixel(i - 1));
         let delta = difference(pixel(i), pixel(chunk));
         let distance = (i - chunk) as f64;
@@ -145,7 +149,8 @@ fn scan_line(
         });
         let invalid = (0..3).any(|axis| {
             step[axis].abs() > MAX_STEP
-                || (direction[axis] != 0 && step[axis] * direction[axis] < 0)
+                || (direction[axis] != 0
+                    && (color[axis] - extreme[axis]) * direction[axis] < -QUANTIZATION_BACKTRACK)
                 || next_lower[axis] > next_upper[axis]
         });
         if invalid {
@@ -160,6 +165,7 @@ fn scan_line(
             first_change = None;
             last_change = start;
             direction = [0; 3];
+            extreme = pixel(start);
             lower = [f64::NEG_INFINITY; 3];
             upper = [f64::INFINITY; 3];
             previous_slope = None;
@@ -173,11 +179,19 @@ fn scan_line(
         if step != [0; 3] {
             first_change.get_or_insert(i - 1);
             last_change = i;
-            for axis in 0..3 {
-                if step[axis] != 0 {
-                    direction[axis] = step[axis].signum();
-                }
+        }
+        // A byte-level reversal is quantization noise until it exceeds the source tolerance.
+        // Lock direction from an actual colour interval, rather than its first noisy step.
+        let run_delta = difference(color, pixel(start));
+        for axis in 0..3 {
+            if direction[axis] == 0 && run_delta[axis].abs() >= CHUNK_CHANGE {
+                direction[axis] = run_delta[axis].signum();
             }
+            extreme[axis] = match direction[axis] {
+                1 => extreme[axis].max(color[axis]),
+                -1 => extreme[axis].min(color[axis]),
+                _ => color[axis],
+            };
         }
         let delta = difference(pixel(i), pixel(chunk));
         if delta.iter().any(|v| v.abs() >= CHUNK_CHANGE) {
