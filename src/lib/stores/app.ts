@@ -7,6 +7,7 @@ import {
 	TRANSPARENT_KEY,
 	WPLACE,
 	WPLACE_PALETTE_NAME,
+	correctedWplaceKey,
 	defaultEnabledState,
 	enabledPalette,
 	paletteColorEnabled,
@@ -123,6 +124,13 @@ export const activePalette = computed([activePaletteName, customPalettes], (name
 export const selectedPalette = computed([activePalette, paletteEnabled], (palette, enabled) =>
 	enabledPalette(palette, enabled)
 );
+
+// A matte saved under a corrected Wplace key follows the corrected colour, unless the active
+// palette holds that exact previous colour, as a custom palette may.
+const savedMatte = outputSettings.get().matteKey;
+const correctedMatte = correctedWplaceKey(savedMatte);
+if (correctedMatte && !activePalette.get().colors.some((color) => color.key === savedMatte))
+	outputSettings.set({ ...outputSettings.get(), matteKey: correctedMatte });
 
 export type SourceMeta = Omit<SourceImageRecord, 'blob'>;
 
