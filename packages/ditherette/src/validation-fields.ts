@@ -120,7 +120,7 @@ function normalizePolicy(value: unknown, path: string) {
 function normalizePlacement(value: unknown, path: string) {
 	const inputPlacement = object(
 		value,
-		['mode', 'radius', 'threshold', 'softness'],
+		['mode', 'radius', 'threshold', 'softness', 'minGradientSize'],
 		'invalid-settings',
 		`${path}.placement`
 	);
@@ -130,7 +130,7 @@ function normalizePlacement(value: unknown, path: string) {
 		threshold = 0,
 		softness = 0;
 	if (mode === 'everywhere') {
-		for (const key of ['radius', 'threshold', 'softness'])
+		for (const key of ['radius', 'threshold', 'softness', 'minGradientSize'])
 			if (Object.hasOwn(inputPlacement, key))
 				throw new DitheretteError(
 					'invalid-settings',
@@ -139,6 +139,12 @@ function normalizePlacement(value: unknown, path: string) {
 				);
 		placement = 0;
 	} else if (mode === 'adaptive') {
+		if (Object.hasOwn(inputPlacement, 'minGradientSize'))
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.placement.minGradientSize`,
+				'Legacy Adaptive takes radius, threshold and softness.'
+			);
 		const value = field(inputPlacement, 'radius');
 		if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 32_768)
 			throw new DitheretteError(
@@ -150,6 +156,24 @@ function normalizePlacement(value: unknown, path: string) {
 		threshold = scalar(field(inputPlacement, 'threshold'), `${path}.placement.threshold`);
 		softness = scalar(field(inputPlacement, 'softness'), `${path}.placement.softness`);
 		placement = 1;
+	} else if (mode === 'smooth-gradient-v1') {
+		for (const key of ['radius', 'threshold', 'softness'])
+			if (Object.hasOwn(inputPlacement, key))
+				throw new DitheretteError(
+					'invalid-settings',
+					`${path}.placement.${key}`,
+					'Smooth gradient placement takes only minGradientSize.'
+				);
+		const value = field(inputPlacement, 'minGradientSize');
+		if (typeof value !== 'number' || !Number.isInteger(value) || value < 4 || value > 32_768)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.placement.minGradientSize`,
+				'Expected a minimum gradient size from 4 through 32768 pixels.'
+			);
+		// Versioned private tag 2 reuses the inactive radius slot for spatial size.
+		placement = 2;
+		radius = value;
 	} else
 		throw new DitheretteError(
 			'invalid-settings',

@@ -144,6 +144,11 @@ export type Placement =
 			readonly radius: number;
 			readonly threshold: number;
 			readonly softness: number;
+	  }
+	| {
+			readonly mode: 'smooth-gradient-v1';
+			/** Integer 4..32768 in working pixels, after any process resize. Editor default: 24. */
+			readonly minGradientSize: number;
 	  };
 
 /** Finite nonnegative f32 controls. Adaptive radius is an integer from 1 through 32768. */

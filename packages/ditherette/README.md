@@ -382,7 +382,18 @@ Adaptive placement uses the original image's eight-neighbor contrast and fixed c
 Cylindrical placement uses the minimum-chroma hue arc, not matching's circular chord.
 Radius is an integer from 1 through 32,768. Strength, threshold, and softness accept finite nonnegative f32-range numbers.
 The implementation rounds these controls to f32, but reconstructs perturbed coordinates with wide arithmetic before final RGB clipping and byte rounding.
-Zero strength preserves every source byte. Both placement modes preserve alpha and hidden RGB processing.
+Zero strength preserves every source byte. Placement preserves alpha and hidden RGB processing.
+
+`{ mode: 'smooth-gradient-v1', minGradientSize: 24 }` selects extended smooth gradients.
+`minGradientSize` is an integer from 4 through 32,768 in working pixels, after any `process` resize.
+Direct `perturb` and `ditherAndQuantize` calls measure source pixels. Larger values exclude shorter gradients.
+This versioned selector reads original encoded RGB independently of palette and working space.
+It allows repeated RGB8 values within a gradient and rejects hard boundaries, flat fills and short texture runs.
+Its fixed smoothness criterion permits byte quantization and gradual nonlinear ramps; it excludes channel reversals,
+steps over eight byte levels per pixel and signals smaller than four byte levels.
+Long smooth monotone portions of a texture can qualify. The [reference](../../crates/ditherette-wasm/src/spec/smooth_gradient_v1.md)
+records its complete criterion and projection limits. Legacy `adaptive` recipes keep their original contrast behavior.
+Analysis needs twelve bytes per working pixel plus fixed call bookkeeping, within the existing memory limit.
 
 `ditherAndQuantize` quantizes that completed RGBA8 result, with the same indices, palette, and warnings as `quantize(perturb(...))`.
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
@@ -414,8 +425,10 @@ Kernels are `floyd-steinberg`, `sierra`, `sierra-lite`, `atkinson`, `jarvis-judi
 Sierra3 is `sierra`, and Sierra-2-4A (Filter Lite) is `sierra-lite`.
 `srgb-bytes` feedback rounds and clips before matching. `matching` feedback keeps unrounded coordinates in the selected matching space.
 Serpentine scanning reverses alternate rows. Adaptive placement uses the unchanged source and the matching space.
+Smooth gradient placement isolates excluded pixels from incoming and outgoing error, so flat fills stay equal to direct matching.
 Preserved transparent pixels discard incoming error and emit none. Palette order, duplicates, and warnings follow direct quantization.
-Diffusion stays scalar and reserves three work rows. Scratch capacity scales with width; owned source and index buffers also count toward the limit.
+Diffusion stays scalar and reserves three work rows. Recurrence scratch scales with width; smooth-gradient analysis uses the full-image storage described above.
+Owned source and index buffers also count toward the limit.
 An arithmetic overflow returns `runtime` at `dither.arithmetic`, publishes no result, and leaves the instance usable.
 
 ## Yliluoma
@@ -435,6 +448,7 @@ const indexed = processor.ditherAndQuantize({
 
 Matrix sizes are `'2'`, `'4'`, `'8'`, and `'16'`. Adaptive placement uses the controls shown above.
 Yliluoma searches every ordered palette pair and matrix ratio. A zero adaptive mask still searches mixtures of the nearest color.
+Smooth gradient placement uses the original nearest palette entry at excluded pixels.
 It allocates source and index storage without an RGBA8 intermediate or mixture table.
 Exact outputs follow the frozen Wasm reference; native floating-point math can select different mixtures near ties.
 
