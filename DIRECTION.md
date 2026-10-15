@@ -8,10 +8,14 @@ Keep that workflow clear and fast, including large images.
 
 - CI now delivers verified main commits to https://ditherette.mia.cx on Cloudflare,
   after fresh conformance at the exact commit. npm publication has separate gates.
+- Public guides cover Wplace templates and colours, dithering, and fixed-palette
+  quantisation. They lead into the editor without loading its workers or Wasm.
 - Rust/Wasm provides the normal processing path. The frozen CPU reference stays
   in `spec/`; production copies live in `prod/` and earn optimizations through benchmarks.
 - Indexed PNG encoding runs in a disposable worker and cancels superseded exports.
   Quantitative export benchmarks remain open.
+- Saved-image persistence shares an IndexedDB connection and recovers after closure.
+  Writes still wait for transaction completion; timed persistence qualification remains open.
 - The dependency audit is clear. Scoped security overrides carry executable
   compatibility checks.
 - The palette shows per-colour pixel counts and the total pixels to paint.
@@ -41,9 +45,6 @@ Website delivery proceeds independently of npm publication holds.
 3. Improve large-output rendering, PNG export, and persistence.
 4. Connect and qualify GPU stages with CPU fallback and explicit memory accounting.
 5. Complete features with settled requirements.
-
-Search discovery should cover Wplace templates, colour conversion, dithering,
-palette fitting, and quantisation. Useful public guides should lead into the editor.
 
 ## Decisions still requiring Mia
 
