@@ -42,6 +42,9 @@ visibility and a saved Teal matte must follow the corrected colour.
   Wplace, the panel fell back to Black and processing to Green. The matte key now resolves where it
   meets a palette: the exact key, else its correction partner. The stored key is never rewritten,
   so switching back keeps the custom palette's exact colour.
+- The key resolves against the whole active palette, hidden colours included (`paletteOutputSettings`
+  for processing, `currentPalette` in the panel). A hidden exact colour then takes main's
+  disabled-matte fallback instead of its correction partner. The package adapter is unchanged.
 - `SPEC.md` and `crates/ditherette-bench/examples/recolour_evaluation.rs` now list `#10AEA6`. The
   example was compile-checked only.
 - Validation: server vitest for `wplace.spec.ts`, `app.spec.ts`, `wplace-teal-state.spec.ts`,
