@@ -445,28 +445,6 @@ impl BorrowedDiffusion<'_> {
                 indices[offset] = index;
                 continue;
             }
-            // Smooth placement is an isolation boundary for incoming as well as outgoing error.
-            // Original alpha preparation and nearest matching still apply to excluded pixels.
-            if smooth.is_some_and(|mask| mask[offset][2] == 0.0) {
-                let rgb = match self.quantizer.palette().prepare_pixel([
-                    row[x * 4],
-                    row[x * 4 + 1],
-                    row[x * 4 + 2],
-                    row[x * 4 + 3],
-                ]) {
-                    PalettePixel::Index(index) => {
-                        indices[offset] = index;
-                        continue;
-                    }
-                    PalettePixel::Color(rgb) => rgb,
-                };
-                indices[offset] = self
-                    .quantizer
-                    .nearest_finite(self.quantizer.converter().coordinates(rgb))
-                    .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))?
-                    .index;
-                continue;
-            }
             let current = self.work[work_rows[0] + x];
             if current.iter().any(|value| !value.is_finite()) {
                 return Err(arithmetic(ErrorPath::DiffusionWork));
@@ -504,7 +482,26 @@ impl BorrowedDiffusion<'_> {
                     (selected.index, error)
                 }
             };
-            indices[offset] = index;
+            // Placement controls visible output, not the kernel's continuous recurrence.
+            // Skipping masked work depletes feedback and destroys the selected Sierra texture.
+            indices[offset] = if smooth.is_some_and(|mask| mask[offset][2] == 0.0) {
+                match self.quantizer.palette().prepare_pixel([
+                    row[x * 4],
+                    row[x * 4 + 1],
+                    row[x * 4 + 2],
+                    row[x * 4 + 3],
+                ]) {
+                    PalettePixel::Index(index) => index,
+                    PalettePixel::Color(rgb) => {
+                        self.quantizer
+                            .nearest_finite(self.quantizer.converter().coordinates(rgb))
+                            .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))?
+                            .index
+                    }
+                }
+            } else {
+                index
+            };
             let mask = match (&placement_row, policy.placement) {
                 (_, Placement::SmoothGradientV1 { .. }) => 1.0,
                 (
@@ -532,9 +529,6 @@ impl BorrowedDiffusion<'_> {
                 };
                 let target_y = y + tap.dy as usize;
                 if target_x >= width || target_y >= height {
-                    continue;
-                }
-                if smooth.is_some_and(|mask| mask[target_y * width + target_x][2] == 0.0) {
                     continue;
                 }
                 if fixed_alpha.is_some_and(|(cutoff, _)| {

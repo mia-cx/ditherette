@@ -42,8 +42,8 @@ pub fn perturb(
     output
 }
 
-/// Uses original prepared colours at excluded pixels and scatters error only between selected pixels.
-/// This full-image oracle keeps the contribution order of every existing kernel.
+/// Masks visible output while preserving the ordinary full-image diffusion recurrence.
+/// Selected pixels retain the kernel's texture; excluded pixels use original prepared colours.
 pub fn diffuse(
     quantize: QuantizeRequest<'_>,
     policy: DiffusionPolicy,
@@ -99,11 +99,6 @@ pub fn diffuse(
                 }
                 PalettePixel::Color(rgb) => rgb,
             };
-            if mask[offset][2] == 0.0 {
-                indices.data_mut()[offset] =
-                    nearest(&matcher, rgb8_to_coordinates(rgb, space))?.index;
-                continue;
-            }
             let current = work[offset];
             if current.iter().any(|v| !v.is_finite()) {
                 return Err(arithmetic());
@@ -126,7 +121,11 @@ pub fn diffuse(
                     (selected, error)
                 }
             };
-            indices.data_mut()[offset] = selected.index;
+            indices.data_mut()[offset] = if mask[offset][2] == 0.0 {
+                nearest(&matcher, rgb8_to_coordinates(rgb, space))?.index
+            } else {
+                selected.index
+            };
             for tap in policy.kernel.taps() {
                 let dx = if reverse { -tap.dx } else { tap.dx };
                 let Some(tx) = x.checked_add_signed(dx as isize) else {
@@ -137,7 +136,7 @@ pub fn diffuse(
                     continue;
                 }
                 let target = ty * width + tx;
-                if mask[target][2] == 0.0 || matches!(pixels[target], PalettePixel::Index(_)) {
+                if matches!(pixels[target], PalettePixel::Index(_)) {
                     continue;
                 }
                 let weight = f64::from(tap.weight) * f64::from(policy.strength);

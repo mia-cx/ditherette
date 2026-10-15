@@ -251,3 +251,103 @@ export async function smoothGradientBudgetChecks(createAtLimit) {
 	}
 	return minima;
 }
+
+/** Proves byte-quantized coloured ramps retain each selected algorithm's ordinary texture. */
+export function coloredGradientChecks(processor) {
+	const source = { width: 512, height: 128, data: new Uint8Array(512 * 128 * 4) };
+	for (let y = 0; y < source.height; y++)
+		for (let x = 0; x < source.width; x++) {
+			const chatter = x % 40 === 0 ? 1 : 0;
+			const rgb =
+				x < 480
+					? [
+							2 * Math.round((50 - 0.004 * x - 0.003 * y) / 2),
+							2 * Math.round((10 - 0.001 * x - 0.004 * y) / 2),
+							2 * Math.round((72 - 0.03 * x - 0.04 * y) / 2) + chatter
+						]
+					: [180, 180, 180];
+			source.data.set([...rgb, 255], (y * source.width + x) * 4);
+		}
+	const placement = { mode: 'smooth-gradient-v1', minGradientSize: 4 };
+	const field = { algorithm: 'bayer', size: '16' };
+	// A nonzero field exposes selection through the public RGBA boundary without a private hook.
+	const marked = processor.perturb({
+		version: 1,
+		source,
+		perturb: { field, space: 'srgb', strength: 8, placement }
+	});
+	const selected = Array.from({ length: source.width * source.height }, (_, i) =>
+		[0, 1, 2].some((c) => marked.data[i * 4 + c] !== source.data[i * 4 + c])
+	);
+	const coverage = selected.filter(Boolean).length / (480 * source.height);
+	if (coverage < 0.95) throw new Error(`Quantized coloured ramp has sparse bands: ${coverage}`);
+	const palette = [
+		[0, 0, 0],
+		[96, 0, 24],
+		[107, 80, 246],
+		[120, 12, 153],
+		[51, 57, 65],
+		[104, 70, 52],
+		[210, 210, 210],
+		[255, 255, 255],
+		[12, 129, 110],
+		[156, 132, 49]
+	].map((rgb) => ({ kind: 'color', rgb }));
+	const outputs = [];
+	for (const matching of ['oklab-euclidean', 'srgb-euclidean', 'cielch-hue-arc']) {
+		const base = { version: 1, source, palette, alpha: { mode: 'premultiplied' }, matching };
+		const plain = processor.quantize(base);
+		const policies = [
+			'floyd-steinberg',
+			'sierra',
+			'sierra-lite',
+			'atkinson',
+			'jarvis-judice-ninke',
+			'stucki',
+			'burkes',
+			'two-row-sierra',
+			'fan',
+			'shiau-fan',
+			'shiau-fan-2',
+			'simple-2d'
+		].flatMap((kernel) =>
+			['srgb-bytes', 'matching'].map((feedback) => ({
+				family: 'diffusion',
+				kernel,
+				feedback,
+				strength: 1,
+				serpentine: true,
+				placement: { mode: 'everywhere' }
+			}))
+		);
+		policies.push({
+			family: 'separable',
+			perturb: {
+				field,
+				space: 'oklab',
+				strength: 1,
+				placement: { mode: 'everywhere' }
+			}
+		});
+		for (const dither of policies) {
+			const normal = processor.ditherAndQuantize({ ...base, dither });
+			const masked = processor.ditherAndQuantize({
+				...base,
+				dither:
+					dither.family === 'separable'
+						? { ...dither, perturb: { ...dither.perturb, placement } }
+						: { ...dither, placement }
+			});
+			for (let i = 0; i < selected.length; i++) {
+				if (i % source.width >= 480 && selected[i]) throw new Error('Flat fill was selected.');
+				const expected = selected[i] ? normal.indices[i] : plain.indices[i];
+				if (masked.indices[i] !== expected)
+					throw new Error(
+						`${matching}/${dither.family}/${dither.kernel}/${dither.feedback}: texture changed at ${i}`
+					);
+			}
+			outputs.push([...masked.indices]);
+		}
+	}
+	return { coverage, outputs };
+}

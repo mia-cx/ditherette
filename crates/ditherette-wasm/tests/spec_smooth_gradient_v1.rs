@@ -19,6 +19,9 @@ fn gradient_domain_table() {
         ("one-pixel image", 1, 1, 0, 4, 0.0, 0.0),
         ("one-row ramp", 1024, 1, 3, 24, 0.95, 1.0),
         ("equal slopes in a rectangle", 96, 64, 7, 50, 0.95, 1.0),
+        ("short gentle ramp", 128, 64, 8, 4, 0.04, 0.09),
+        ("short gentle ramp excluded", 128, 64, 8, 24, 0.0, 0.0),
+        ("quantized coloured plane", 512, 128, 9, 4, 0.95, 1.0),
     ] {
         let mut bytes = Vec::new();
         for y in 0..height {
@@ -37,9 +40,21 @@ fn gradient_domain_table() {
                     5 => 64 + (0.5 * x as f64 + 0.7 * y as f64).round() as u32,
                     6 => 64 + (x % 8) * 8,
                     7 => 64 + x + y,
+                    8 => 64 + x.saturating_sub(48).min(8) * 4,
                     _ => 128,
                 } as u8;
-                bytes.extend_from_slice(&[v, v, v, (x + y) as u8]);
+                let rgb = if kind == 9 {
+                    let x = x as f64;
+                    let y = y as f64;
+                    [
+                        (2.0 * ((50.0 - 0.004 * x - 0.003 * y) / 2.0).round()) as u8,
+                        (2.0 * ((10.0 - 0.001 * x - 0.004 * y) / 2.0).round()) as u8,
+                        (2.0 * ((72.0 - 0.03 * x - 0.04 * y) / 2.0).round()) as u8,
+                    ]
+                } else {
+                    [v; 3]
+                };
+                bytes.extend_from_slice(&[rgb[0], rgb[1], rgb[2], (x + y) as u8]);
             }
         }
         let source =
