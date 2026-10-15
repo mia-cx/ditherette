@@ -26,8 +26,9 @@ Keep that workflow clear and fast, including large images.
   Histograms compare stages and report sampled pure black and pure white clipping.
 - Production Adaptive placement follows local contrast and can halo hard edges.
   The development preview preserves each dithering algorithm's normal texture,
-  but its directional mask still fragments smooth areas. Replace it with a two-dimensional
-  contrast test that dithers whole qualifying sample areas. Expose sample size and
+  but its directional mask still fragments smooth areas. Compare fine-scale contrast
+  with broader contrast to separate sharp edges from gradual ramps, even when the ramp's
+  total colour change is large. Dither whole qualifying areas. Expose sample size and
   contrast tolerance; higher tolerance includes less-smooth areas. Visual acceptance
   remains open at https://development.ditherette.mia.cx.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
