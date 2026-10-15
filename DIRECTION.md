@@ -18,6 +18,8 @@ Keep that workflow clear and fast, including large images.
   Its tag and Edit controls remain accessible in narrow panels.
 - Source previews reuse recent effects results and retain the uploaded colour
   index when effects are toggled off and on.
+- Scopes inspect Source, Effects before resize and palette matching, and Output.
+  Histograms compare stages and report sampled pure black and pure white clipping.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
@@ -38,7 +40,7 @@ Website delivery proceeds independently of npm publication holds.
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.
 4. Connect and qualify GPU stages with CPU fallback and explicit memory accounting.
-5. Complete features with settled requirements, including graded histograms.
+5. Complete features with settled requirements.
 
 Search discovery should cover Wplace templates, colour conversion, dithering,
 palette fitting, and quantisation. Useful public guides should lead into the editor.
