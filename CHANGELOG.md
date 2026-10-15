@@ -1,5 +1,25 @@
 # ditherette-web
 
+## 0.2.0
+
+### Minor Changes
+
+- 3a1e2e0: Scopes can inspect the image after effects, before palette matching, and the histogram shows pure-black and pure-white clipping for the inspected stage.
+- 943b732: Show how many pixels each palette colour uses in the palette table, and the total pixels to paint, leaving out Transparent, in the export bar.
+- 5fcb8ec: Adds guides to Wplace templates, Wplace colours, dithering and colour quantisation, with page descriptions, canonical URLs, social previews and a sitemap.
+
+### Patch Changes
+
+- a800b08: Update Typography's selector parser to address a security vulnerability while preserving generated prose styles.
+- e35d4bb: Update SvelteKit, Svelte and their dependencies to address security vulnerabilities in request handling and serialization.
+- a9dbe74: Processing a newly loaded image keeps waiting for its effects when a reply for the previous image arrives.
+- cd14e37: Keep indexed PNG downloads responsive by encoding in a dedicated worker. Cancel superseded exports while preserving the displayed result and exact palette transparency.
+- 0d14783: Toggling effects on the Source half no longer recompiles a chain it just showed. The last eight successful results for the image are kept, and turning every effect off keeps the Source canvas and its uploaded colour index for when they come back on.
+- f4e7b49: Reuse the saved-image database connection across reads and writes, and recover after connection closure or a failed open.
+- 99aa38a: Match Wplace's Teal, #10AEA6, in the built-in Wplace palette. Saved Teal visibility and a Teal matte carry over to the corrected colour.
+- Updated dependencies [ff9b06d]
+  - ditherette@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
