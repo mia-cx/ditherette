@@ -75,11 +75,12 @@ export const previewSettings = persistentJSON<PreviewSettings>('ditherette:previ
 export const uiSettings = persistentJSON<{
 	desktopDitherFiltersOpen?: boolean;
 	controlAccordionSections?: string[];
-	/** The Scopes window's scope, its colour model, and which images it plots. */
+	/** The Scopes window's scope, its colour model, and which pipeline stages it plots. */
 	scopes?: {
 		scope: ScopeKind;
 		model: ScopeModel;
 		source: boolean;
+		effects?: boolean;
 		output: boolean;
 		vectorZoom: number;
 	};
