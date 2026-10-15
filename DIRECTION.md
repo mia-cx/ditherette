@@ -24,8 +24,10 @@ Keep that workflow clear and fast, including large images.
   index when effects are toggled off and on.
 - Scopes inspect Source, Effects before resize and palette matching, and Output.
   Histograms compare stages and report sampled pure black and pure white clipping.
-- Adaptive placement currently follows local contrast and can halo hard edges.
-  Its replacement must select extended smooth gradients, with a minimum-size control.
+- Production Adaptive placement follows local contrast and can halo hard edges.
+  The development preview selects smooth gradients with a minimum-size control.
+  It preserves each dithering algorithm's normal texture inside selected regions;
+  visual acceptance remains open at https://development.ditherette.mia.cx.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
