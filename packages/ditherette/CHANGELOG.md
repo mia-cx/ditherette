@@ -1,5 +1,11 @@
 # ditherette
 
+## 0.2.0
+
+### Minor Changes
+
+- ff9b06d: Add opt-in async GPU effects processing with exact channel tables, bounded staging/readback memory, and scalar fallback. Keep synchronous CPU processing unchanged.
+
 ## 0.1.0
 
 ### Minor Changes
