@@ -7,53 +7,86 @@ const STORE = 'records';
 const SOURCE_KEY = 'source';
 const PROCESSED_KEY = 'processed';
 
+let connection: Promise<IDBDatabase> | undefined;
+
 function openDb(): Promise<IDBDatabase> {
-	return new Promise((resolve, reject) => {
+	if (connection) return connection;
+	const opening = new Promise<IDBDatabase>((resolve, reject) => {
 		const request = indexedDB.open(DB_NAME, DB_VERSION);
 		request.onupgradeneeded = () => {
 			request.result.createObjectStore(STORE);
 		};
 		request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB'));
-		request.onsuccess = () => resolve(request.result);
+		request.onsuccess = () => {
+			const db = request.result;
+			const forget = () => {
+				if (connection === opening) connection = undefined;
+			};
+			db.onclose = forget;
+			db.onversionchange = () => {
+				forget();
+				db.close();
+			};
+			resolve(db);
+		};
 	});
+	connection = opening;
+	void opening.catch(() => {
+		if (connection === opening) connection = undefined;
+	});
+	return opening;
+}
+
+/** Release shared ownership. Existing transactions finish; later operations open again. */
+export async function closeDb(): Promise<void> {
+	const closing = connection;
+	connection = undefined;
+	if (closing) (await closing).close();
+}
+
+async function openTransaction(mode: IDBTransactionMode): Promise<IDBTransaction> {
+	const opening = openDb();
+	const db = await opening;
+	try {
+		return db.transaction(STORE, mode);
+	} catch (error) {
+		// A connection can close before its close event arrives. Fail this operation without replaying it.
+		if (
+			error instanceof DOMException &&
+			error.name === 'InvalidStateError' &&
+			connection === opening
+		)
+			connection = undefined;
+		throw error;
+	}
 }
 
 async function withStore<T>(
 	mode: IDBTransactionMode,
 	run: (store: IDBObjectStore) => IDBRequest<T>
 ): Promise<T> {
-	const db = await openDb();
-	try {
-		return await new Promise<T>((resolve, reject) => {
-			const tx = db.transaction(STORE, mode);
-			let result: T;
-			const request = run(tx.objectStore(STORE));
-			request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-			request.onsuccess = () => {
-				result = request.result;
-			};
-			tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
-			tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
-			tx.oncomplete = () => resolve(result);
-		});
-	} finally {
-		db.close();
-	}
+	const tx = await openTransaction(mode);
+	return new Promise<T>((resolve, reject) => {
+		let result: T;
+		const request = run(tx.objectStore(STORE));
+		request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+		request.onsuccess = () => {
+			result = request.result;
+		};
+		tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+		tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+		tx.oncomplete = () => resolve(result);
+	});
 }
 
 async function withWriteTransaction(run: (store: IDBObjectStore) => void): Promise<void> {
-	const db = await openDb();
-	try {
-		await new Promise<void>((resolve, reject) => {
-			const tx = db.transaction(STORE, 'readwrite');
-			run(tx.objectStore(STORE));
-			tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
-			tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
-			tx.oncomplete = () => resolve();
-		});
-	} finally {
-		db.close();
-	}
+	const tx = await openTransaction('readwrite');
+	await new Promise<void>((resolve, reject) => {
+		run(tx.objectStore(STORE));
+		tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+		tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+		tx.oncomplete = () => resolve();
+	});
 }
 
 function sameSourceRecord(left: SourceImageRecord, right: SourceImageRecord) {
@@ -78,32 +111,27 @@ export async function saveSourceImageAndClearProcessed(record: SourceImageRecord
 
 export async function clearPersistedImagesIfSourceMatches(record: SourceImageRecord) {
 	const safeRecord = validateSourceImageRecord(record);
-	const db = await openDb();
-	try {
-		await new Promise<void>((resolve, reject) => {
-			const tx = db.transaction(STORE, 'readwrite');
-			const store = tx.objectStore(STORE);
-			const request = store.get(SOURCE_KEY);
-			request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-			request.onsuccess = () => {
-				try {
-					const current = request.result;
-					if (current === undefined) return;
-					if (!sameSourceRecord(validateSourceImageRecord(current), safeRecord)) return;
-					store.delete(SOURCE_KEY);
-					store.delete(PROCESSED_KEY);
-				} catch (error) {
-					tx.abort();
-					reject(error instanceof Error ? error : new Error('IndexedDB rollback failed'));
-				}
-			};
-			tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
-			tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
-			tx.oncomplete = () => resolve();
-		});
-	} finally {
-		db.close();
-	}
+	const tx = await openTransaction('readwrite');
+	await new Promise<void>((resolve, reject) => {
+		const store = tx.objectStore(STORE);
+		const request = store.get(SOURCE_KEY);
+		request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+		request.onsuccess = () => {
+			try {
+				const current = request.result;
+				if (current === undefined) return;
+				if (!sameSourceRecord(validateSourceImageRecord(current), safeRecord)) return;
+				store.delete(SOURCE_KEY);
+				store.delete(PROCESSED_KEY);
+			} catch (error) {
+				tx.abort();
+				reject(error instanceof Error ? error : new Error('IndexedDB rollback failed'));
+			}
+		};
+		tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+		tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+		tx.oncomplete = () => resolve();
+	});
 }
 
 export async function loadSourceImage(): Promise<SourceImageRecord | undefined> {
