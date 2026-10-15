@@ -16,7 +16,7 @@ const free = [
 	['Light Green', '#13E67B'],
 	['Mint', '#87FF5E'],
 	['Deep Teal', '#0C816E'],
-	['Teal', '#10AE82'],
+	['Teal', '#10AEA6'],
 	['Cyan', '#13E1BE'],
 	['Aqua', '#60F7F2'],
 	['Blue', '#28509E'],
@@ -103,8 +103,21 @@ export function paletteEnabledKey(paletteName: string, colorKey: string) {
 	return paletteName === WPLACE_PALETTE_NAME ? colorKey : JSON.stringify([paletteName, colorKey]);
 }
 
+/**
+ * Wplace colours whose hex, and so key, was corrected: [previous key, current key]. Saved state
+ * under a previous key still belongs to the corrected colour.
+ */
+const CORRECTED_WPLACE_KEYS = [['#10AE82', '#10AEA6']] as const;
+
+/** The current key for a Wplace key that a hex correction replaced, or undefined. */
+export function correctedWplaceKey(key: string): string | undefined {
+	return CORRECTED_WPLACE_KEYS.find(([previous]) => previous === key)?.[1];
+}
+
 function legacyPaletteEnabledKey(paletteName: string, colorKey: string) {
-	return paletteName === WPLACE_PALETTE_NAME ? colorKey : `${paletteName}\u0000${colorKey}`;
+	return paletteName === WPLACE_PALETTE_NAME
+		? (CORRECTED_WPLACE_KEYS.find(([, current]) => current === colorKey)?.[0] ?? colorKey)
+		: `${paletteName}\u0000${colorKey}`;
 }
 
 export function paletteColorEnabled(
