@@ -101,6 +101,37 @@ fn area_domain_table_matches_complete_square_definition() {
             .chunks_exact(4)
             .map(|p| ditherette_wasm::spec::color::oklab::rgb8_to_oklab([p[0], p[1], p[2]]))
             .collect();
+        let radius = size / 2;
+        // Literal symmetric box sums are independent of the production running-sum scan.
+        let mut horizontal = colors.clone();
+        let mut coarse = colors.clone();
+        if kind != 0 {
+            for y in 0..h {
+                for x in 0..w {
+                    let r = radius.min(x).min(w - 1 - x);
+                    let mut sum = [0.0_f64; 3];
+                    for nx in x - r..=x + r {
+                        for c in 0..3 {
+                            sum[c] += f64::from(colors[(y * w + nx) as usize][c]);
+                        }
+                    }
+                    horizontal[(y * w + x) as usize] =
+                        sum.map(|v| (v / f64::from(2 * r + 1)) as f32);
+                }
+            }
+            for y in 0..h {
+                for x in 0..w {
+                    let r = radius.min(y).min(h - 1 - y);
+                    let mut sum = [0.0_f64; 3];
+                    for ny in y - r..=y + r {
+                        for c in 0..3 {
+                            sum[c] += f64::from(horizontal[(ny * w + x) as usize][c]);
+                        }
+                    }
+                    coarse[(y * w + x) as usize] = sum.map(|v| (v / f64::from(2 * r + 1)) as f32);
+                }
+            }
+        }
         let sw = size.min(w);
         let sh = size.min(h);
         for top in 0..=h - sh {
@@ -108,6 +139,10 @@ fn area_domain_table_matches_complete_square_definition() {
                 let mut sharpness = 0.0_f32;
                 for y in top..top + sh {
                     for x in left..left + sw {
+                        let p = (y * w + x) as usize;
+                        let [dl, da, db] = std::array::from_fn(|c| colors[p][c] - coarse[p][c]);
+                        sharpness =
+                            sharpness.max((2.0 * (dl * dl + da * da + db * db).sqrt()).min(1.0));
                         for ny in y.saturating_sub(1)..=(y + 1).min(h - 1) {
                             for nx in x.saturating_sub(1)..=(x + 1).min(w - 1) {
                                 let left = colors[(y * w + x) as usize];

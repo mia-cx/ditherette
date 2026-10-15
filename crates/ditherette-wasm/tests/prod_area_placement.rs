@@ -371,9 +371,9 @@ fn public_area_calls_budget_analysis_cancel_and_invalidate_it_between_sources() 
         eprintln!(
             "kind{kind} peak{peak} minimum{minimum} analysis{} source{}",
             if kind < 3 {
-                (70 * 12 + 2 * 70) * 12
+                (70 * 12 + 3 * 70) * 12
             } else {
-                (35 * 6 + 2 * 35) * 12
+                (35 * 6 + 3 * 35) * 12
             },
             data.len()
         );
