@@ -8,8 +8,8 @@ const root = new URL('../../', crate);
 
 /** Keep compiler, profile, linker flags, and staging identical for developer candidates. */
 export async function buildConfiguration(variant, benchSubjects = false) {
-	if (variant !== 'scalar' && variant !== 'threads') {
-		throw new Error('Expected scalar or threads.');
+	if (!['scalar', 'threads', 'gpu'].includes(variant)) {
+		throw new Error('Expected scalar or threads, or opt-in gpu.');
 	}
 	const threaded = variant === 'threads';
 	const toolchainFile = threaded
@@ -22,6 +22,7 @@ export async function buildConfiguration(variant, benchSubjects = false) {
 
 	const args = ['build', '.', '--target', 'web', '--out-dir', `dist/${variant}`, '--', '--locked'];
 	if (threaded) args.push('--features', 'threads', '-Z', 'build-std=panic_abort,std');
+	if (variant === 'gpu') args.push('--features', 'gpu');
 	if (benchSubjects) args.push('--features', 'bench-subjects');
 	return { args, toolchain, rustFlags, threaded };
 }
@@ -44,7 +45,8 @@ async function build(variant, benchSubjects) {
 			...process.env,
 			RUSTUP_TOOLCHAIN: toolchain,
 			CARGO_ENCODED_RUSTFLAGS: rustFlags.join('\x1f'),
-			CARGO_TARGET_DIR: fileURLToPath(new URL(`target/${variant}`, crate))
+			CARGO_TARGET_DIR:
+				process.env.CARGO_TARGET_DIR ?? fileURLToPath(new URL(`target/${variant}`, crate))
 		}
 	});
 	if (result.error) throw result.error;
@@ -57,7 +59,7 @@ async function build(variant, benchSubjects) {
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
 	const [variant, ...options] = process.argv.slice(2);
 	if (options.length > 1 || (options.length === 1 && options[0] !== '--bench-subjects')) {
-		throw new Error('Usage: build.mjs scalar|threads [--bench-subjects]');
+		throw new Error('Usage: build.mjs scalar|threads|gpu [--bench-subjects]');
 	}
 	await build(variant, options.length === 1);
 }

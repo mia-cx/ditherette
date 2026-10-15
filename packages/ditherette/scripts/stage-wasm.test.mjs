@@ -70,8 +70,16 @@ export function greet(name: string): string { return createScalarBindings().hell
 	assert.equal(built.greet('typed factory'), 'typed factory');
 
 	await mkdir(new URL('dist/threads/snippets/', crate), { recursive: true });
+	await mkdir(new URL('dist/wasm/gpu/', packageDirectory), { recursive: true });
+	await writeFile(
+		new URL('dist/wasm/gpu/stale.wasm', packageDirectory),
+		'GPU from a previous opt-in build'
+	);
 	await writeFile(new URL('dist/threads/snippets/worker.js', crate), '// threaded worker fixture');
 	await stageWasm(crate, packageDirectory, new URL('LICENSE', root));
+	await assert.rejects(readFile(new URL('dist/wasm/gpu/stale.wasm', packageDirectory)), {
+		code: 'ENOENT'
+	});
 	assert.equal(
 		await readFile(new URL('dist/wasm/threads/snippets/worker.js', packageDirectory), 'utf8'),
 		'// threaded worker fixture'
@@ -86,5 +94,32 @@ test('staging rejects stale scalar output without factory declarations', async (
 	await assert.rejects(
 		stageWasm(new URL('crate/', root), new URL('package/', root), new URL('LICENSE', root)),
 		/ditherette_wasm\.factory\.js/
+	);
+});
+
+test('optional GPU staging is explicit and does not require or change CPU artifacts', async (t) => {
+	const directory = await mkdtemp(join(tmpdir(), 'ditherette-staging-gpu-'));
+	t.after(() => rm(directory, { recursive: true, force: true }));
+	const root = pathToFileURL(directory + '/');
+	const crate = new URL('crate/', root);
+	const packageDirectory = new URL('package/', root);
+	await mkdir(new URL('dist/gpu/', crate), { recursive: true });
+	await mkdir(new URL('dist/wasm/scalar/', packageDirectory), { recursive: true });
+	await writeFile(new URL('LICENSE', root), 'MIT fixture');
+	await writeFile(new URL('dist/wasm/scalar/unchanged', packageDirectory), 'CPU');
+	for (const file of [
+		'ditherette_wasm.factory.js',
+		'ditherette_wasm.factory.d.ts',
+		'ditherette_wasm_bg.wasm'
+	])
+		await writeFile(new URL(`dist/gpu/${file}`, crate), 'GPU fixture');
+	await stageWasm(crate, packageDirectory, new URL('LICENSE', root), ['gpu']);
+	assert.equal(
+		await readFile(new URL('dist/wasm/scalar/unchanged', packageDirectory), 'utf8'),
+		'CPU'
+	);
+	assert.equal(
+		await readFile(new URL('dist/wasm/gpu/ditherette_wasm_bg.wasm', packageDirectory), 'utf8'),
+		'GPU fixture'
 	);
 });

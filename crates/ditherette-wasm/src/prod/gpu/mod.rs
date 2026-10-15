@@ -10,11 +10,13 @@
 //! privacy features such as Helium's add noise to canvas readback.
 //! The GPU never decides palette indices yet: palette output stays exact.
 //!
-//! Nothing calls this module in normal processing yet. Each stage of #249 adds
-//! a [`Stage`] and is compared against the CPU with [`Gpu::parity`].
+//! The opt-in package effects processor uses [`ChannelLookup::from_effects`]
+//! and [`Backend::lookup`] for complete enabled per-channel chains. Other
+//! stages still run on CPU and are qualified separately with [`Gpu::parity`].
 
 mod device;
 mod lookup;
+mod memory;
 mod parity;
 mod stage;
 #[cfg(test)]
@@ -22,6 +24,7 @@ mod tests;
 
 pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
+pub use memory::LookupMemory;
 pub use parity::Parity;
 pub use stage::Stage;
 
@@ -44,6 +47,8 @@ pub enum Fallback {
     Failed(String),
     /// The image exceeds this device's texture or buffer limits. The GPU stays usable.
     TooLarge,
+    /// Planned owned capacity exceeds the caller's memory limit. The GPU stays usable.
+    MemoryLimit,
 }
 
 /// Where stages run. Starts from [`Backend::detect`]; a failed GPU call demotes it to the CPU.
@@ -53,6 +58,33 @@ pub enum Backend {
 }
 
 impl Backend {
+    /// Attempts real effects lookup with all transient image capacity charged
+    /// before upload. The host runs its CPU processor on any rejection.
+    pub async fn lookup(
+        &mut self,
+        stage: &ChannelLookup,
+        dimensions: ImageDimensions,
+        rgba: &[u8],
+        memory_limit: u64,
+    ) -> Result<Vec<u8>, Fallback> {
+        LookupMemory::new(dimensions).check(memory_limit)?;
+        let result = match self {
+            Self::Cpu(reason) => Err(reason.clone()),
+            Self::Gpu(gpu) => gpu.process(stage, dimensions, rgba).await,
+        };
+        self.retire_failure(&result);
+        result
+    }
+
+    /// Releases a failed device, keeping request-specific size/budget rejections recoverable.
+    pub(crate) fn retire_failure<T>(&mut self, result: &Result<T, Fallback>) {
+        if let Err(reason) = result {
+            if !matches!(reason, Fallback::TooLarge | Fallback::MemoryLimit) {
+                *self = Self::Cpu(reason.clone());
+            }
+        }
+    }
+
     /// Probes the platform's default adapter. Software adapters count as no GPU.
     pub async fn detect() -> Self {
         Self::detect_on(&Gpu::instance(), Adapters::Hardware).await

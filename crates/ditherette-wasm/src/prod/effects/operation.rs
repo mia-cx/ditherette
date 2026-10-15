@@ -83,7 +83,7 @@ pub const BOOKKEEPING_BYTES: u64 = {
 const MASKED_CARRIER_BYTES_PER_PIXEL: u64 = (size_of::<[f32; 3]>() + size_of::<f32>()) as u64;
 
 /// True when a step joins the leading per-channel tables. A mask reads all three channels.
-fn tabulates<E: Effect>(step: &Planned<'_, E>) -> bool {
+pub(crate) fn tabulates<E: Effect>(step: &Planned<'_, E>) -> bool {
     step.mask.is_empty() && step.effect.per_channel()
 }
 
@@ -100,7 +100,7 @@ fn masked_carrier_bytes<'a, E: Effect + 'a>(
 }
 
 /// Enabled steps without allocating, for memory estimates.
-fn enabled_steps<E, M: AsRef<[MaskCurve]>>(
+pub(crate) fn enabled_steps<E, M: AsRef<[MaskCurve]>>(
     steps: &[Step<E, M>],
 ) -> impl Iterator<Item = Planned<'_, E>> + Clone {
     steps

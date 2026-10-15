@@ -1,6 +1,12 @@
 //! Per-channel byte lookup: the first stage on the GPU, and the startup known-answer check.
 
 use crate::image::ImageDimensions;
+use crate::prod::effects::{
+    chain::validate_chain,
+    operation::{enabled_steps, tabulates},
+    table::ChannelTables,
+    EffectContext, EffectStep,
+};
 
 use super::Stage;
 
@@ -17,6 +23,22 @@ const KNOWN_WIDTH: u32 = 23;
 const KNOWN_HEIGHT: u32 = 12;
 
 impl ChannelLookup {
+    /// Selects the CPU planner's whole enabled per-channel run. Mixed or masked
+    /// chains must keep their continuous carrier and cannot use byte tables.
+    /// The package validates context before calling; eligible effects need none.
+    pub fn from_effects(
+        steps: &[EffectStep],
+    ) -> Result<Option<Self>, crate::prod::contract::error::DitheretteError> {
+        let enabled = enabled_steps(steps);
+        if !enabled.clone().all(|step| tabulates(&step)) {
+            return Ok(None);
+        }
+        validate_chain(steps, &EffectContext::default())?;
+        Ok(Some(Self(
+            ChannelTables::new(enabled.map(|step| step.effect)).bytes(),
+        )))
+    }
+
     /// A table that moves every byte of every channel, and an image whose
     /// channels each cover all 256 bytes, alpha included.
     pub fn known_answer() -> (Self, ImageDimensions, Vec<u8>) {

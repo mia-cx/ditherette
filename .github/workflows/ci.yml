@@ -205,6 +205,8 @@ jobs:
           pnpm --filter ditherette test:staging
           pnpm --filter ditherette-wasm test:glue:built
           pnpm --filter ditherette-wasm test:private
+      - name: Optional GPU artifact and hardware-independent ABI tests
+        run: pnpm --filter ditherette test:gpu
 
   release-tooling:
     name: Release tooling

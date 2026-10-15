@@ -227,6 +227,88 @@ const graded = applyCompiledEffects(source, indices, results); // equals applyEf
 Colours and results are packed `r | g << 8 | b << 16`. A palette fit needs its `recipe` here; derive a missing one with `analyzeRecolour`.
 The package leaves display to you: upload `indices` and `results` as textures to draw only the visible region on the GPU, or map pixels on the CPU with `applyCompiledEffects`, passing the previous output as `into` to reuse its memory.
 
+### Optional async GPU effects
+
+`createGpuEffects` runs whole enabled per-channel chains on the validated wgpu lookup backend.
+It uses the production CPU's exact `ChannelTables` bytes and preserves every alpha byte.
+`createDitherette` and its synchronous operations keep their CPU behavior.
+
+Build and stage the optional artifact explicitly, after the ordinary package build:
+
+```sh
+pnpm package:build
+pnpm --filter ditherette-wasm exec node scripts/build.mjs gpu
+node packages/ditherette/scripts/stage-wasm.mjs gpu
+```
+
+Ordinary staging removes previous GPU assets. This optional artifact has separate release qualification;
+these commands do not publish the package or clear its release gates.
+Serve `dist/wasm/gpu/` alongside the package modules, including generated snippets and Wasm.
+The optional module loads by URL relative to `gpu-effects.js`, so bundling hosts must preserve that asset location.
+
+```ts
+import { createGpuEffects } from 'ditherette';
+
+const effectsProcessor = await createGpuEffects({ memoryLimitBytes: 512 * 1024 ** 2 });
+const image = await effectsProcessor.applyEffects({ version: 1, source, effects });
+console.log(effectsProcessor.execution); // Last successful call's backend, adapter and fallback reason.
+effectsProcessor.dispose();
+```
+
+`wasm` supplies an alternate scalar artifact; `gpuWasm` supplies an alternate GPU artifact.
+Neither setting changes the other artifact. Missing WebGPU, optional assets, failed startup verification,
+unsupported/masked/mixed chains, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
+The facade reuses one verified device for repeated eligible calls. Any CPU fallback releases the device
+and drops the entire library-owned GPU artifact before allocating scalar resources.
+The locked WebGPU backend forgets its error callbacks; retaining the artifact for re-detection would accumulate them.
+The facade stays on CPU after that retirement, including for request-specific limits or unsupported chains.
+Create a fresh facade to retry GPU processing. Empty/disabled chains return the source and preserve an existing device.
+The fresh scalar fallback processor is disposed after each call.
+
+The budget charges the package-owned async source snapshot, Wasm source and result capacity, row-aligned texture/upload staging,
+packed output/readback buffers, wgpu's temporary Wasm mapped copy, parameter copies, effect bookkeeping, and retained backend/pipeline records.
+Every enabled call first admits the source snapshot plus `512 KiB + 324 * canonicalJsonBytes` for decoding.
+This conservative reserve precedes both GPU and scalar string ABIs, including missing assets, no capability,
+unsupported chains, and calls after retirement. It uses numeric metadata in the package and needs no GPU factory.
+Over-budget decoding reports `memory-limit` before either decoder allocates; it cannot safely fall back to the same decoder.
+The synchronous `createDitherette` contract is unchanged. Disabled/empty chains bypass this reserve and return the source.
+
+The decoder reserve follows the locked Wasm allocation structures, rather than measured page growth:
+
+| Ownership                                              | Reserve per canonical ASCII byte | Capacity basis                                                                                                          |
+| ------------------------------------------------------ | -------------------------------: | ----------------------------------------------------------------------------------------------------------------------- |
+| Whole `serde_json::Value` tree                         |                               96 | 24-byte values; minimum-four/geometric Vec capacity, including old and new realloc storage; BTree nodes below 512 bytes |
+| Serde flatten, internally tagged, and untagged buffers |                              192 | Three 64-byte allowances for 16-byte `Content` sequences and 32-byte map pairs                                          |
+| Decoded curves, masks, grid axes/rows and points       |                               32 | f32/pair/row-vector and curve-enum Vec capacities, including failed untagged attempts                                   |
+| String ABI and decoder string scratch                  |                                4 | ASCII wire allocation and string scratch capacity                                                                       |
+
+Canonical normalization emits bounded enums/numbers and known keys, with no escaped or caller-defined strings.
+For a nonempty array of `n` entries, its `n + 1` bracket/comma bytes cover `max(4, 3n)` slots.
+This includes the largest minimum capacity and a moving realloc's old plus new storage.
+At 24 bytes per `Value`, 96 bytes per punctuation byte is sufficient; at 16 bytes per `Content`, 64 is sufficient.
+Object key/colon/quote punctuation bounds the BTree nodes and `Content` map pairs separately.
+Canonical objects have at least two fields; the locked allocator requests 408 bytes for a two-field BTree node.
+String payload bytes cover their own allocations. These separate byte classes keep nested containers from double-charging the same text.
+The fixed 512 KiB reserves bounded step/planning records. ABI tests pin the package constants to the optional artifact.
+A private diagnostic allocator validates these allowances using requested live layouts, charging old and new realloc storage together.
+Its fixture peaks are validation evidence, not the derivation of this general admission bound.
+Caller-owned input, returned JS buffers, and driver/compiler internals follow the existing ownership exclusions.
+After artifact retirement, engine-managed pages may wait for collection; the facade retains no instance reference.
+Caller-retained diagnostic bindings/exports remain caller-owned and can keep their own instance alive.
+GPU image-buffer budget rejection can still succeed on CPU; CPU budget rejection reports `memory-limit`.
+
+`applyEffects(request)` accepts packed RGBA8 only. Image decoding belongs to the host.
+The unreleased optional `ImageBitmap` argument was removed because the locked external-image uploader
+can panic on a synchronous DOM exception and strand its Wasm promise.
+The facade uploads the captured bytes and returns mapped-buffer results, never canvas readback.
+
+Enabled calls snapshot source bytes and normalized effects before their first await.
+Outputs remain valid after subsequent calls and disposal. Empty/disabled chains return the source itself.
+One facade accepts one active call; overlapping calls and active-call disposal reject with `reentrant-call`.
+Progress callback exceptions report `callback`, and `execution` updates only after a successful call.
+The host owns its source/slider generation guard and checks that guard before publishing an awaited image.
+This API applies effects only. Resize, dithering, palette indices, and indexed PNG export remain with the existing processor.
+
 ## Direct quantization
 
 ```ts
