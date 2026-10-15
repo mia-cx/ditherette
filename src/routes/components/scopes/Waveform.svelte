@@ -13,27 +13,30 @@
 	type Channels = readonly [Float32Array, Float32Array, Float32Array];
 	type Props = {
 		channels: readonly [ScopeChannel, ScopeChannel, ScopeChannel];
-		source?: Channels;
-		output?: Channels;
+		under?: Channels;
+		over?: Channels;
 		/** Each channel in its own column, instead of all three overlaid. */
 		parade: boolean;
 	};
-	/** Level against image column. With both images, the source draws neutral behind the output. */
-	let { channels, source, output, parade }: Props = $props();
+	/**
+	 * Level against image column. With two images, the earlier stage draws neutral behind the
+	 * later one.
+	 */
+	let { channels, under, over, parade }: Props = $props();
 
 	const GRID = [100, 75, 50, 25, 0];
 	const rgb = ([r, g, b]: readonly number[]) => `rgb(${r} ${g} ${b})`;
 
-	/** The layers for the given channels: a neutral source under coloured output when both show. */
+	/** The layers for the given channels: the earlier stage neutral under the later one. */
 	function layers(indices: readonly number[]): Layer[] {
 		const coloured = (grids: Channels) =>
 			indices.map((index) => ({ density: grids[index]!, colour: TRACE[channels[index]!.name] }));
-		const under = source
-			? output
-				? [underLayer(combined(indices.map((index) => source[index]!)))]
-				: coloured(source)
+		const below = under
+			? over
+				? [underLayer(combined(indices.map((index) => under[index]!)))]
+				: coloured(under)
 			: [];
-		return [...under, ...(output ? coloured(output) : [])];
+		return [...below, ...(over ? coloured(over) : [])];
 	}
 
 	const plots = $derived(
