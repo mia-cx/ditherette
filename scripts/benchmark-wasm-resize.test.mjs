@@ -97,9 +97,16 @@ test('color alias resolves the color profile', async () => {
 	assert.ok(resolved.subjects.every((id) => id.startsWith('wasm:color:')));
 });
 
+test('preparation aliases only build or report pnpm provenance', () => {
+	assert.equal(manifest.scripts['bench:prepare'], 'node scripts/prepare-benchmarks.mjs');
+	assert.equal(manifest.scripts['bench:pnpm:entry'], 'node -p process.env.npm_execpath');
+});
+
 test('measurement aliases launch prepared executables under the coordinator', () => {
 	for (const [name, script] of Object.entries(manifest.scripts)) {
-		if (!name.startsWith('bench:') || name === 'bench:prepare') continue;
+		// Build preparation and its provenance probe never attest a measurement quiet phase.
+		if (!name.startsWith('bench:') || name === 'bench:prepare' || name === 'bench:pnpm:entry')
+			continue;
 		assert.ok(!script.includes('cargo '), name);
 		assert.ok(!script.includes('wasm:build'), name);
 		assert.ok(
