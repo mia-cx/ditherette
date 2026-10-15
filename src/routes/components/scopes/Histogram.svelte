@@ -5,11 +5,14 @@
 	type Channels = readonly [Float32Array, Float32Array, Float32Array];
 	type Props = {
 		channels: readonly [ScopeChannel, ScopeChannel, ScopeChannel];
-		source?: Channels;
-		output?: Channels;
+		under?: Channels;
+		over?: Channels;
 	};
-	/** One level plot per channel. With both images, the source draws neutral behind the output. */
-	let { channels, source, output }: Props = $props();
+	/**
+	 * One level plot per channel. With two images, the earlier stage draws neutral behind the
+	 * later one.
+	 */
+	let { channels, under, over }: Props = $props();
 
 	const HEIGHT = 100;
 	const QUARTERS = [0.25, 0.5, 0.75];
@@ -48,17 +51,17 @@
 						vector-effect="non-scaling-stroke"
 					/>
 				{/each}
-				{#if source}
+				{#if under}
 					<path
-						d={area(source[index]!)}
-						fill={output ? 'rgb(255 255 255 / 0.16)' : rgb(colour, 0.3)}
-						stroke={output ? 'none' : rgb(colour, 0.9)}
+						d={area(under[index]!)}
+						fill={over ? 'rgb(255 255 255 / 0.16)' : rgb(colour, 0.3)}
+						stroke={over ? 'none' : rgb(colour, 0.9)}
 						vector-effect="non-scaling-stroke"
 					/>
 				{/if}
-				{#if output}
+				{#if over}
 					<path
-						d={area(output[index]!)}
+						d={area(over[index]!)}
 						fill={rgb(colour, 0.35)}
 						stroke={rgb(colour)}
 						vector-effect="non-scaling-stroke"

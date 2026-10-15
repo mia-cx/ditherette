@@ -4,6 +4,8 @@ import { chromaticity, D65, vectorPlane } from './colour';
 import {
 	chromaticityBackdrop,
 	chromaticityScope,
+	clipping,
+	formatShare,
 	histogram,
 	LEVELS,
 	PLANE_SIZE,
@@ -124,5 +126,60 @@ describe('scopes', () => {
 			]
 		} as unknown as ProcessedImage;
 		expect(filled(histogram(sampleOutput(output), 'srgb'))[0]).toEqual({ 0: 3, [LEVELS - 1]: 1 });
+	});
+});
+
+describe('clipping', () => {
+	it('counts only pure black and pure white among the visible samples', () => {
+		const samples = sampleSource(
+			row(
+				[0, 0, 0, 255], // black
+				[255, 255, 255, 255], // white
+				[255, 0, 0, 255], // saturated red: not white
+				[255, 255, 0, 255], // yellow: not white
+				[0, 0, 1, 255], // near-black blue: not black
+				[254, 255, 255, 255], // near-white: not white
+				[255, 255, 255, 0], // fully transparent: absent already
+				[255, 255, 255, 128] // half-transparent white: counts
+			)
+		);
+		expect(samples.count).toBe(7);
+		expect(clipping(samples)).toEqual({ black: 1 / 7, white: 2 / 7 });
+	});
+
+	it('is undefined without samples', () => {
+		expect(clipping(sampleSource(row([0, 0, 0, 0])))).toBeUndefined();
+	});
+});
+
+describe('formatShare', () => {
+	it.each([
+		[0, '0%'],
+		[0.0004, '<0.1%'],
+		[0.02, '2%'],
+		[0.021, '2.1%'],
+		[0.5, '50%'],
+		[0.994, '99%'],
+		[0.995, '99.5%'],
+		[0.998, '99.8%'],
+		[0.999, '99.9%'],
+		[0.9995, '>99.9%'],
+		[0.99999, '>99.9%'],
+		[1, '100%']
+	])('formats %f as %s', (share, text) => {
+		expect(formatShare(share)).toBe(text);
+	});
+
+	it('never reports a partial share as 0% or 100%', () => {
+		for (const [from, to] of [
+			[0.0001, 0.1],
+			[0.9, 0.9999]
+		]) {
+			for (let share = from; share <= to; share += 0.0001) {
+				const label = formatShare(share);
+				expect(label).not.toBe('0%');
+				expect(label).not.toBe('100%');
+			}
+		}
 	});
 });

@@ -6,14 +6,14 @@
 
 	type Props = {
 		plane: VectorPlane;
-		source?: Scatter;
-		output?: Scatter;
+		under?: Scatter;
+		over?: Scatter;
 		/** How many times the plot is magnified, for images with little saturation. */
 		zoom: number;
 		onzoom: (zoom: number) => void;
 	};
 	/** A colour plane with its primary and secondary targets. Greys sit at the centre. */
-	let { plane, source, output, zoom, onzoom }: Props = $props();
+	let { plane, under, over, zoom, onzoom }: Props = $props();
 	const ZOOMED = 2;
 
 	type Rgb = readonly [number, number, number];
@@ -35,10 +35,10 @@
 
 	const image = $derived(
 		paint(PLANE_SIZE, PLANE_SIZE, [
-			...(source
-				? [output ? underLayer(source.density) : { density: source.density, colour: source.sums }]
+			...(under
+				? [over ? underLayer(under.density) : { density: under.density, colour: under.sums }]
 				: []),
-			...(output ? [{ density: output.density, colour: output.sums }] : [])
+			...(over ? [{ density: over.density, colour: over.sums }] : [])
 		])
 	);
 

@@ -36,12 +36,13 @@ The Effects list reads top to bottom in run order: effects run on the source, th
 
 ## Scopes
 
-Window > Scopes shows a histogram, waveform, parade, vectorscope, or CIE 1931 chromaticity diagram of the source, the output, or both. It reads any curves model plus CMY, on the same normalised axes as the curves editor.
+Window > Scopes shows a histogram, waveform, parade, vectorscope, or CIE 1931 chromaticity diagram of the source, the image after effects (before resize and palette matching), or the output, any two at once. It reads any curves model plus CMY, on the same normalised axes as the curves editor.
 
-- **Always dark.** Scopes read like a grading monitor in either theme: density glows on black, the graticule stays at 6–25% white, and each channel traces in its own colour. With both images, the source glows dim and neutral under the output.
+- **Always dark.** Scopes read like a grading monitor in either theme: density glows on black, the graticule stays at 6–25% white, and each channel traces in its own colour. With two images, the earlier stage glows dim and neutral under the later one.
 - **Vectorscope.** It uses the model's chroma plane, or YCbCr's for the RGB models. It draws 100% target boxes, 75% dots and a skin-tone line, and has a 2× magnifier for low-saturation images.
 - **Chromaticity.** The xy diagram draws the spectral locus from the CIE 1931 table, filled faintly with its own colours, plus the sRGB gamut and D65.
-- **Sampling.** Scopes sample up to 262,144 pixels on a jittered grid, so a regular dither pattern can't alias. Output colours come from the processed indices, and canvases are only drawn to.
+- **Clipping.** The histogram reports the share of sampled visible pixels at pure black and pure white for the stage drawn in colour; fully transparent pixels are left out.
+- **Sampling.** Scopes sample up to 262,144 pixels on a jittered grid, so a regular dither pattern can't alias. Output colours come from the processed indices, and canvases are only drawn to. The effects stage samples the same pixels as the source, through the effects worker's current results; a scope reading older results dims and reads Updating… until the current ones arrive.
 
 ## Accessibility
 

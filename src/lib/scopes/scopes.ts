@@ -30,7 +30,7 @@ export type Samples = {
 type Rgb = readonly [number, number, number];
 
 /** A quarter of a million samples fills every scope smoothly and keeps redraws quick. */
-const MAX_SAMPLES = 1 << 18;
+export const MAX_SAMPLES = 1 << 18;
 /** Enough sample columns to resolve the waveform at any window width. */
 const MAX_COLUMNS = 1024;
 export const LEVELS = 256;
@@ -103,6 +103,37 @@ export function sampleOutput({ indices, palette, width, height }: ProcessedImage
 		rgb[at + 2] = colour.rgb.b;
 		return true;
 	});
+}
+
+/**
+ * Shares of the visible samples that are pure black or pure white: all three channels at 0 or at
+ * 255. Undefined without samples.
+ */
+export function clipping({ count, rgb }: Samples): { black: number; white: number } | undefined {
+	if (!count) return undefined;
+	let black = 0;
+	let white = 0;
+	for (let sample = 0; sample < count; sample++) {
+		const at = sample * 3;
+		const r = rgb[at]!;
+		const g = rgb[at + 1]!;
+		const b = rgb[at + 2]!;
+		if (r === 0 && g === 0 && b === 0) black++;
+		else if (r === 255 && g === 255 && b === 255) white++;
+	}
+	return { black: black / count, white: white / count };
+}
+
+/** A share as a short percentage: "0%", "<0.1%", "2%", "2.1%", "50%", "99.9%", ">99.9%", "100%". */
+export function formatShare(share: number): string {
+	if (share <= 0) return '0%';
+	if (share >= 1) return '100%';
+	if (share < 0.001) return '<0.1%';
+	if (share > 0.999) return '>99.9%';
+	if (share < 0.1) return `${Number((share * 100).toFixed(1))}%`;
+	const percent = share * 100;
+	// One decimal near either end, so a partial share never rounds to 0% or 100%.
+	return `${Number(percent.toFixed(percent < 10 || percent >= 99.5 ? 1 : 0))}%`;
 }
 
 /** Visits each sample's normalised coordinates in `model`, with how much its hue counts. */

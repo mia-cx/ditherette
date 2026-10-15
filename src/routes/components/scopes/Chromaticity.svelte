@@ -9,9 +9,9 @@
 	} from '$lib/scopes/scopes';
 	import DensityCanvas from './DensityCanvas.svelte';
 
-	type Props = { source?: Scatter; output?: Scatter };
+	type Props = { under?: Scatter; over?: Scatter };
 	/** Samples on the CIE 1931 xy diagram, inside the spectral locus, against the sRGB gamut. */
-	let { source, output }: Props = $props();
+	let { under, over }: Props = $props();
 
 	const LABELLED_NM = [460, 480, 500, 520, 540, 560, 580, 600, 620];
 	const LABEL_OFFSET = 0.035;
@@ -19,10 +19,10 @@
 	const image = $derived(
 		paint(PLANE_SIZE, PLANE_SIZE, [
 			chromaticityBackdrop(),
-			...(source
-				? [output ? underLayer(source.density) : { density: source.density, colour: source.sums }]
+			...(under
+				? [over ? underLayer(under.density) : { density: under.density, colour: under.sums }]
 				: []),
-			...(output ? [{ density: output.density, colour: output.sums }] : [])
+			...(over ? [{ density: over.density, colour: over.sums }] : [])
 		])
 	);
 
