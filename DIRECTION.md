@@ -18,8 +18,9 @@ Keep that workflow clear and fast, including large images.
   Its tag and Edit controls remain accessible in narrow panels.
 - Source previews reuse recent effects results and retain the uploaded colour
   index when effects are toggled off and on.
-- The shared wgpu backend and exact channel-lookup stage exist. Normal processing
-  still needs GPU integration and the remaining stages.
+- The opt-in package GPU effects API uses exact channel lookup with bounded CPU
+  fallback. Website integration, the remaining GPU stages, and physical GPU
+  validation of the new API remain open.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 
