@@ -81,8 +81,9 @@
 	<h2>Strength and placement</h2>
 	<p>
 		Strength sets how far the dither pushes each pixel; lower it to keep flat areas mostly flat.
-		Placement can apply the dither everywhere, or adaptively: Adaptive decides where to dither from
-		the contrast between neighbouring source pixels, tuned with Radius, Threshold and Softness.
+		Placement can apply the dither everywhere, or adaptively: Adaptive samples the image in Sample
+		size squares and dithers the areas that change gradually, leaving sharp edges and fine detail
+		clean. Raise Contrast tolerance to include rougher areas.
 	</p>
 
 	<h2>For a Wplace template</h2>

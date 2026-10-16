@@ -143,7 +143,7 @@ pub enum AlphaPolicy {
     },
 }
 
-/// Palette-independent contrast placement. Threshold/softness use the existing 0..100 contrast scale.
+/// Palette-independent placement. Legacy Adaptive retains its 0..100 contrast scale.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Placement {
@@ -152,6 +152,13 @@ pub enum Placement {
         radius: u32,
         threshold: f32,
         softness: f32,
+    },
+    /// Overlapping perceptually smooth squares, measured in working pixels after resize.
+    SmoothAreaV1 {
+        #[serde(rename = "sampleSize")]
+        sample_size: u32,
+        #[serde(rename = "contrastThreshold")]
+        contrast_threshold: f32,
     },
 }
 
@@ -485,6 +492,26 @@ fn nonnegative(value: f32, path: String) -> Result<(), DitheretteError> {
 }
 
 fn validate_placement(placement: Placement, path: &str) -> Result<(), DitheretteError> {
+    if let Placement::SmoothAreaV1 {
+        sample_size,
+        contrast_threshold,
+    } = placement
+    {
+        if !(4..=MAX_SOURCE_SIDE).contains(&sample_size) {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.sampleSize"),
+                "Square sample size must be between 4 and 32768 pixels.",
+            ));
+        }
+        if !contrast_threshold.is_finite() || !(0.0..=1.0).contains(&contrast_threshold) {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.contrastThreshold"),
+                "Contrast threshold must be finite from 0 through 1.",
+            ));
+        }
+    }
     if let Placement::Adaptive {
         radius,
         threshold,

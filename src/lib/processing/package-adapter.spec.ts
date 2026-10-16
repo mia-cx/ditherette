@@ -27,9 +27,8 @@ const settings: ProcessingSettings = {
 		algorithm: 'none',
 		strength: 100,
 		placement: 'everywhere',
-		placementRadius: 3,
-		placementThreshold: 12,
-		placementSoftness: 8,
+		placementSampleSize: 64,
+		placementContrastThreshold: 12,
 		serpentine: true,
 		seed: 1,
 		useColorSpace: false
@@ -203,7 +202,7 @@ describe('website package request', () => {
 			});
 		}
 	);
-	it('normalizes random seed and adaptive radius while retaining placement percentage points', () => {
+	it('normalizes the random seed', () => {
 		const { recipe } = packageProcessRequest(
 			source,
 			palette,
@@ -213,8 +212,7 @@ describe('website package request', () => {
 					...settings.dither,
 					algorithm: 'random',
 					seed: -1,
-					placement: 'adaptive',
-					placementRadius: 0.4
+					placement: 'adaptive'
 				}
 			},
 			settings.output
@@ -225,27 +223,48 @@ describe('website package request', () => {
 				field: { algorithm: 'random', seed: 4294967295 },
 				space: 'srgb',
 				strength: 96 / 63.75,
-				placement: { mode: 'adaptive', radius: 1, threshold: 12, softness: 8 }
+				placement: { mode: 'smooth-area-v1', sampleSize: 64, contrastThreshold: 0.12 }
 			}
 		});
 	});
-	it.each(['floyd-steinberg', 'sierra', 'sierra-lite', 'random'] as const)(
-		'caps persisted adaptive radii for %s',
+	it.each(['bayer-16', 'floyd-steinberg'] as const)(
+		'maps website sample size and contrast tolerance to smooth-area placement for %s',
 		(algorithm) => {
-			for (const placementRadius of [32767.6, 32768, 40000, Number.MAX_VALUE]) {
+			for (const [
+				placementSampleSize,
+				placementContrastThreshold,
+				sampleSize,
+				contrastThreshold
+			] of [
+				[64, 12, 64, 0.12],
+				[3.6, 0, 4, 0],
+				[40000, 150, 32768, 1]
+			] as const) {
 				const { recipe } = packageProcessRequest(
 					source,
 					palette,
 					{
 						...settings,
-						dither: { ...settings.dither, algorithm, placement: 'adaptive', placementRadius }
+						dither: {
+							...settings.dither,
+							algorithm,
+							placement: 'adaptive',
+							placementSampleSize,
+							placementContrastThreshold
+						}
 					},
 					settings.output
 				).request;
 				expect(recipe.dither).toMatchObject(
-					algorithm === 'random'
-						? { perturb: { placement: { radius: 32768 } } }
-						: { placement: { radius: 32768 } }
+					algorithm === 'floyd-steinberg'
+						? {
+								placement: { mode: 'smooth-area-v1', sampleSize, contrastThreshold }
+							}
+						: {
+								perturb: {
+									placement: { mode: 'smooth-area-v1', sampleSize, contrastThreshold }
+								}
+							}
 				);
 			}
 		}

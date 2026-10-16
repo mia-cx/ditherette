@@ -24,9 +24,24 @@ Keep that workflow clear and fast, including large images.
   index when effects are toggled off and on.
 - Scopes inspect Source, Effects before resize and palette matching, and Output.
   Histograms compare stages and report sampled pure black and pure white clipping.
+- Production Adaptive placement follows local contrast and can halo hard edges.
+  The development preview compares fine and coarse perceptual contrast, then dithers
+  whole qualifying areas while preserving each algorithm's normal texture. Sample size
+  controls spatial scale; contrast tolerance controls the accepted colour jump.
+  Edge/ramp detection is visually accepted. The development preview reconstructs rounded
+  regions along source-colour boundaries and feathers dither density to reduce hard cutoffs,
+  isolated patches and undithered fringes. The result is visually accepted at
+  https://development.ditherette.mia.cx. The first production optimization removes redundant
+  distance work and is deployed there with exact scalar/threaded output checks.
+  Qualified latency measurements remain pending because shared-host browser activity
+  prevented a quiet benchmark window. Further performance work must preserve the accepted output.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
-  validation of the new API remain open.
+  validation of the new API remain open. Start editor integration now alongside
+  host preview/save memory bounds. Reuse the existing backend and keep CPU fallback.
+  Port generated pointwise effects and recipe application, resize, palette matching,
+  ordered/noise dithering, then Yliluoma. Error diffusion comes last because its
+  recurrence constrains parallel execution.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 
@@ -40,6 +55,7 @@ Website delivery proceeds independently of npm publication holds.
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
+   Optimize accepted adaptive placement with profiling, exact-output checks and benchmarks.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.

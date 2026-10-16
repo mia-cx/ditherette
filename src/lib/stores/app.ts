@@ -1,5 +1,5 @@
 import { computed, atom } from 'nanostores';
-import { persistentJSON } from '@nanostores/persistent';
+import { persistentAtom, persistentJSON } from '@nanostores/persistent';
 import type { ScopeModel } from '$lib/scopes/colour';
 import type { ScopeKind } from '$lib/scopes/scopes';
 import { releaseLevels, type PreviewLevel } from '$lib/processing/output-preview';
@@ -43,17 +43,74 @@ export const outputSettings = persistentJSON<OutputSettings>('ditherette:output'
 /** Whether exports post the anonymous settings-and-measurements event. */
 export const shareExportData = persistentJSON<boolean>('ditherette:share-export-data', true);
 
-export const ditherSettings = persistentJSON<DitherSettings>('ditherette:dither', {
+const DEFAULT_DITHER_SETTINGS: DitherSettings = {
 	algorithm: 'none',
 	strength: 100,
 	placement: 'everywhere',
-	placementRadius: 3,
-	placementThreshold: 12,
-	placementSoftness: 8,
+	placementSampleSize: 64,
+	placementContrastThreshold: 12,
 	serpentine: true,
 	seed: 0xc0ffee42,
 	useColorSpace: false
-});
+};
+
+/**
+ * Shape a persisted dither object into current settings. Keys from removed settings are dropped,
+ * `placement` falls back to the legacy `coverage` split like the panel once did, and missing or
+ * non-finite area-placement controls become the defaults. The result always differs in identity
+ * from anything saved before area placement, so stale adaptive outputs are regenerated.
+ */
+export function normalizeDitherSettings(value: unknown): DitherSettings {
+	const stored: Record<string, unknown> =
+		typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+	const coverage = stored.coverage;
+	const placement = stored.placement;
+	const sampleSize = stored.placementSampleSize;
+	const contrast = stored.placementContrastThreshold;
+	return {
+		...DEFAULT_DITHER_SETTINGS,
+		...(typeof stored.algorithm === 'string'
+			? { algorithm: stored.algorithm as DitherSettings['algorithm'] }
+			: {}),
+		...(typeof stored.strength === 'number' ? { strength: stored.strength } : {}),
+		placement:
+			placement === 'everywhere' || placement === 'adaptive'
+				? placement
+				: coverage === 'full'
+					? 'everywhere'
+					: 'adaptive',
+		placementSampleSize:
+			typeof sampleSize === 'number' && Number.isFinite(sampleSize)
+				? Math.min(512, Math.max(4, Math.round(sampleSize)))
+				: DEFAULT_DITHER_SETTINGS.placementSampleSize,
+		placementContrastThreshold:
+			typeof contrast === 'number' && Number.isFinite(contrast)
+				? Math.min(100, Math.max(0, contrast))
+				: DEFAULT_DITHER_SETTINGS.placementContrastThreshold,
+		...(typeof stored.serpentine === 'boolean' ? { serpentine: stored.serpentine } : {}),
+		...(typeof stored.seed === 'number' ? { seed: stored.seed } : {}),
+		...(typeof stored.useColorSpace === 'boolean' ? { useColorSpace: stored.useColorSpace } : {}),
+		...(coverage === 'full' || coverage === 'transitions' || coverage === 'edges'
+			? { coverage }
+			: {})
+	};
+}
+
+export const ditherSettings = persistentAtom<DitherSettings>(
+	'ditherette:dither',
+	DEFAULT_DITHER_SETTINGS,
+	{
+		encode: JSON.stringify,
+		decode: (raw) => {
+			try {
+				return normalizeDitherSettings(JSON.parse(raw));
+			} catch {
+				// Corrupted saved JSON must not prevent the editor from starting.
+				return DEFAULT_DITHER_SETTINGS;
+			}
+		}
+	}
+);
 
 export const colorSpace = persistentJSON<ColorSpaceId>('ditherette:color-space', 'oklab');
 

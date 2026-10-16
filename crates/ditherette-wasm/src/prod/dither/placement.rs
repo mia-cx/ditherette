@@ -8,6 +8,8 @@ use crate::{
     },
 };
 
+const SMOOTH_WORKING_BYTES: u64 = 4096;
+
 /// Fixed coordinate enclosure of source RGB8 in one working space.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CoordinateDomain {
@@ -102,6 +104,7 @@ fn contrast_with_converter(
 
 /// Returns an everywhere or adaptive mask in [0,1] for a validated placement request.
 /// Adaptive threshold and softness use normalized contrast percentage points.
+/// SmoothAreaV1 uses full-image `smooth_area_v1::select` scratch instead.
 pub fn placement_mask_at(
     source: ImageView<'_, Rgba8>,
     x: u32,
@@ -125,6 +128,10 @@ pub(crate) fn placement_mask_with_converter(
     placement: Placement,
     converter: &Converter,
 ) -> f32 {
+    assert!(
+        !matches!(placement, Placement::SmoothAreaV1 { .. }),
+        "smooth placement requires precomputed source analysis"
+    );
     let Placement::Adaptive {
         radius,
         threshold,
@@ -149,12 +156,55 @@ fn adaptive_mask(contrast: f64, threshold: f32, softness: f32) -> f32 {
     (t * t * (3.0 - 2.0 * t)) as f32
 }
 
-/// Optional call-owned coordinates. Reservation failure keeps the direct converter path usable.
+/// Call-owned legacy coordinate rows or mandatory smooth-area analysis.
+/// Only legacy row storage can fall back after a reservation miss.
 pub(crate) struct AdaptivePlacementWork {
     coordinates: Vec<[f32; 3]>,
+    smooth: bool,
 }
 
 impl AdaptivePlacementWork {
+    pub(crate) fn required_for_image(
+        dimensions: crate::image::ImageDimensions,
+        placement: Placement,
+    ) -> u64 {
+        if !matches!(placement, Placement::SmoothAreaV1 { .. }) {
+            return 0;
+        }
+        Self::RECORD_BYTES
+            + SMOOTH_WORKING_BYTES
+            + super::smooth_area_v1::scratch_len(dimensions) as u64
+                * std::mem::size_of::<[f32; 3]>() as u64
+    }
+    /// Area placement owns pixel records plus max(3 * width, height) line records.
+    /// Box-sum lines and three source colour rows become one queue. No analysis is cached.
+    /// A conservative 4 KiB fixed reserve covers the serial selector's live scalar records.
+    /// Legacy row storage remains optional; smooth storage fails before execution when it cannot fit.
+    pub(crate) fn try_for_image(
+        dimensions: crate::image::ImageDimensions,
+        placement: Placement,
+        available: u64,
+    ) -> Result<Option<Self>, crate::prod::contract::failure::Failure> {
+        if !matches!(placement, Placement::SmoothAreaV1 { .. }) {
+            return Ok(Self::try_new(dimensions.width(), placement, available));
+        }
+        use crate::prod::contract::{
+            error::ErrorCode,
+            failure::{ErrorPath, Failure},
+        };
+        let failure = || Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes);
+        let heap = available
+            .checked_sub(Self::RECORD_BYTES + SMOOTH_WORKING_BYTES)
+            .ok_or_else(failure)?;
+        let count = super::smooth_area_v1::scratch_len(dimensions);
+        let mut coordinates =
+            crate::prod::resize::common::allocation::CapacityBudget::new(heap).vector(count)?;
+        coordinates.resize(count, [0.0; 3]);
+        Ok(Some(Self {
+            coordinates,
+            smooth: true,
+        }))
+    }
     const RECORD_BYTES: u64 = (std::mem::size_of::<Self>()
         + std::mem::size_of::<AdaptivePlacementRows<'_>>()
         + std::mem::size_of::<AdaptivePlacementRow<'_>>()) as u64;
@@ -169,12 +219,16 @@ impl AdaptivePlacementWork {
             .vector(count)
             .ok()?;
         coordinates.resize(count, [0.0; 3]);
-        Some(Self { coordinates })
+        Some(Self {
+            coordinates,
+            smooth: false,
+        })
     }
 
     pub(crate) fn capacity_bytes(&self) -> u64 {
         Self::RECORD_BYTES
             + self.coordinates.capacity() as u64 * std::mem::size_of::<[f32; 3]>() as u64
+            + if self.smooth { SMOOTH_WORKING_BYTES } else { 0 }
     }
 
     pub(crate) fn scratch(&mut self) -> &mut [[f32; 3]] {

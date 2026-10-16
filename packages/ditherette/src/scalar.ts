@@ -112,7 +112,11 @@ const errorPaths = [
 	'effects',
 	'context.palette',
 	'context.space',
-	'mask'
+	'mask',
+	'perturb.placement.sampleSize',
+	'dither.placement.sampleSize',
+	'perturb.placement.contrastThreshold',
+	'dither.placement.contrastThreshold'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',

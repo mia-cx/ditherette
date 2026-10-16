@@ -120,7 +120,7 @@ function normalizePolicy(value: unknown, path: string) {
 function normalizePlacement(value: unknown, path: string) {
 	const inputPlacement = object(
 		value,
-		['mode', 'radius', 'threshold', 'softness'],
+		['mode', 'radius', 'threshold', 'softness', 'sampleSize', 'contrastThreshold'],
 		'invalid-settings',
 		`${path}.placement`
 	);
@@ -130,7 +130,7 @@ function normalizePlacement(value: unknown, path: string) {
 		threshold = 0,
 		softness = 0;
 	if (mode === 'everywhere') {
-		for (const key of ['radius', 'threshold', 'softness'])
+		for (const key of ['radius', 'threshold', 'softness', 'sampleSize', 'contrastThreshold'])
 			if (Object.hasOwn(inputPlacement, key))
 				throw new DitheretteError(
 					'invalid-settings',
@@ -139,6 +139,13 @@ function normalizePlacement(value: unknown, path: string) {
 				);
 		placement = 0;
 	} else if (mode === 'adaptive') {
+		for (const key of ['sampleSize', 'contrastThreshold'])
+			if (Object.hasOwn(inputPlacement, key))
+				throw new DitheretteError(
+					'invalid-settings',
+					`${path}.placement.${key}`,
+					'Legacy Adaptive takes radius, threshold and softness.'
+				);
 		const value = field(inputPlacement, 'radius');
 		if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 32_768)
 			throw new DitheretteError(
@@ -150,6 +157,37 @@ function normalizePlacement(value: unknown, path: string) {
 		threshold = scalar(field(inputPlacement, 'threshold'), `${path}.placement.threshold`);
 		softness = scalar(field(inputPlacement, 'softness'), `${path}.placement.softness`);
 		placement = 1;
+	} else if (mode === 'smooth-area-v1') {
+		for (const key of ['radius', 'threshold', 'softness'])
+			if (Object.hasOwn(inputPlacement, key))
+				throw new DitheretteError(
+					'invalid-settings',
+					`${path}.placement.${key}`,
+					'Smooth area placement takes sampleSize and contrastThreshold.'
+				);
+		const value = field(inputPlacement, 'sampleSize');
+		if (typeof value !== 'number' || !Number.isInteger(value) || value < 4 || value > 32_768)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.placement.sampleSize`,
+				'Expected a square side from 4 through 32768 pixels.'
+			);
+		const tolerance = field(inputPlacement, 'contrastThreshold');
+		if (
+			typeof tolerance !== 'number' ||
+			!Number.isFinite(tolerance) ||
+			tolerance < 0 ||
+			tolerance > 1
+		)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.placement.contrastThreshold`,
+				'Expected a finite contrast threshold from 0 through 1.'
+			);
+		// The unshipped private preview reuses radius/threshold for sample size/tolerance.
+		placement = 2;
+		radius = value;
+		threshold = tolerance;
 	} else
 		throw new DitheretteError(
 			'invalid-settings',

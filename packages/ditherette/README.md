@@ -382,7 +382,28 @@ Adaptive placement uses the original image's eight-neighbor contrast and fixed c
 Cylindrical placement uses the minimum-chroma hue arc, not matching's circular chord.
 Radius is an integer from 1 through 32,768. Strength, threshold, and softness accept finite nonnegative f32-range numbers.
 The implementation rounds these controls to f32, but reconstructs perturbed coordinates with wide arithmetic before final RGB clipping and byte rounding.
-Zero strength preserves every source byte. Both placement modes preserve alpha and hidden RGB processing.
+Zero strength preserves every source byte. Placement preserves alpha and hidden RGB processing.
+
+`{ mode: 'smooth-area-v1', sampleSize: 64, contrastThreshold: 0.12 }` selects complete smooth areas.
+`sampleSize` is an integer square side from 4 through 32,768 working pixels after any `process` resize.
+Direct APIs measure source pixels. The square clips to smaller image dimensions.
+`sampleSize / 2` sets the radius of a symmetric square box mean in source Oklab.
+`contrastThreshold` is finite from 0 through 1. It bounds the largest immediate-neighbour Oklab
+distance and twice the distance to the coarse mean inside each square. Higher tolerance only adds selection.
+Total colour change across a broad ramp is unrestricted. A steep edge fails even when its total change
+equals that ramp. Increasing sample size can reject compact transitions whose one-pixel jumps remain small.
+Lower-contrast compact transitions can still qualify. Overlapping qualifying squares seed smooth regions,
+including quantized plateaus and flat fills. Source-aware reconstruction rounds their contours and
+feathers dither density at regional boundaries. Small isolated patches are suppressed. Smooth coverage
+can reach the gradient side of lineart, while source-colour barriers preserve the line itself.
+There is no directional run fitting or per-pixel flat veto. Selected pixels retain the ordinary
+algorithm's full pixel and phase; fractional coverage never blends palette colours.
+Distance uses Euclidean D65 Oklab, with 1 approximately the black-to-white lightness difference,
+and clips distances above 1. Zero tolerance admits flat areas; one admits the entire image.
+Low-contrast texture can qualify. The [reference](../../crates/ditherette-wasm/src/spec/smooth_area_v1.md)
+defines the exact regional criterion. Legacy Adaptive and Everywhere remain unchanged.
+Analysis needs twelve bytes per working pixel plus twelve bytes times max(3 × width, height) and fixed
+call bookkeeping, all within the existing memory limit.
 
 `ditherAndQuantize` quantizes that completed RGBA8 result, with the same indices, palette, and warnings as `quantize(perturb(...))`.
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
@@ -414,8 +435,11 @@ Kernels are `floyd-steinberg`, `sierra`, `sierra-lite`, `atkinson`, `jarvis-judi
 Sierra3 is `sierra`, and Sierra-2-4A (Filter Lite) is `sierra-lite`.
 `srgb-bytes` feedback rounds and clips before matching. `matching` feedback keeps unrounded coordinates in the selected matching space.
 Serpentine scanning reverses alternate rows. Adaptive placement uses the unchanged source and the matching space.
+Smooth gradient placement keeps the ordinary kernel recurrence and masks its visible output.
+Selected pixels equal Everywhere dithering; excluded pixels equal direct matching, so flat fills stay clean.
 Preserved transparent pixels discard incoming error and emit none. Palette order, duplicates, and warnings follow direct quantization.
-Diffusion stays scalar and reserves three work rows. Scratch capacity scales with width; owned source and index buffers also count toward the limit.
+Diffusion stays scalar and reserves three work rows. Recurrence scratch scales with width; smooth-gradient analysis uses the full-image storage described above.
+Owned source and index buffers also count toward the limit.
 An arithmetic overflow returns `runtime` at `dither.arithmetic`, publishes no result, and leaves the instance usable.
 
 ## Yliluoma
@@ -435,6 +459,7 @@ const indexed = processor.ditherAndQuantize({
 
 Matrix sizes are `'2'`, `'4'`, `'8'`, and `'16'`. Adaptive placement uses the controls shown above.
 Yliluoma searches every ordered palette pair and matrix ratio. A zero adaptive mask still searches mixtures of the nearest color.
+Smooth area placement uses the original nearest palette entry at excluded pixels.
 It allocates source and index storage without an RGBA8 intermediate or mixture table.
 Exact outputs follow the frozen Wasm reference; native floating-point math can select different mixtures near ties.
 
