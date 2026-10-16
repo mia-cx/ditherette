@@ -17,6 +17,7 @@ import {
 } from '$lib/stores/app';
 import type { ProcessedImage, WorkerRequest } from './types';
 import { ProcessorWorkerPipeline } from './worker-pipeline';
+import { saveProcessedImage } from './db';
 
 vi.mock('./db', () => ({ saveProcessedImage: vi.fn(async () => undefined) }));
 
@@ -87,6 +88,66 @@ afterEach(() => {
 });
 
 describe('website processing scheduling', () => {
+	it('does not save the retained output after settings supersede it', async () => {
+		vi.mocked(saveProcessedImage).mockClear();
+		const pending = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		const pipeline = new ProcessorWorkerPipeline();
+		worker.receive(await pipeline.handleAsync(worker.messages[0], () => undefined));
+		worker.receive(await pipeline.handleAsync(worker.messages.at(-1)!, () => undefined));
+		await pending;
+		outputSettings.set({ ...outputSettings.get(), width: 2 });
+		scheduleProcessing(180);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(saveProcessedImage).not.toHaveBeenCalled();
+	});
+
+	it('cancels a started save when settings change and suppresses its late failure', async () => {
+		const saving = Promise.withResolvers<void>();
+		vi.mocked(saveProcessedImage).mockReturnValueOnce(saving.promise);
+		const pending = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		const pipeline = new ProcessorWorkerPipeline();
+		worker.receive(await pipeline.handleAsync(worker.messages[0], () => undefined));
+		worker.receive(await pipeline.handleAsync(worker.messages.at(-1)!, () => undefined));
+		await pending;
+		await vi.advanceTimersByTimeAsync(1000);
+		const guard = vi.mocked(saveProcessedImage).mock.calls.at(-1)?.[1];
+		expect(guard?.isCurrent()).toBe(true);
+		outputSettings.set({ ...outputSettings.get(), width: 2 });
+		scheduleProcessing(180);
+		expect(guard?.signal.aborted).toBe(true);
+		expect(guard?.isCurrent()).toBe(false);
+		saving.reject(new Error('IndexedDB transaction aborted'));
+		await vi.advanceTimersByTimeAsync(0);
+		expect(processingError.get()).toBeUndefined();
+	});
+
+	it.each(['invalid current response', 'superseded response'])(
+		'closes bitmaps from an %s',
+		async (reason) => {
+			class Bitmap {
+				close = vi.fn();
+			}
+			vi.stubGlobal('ImageBitmap', Bitmap);
+			const pending = processCurrentImage();
+			await vi.advanceTimersByTimeAsync(0);
+			const worker = ControlledWorker.instances[0];
+			const bitmap = new Bitmap();
+			worker.receive({
+				id: worker.messages[0].id + (reason === 'superseded response' ? -1 : 0),
+				type: 'complete',
+				image: undefined,
+				preview: [bitmap]
+			});
+			expect(bitmap.close).toHaveBeenCalledOnce();
+			cancelProcessing();
+			await pending;
+		}
+	);
+
 	it('records package worker timings through response validation and client completion', async () => {
 		const pending = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);

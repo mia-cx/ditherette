@@ -44,6 +44,7 @@ let workerNeedsReplacement = false;
 /** A superseded job may still be running on the kept worker, so the next request may wait. */
 let workerMayBeBusy = false;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
+let persistController: AbortController | undefined;
 
 const SLIDER_DEBOUNCE_MS = 180;
 /**
@@ -77,8 +78,7 @@ export function cancelProcessing() {
 	if (timer) clearTimeout(timer);
 	timer = undefined;
 	// A new source cancels processing first; an old result saved after that would outlive it.
-	if (persistTimer) clearTimeout(persistTimer);
-	persistTimer = undefined;
+	cancelPendingSave();
 	activeRequestId = ++requestId;
 	activeReject?.(new ProcessingCanceled());
 	activeReject = undefined;
@@ -260,6 +260,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				message = validateWorkerResponse(event.data);
 				responseValidationMs += performance.now() - validationStart;
 			} catch (error) {
+				releaseDropped(event.data);
 				responseValidationMs += performance.now() - validationStart;
 				processingProgress.set(undefined);
 				settle(reject, error instanceof Error ? error : new Error('Worker response was invalid.'));
@@ -345,6 +346,7 @@ export async function processCurrentImage(schedule?: ProcessingSchedule) {
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
 	if (previous?.settingsHash === hash) return;
+	cancelPendingSave();
 	// Keep the last valid output on screen while non-crop edits reprocess.
 	// Source and crop changes clear it at their boundaries because the old frame shape is misleading there.
 	const program = Effect.tryPromise({
@@ -372,21 +374,41 @@ export async function processCurrentImage(schedule?: ProcessingSchedule) {
 	}
 }
 
-/** Save the processed image once no newer result replaces it for a moment. */
-function persistWhenSettled() {
+function cancelPendingSave() {
 	if (persistTimer) clearTimeout(persistTimer);
+	persistTimer = undefined;
+	persistController?.abort();
+	persistController = undefined;
+}
+
+/** Save only settled, current output; cancel pending clones and active writes on supersession. */
+function persistWhenSettled() {
+	cancelPendingSave();
+	const controller = new AbortController();
+	persistController = controller;
 	persistTimer = setTimeout(() => {
 		persistTimer = undefined;
 		const image = processedImage.get();
-		if (!image) return;
-		saveProcessedImage(image).catch((error: unknown) => {
-			if (processedImage.get() !== image) return;
-			processingError.set(error instanceof Error ? error.message : 'Saving the output failed.');
-		});
+		if (!image || image.settingsHash !== currentSettingsHash()) return;
+		const hash = image.settingsHash;
+		// The guard retains identity, not the pixel buffer of an output skipped by DB admission.
+		const isCurrent = () =>
+			persistController === controller &&
+			processedImage.get()?.settingsHash === hash &&
+			currentSettingsHash() === hash;
+		saveProcessedImage(image, { signal: controller.signal, isCurrent })
+			.catch((error: unknown) => {
+				if (!isCurrent()) return;
+				processingError.set(error instanceof Error ? error.message : 'Saving the output failed.');
+			})
+			.finally(() => {
+				if (persistController === controller) persistController = undefined;
+			});
 	}, PERSIST_DELAY_MS);
 }
 
 export function scheduleProcessing(delay = 0) {
+	cancelPendingSave();
 	if (!sourceImageData.get()) return;
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
@@ -396,6 +418,7 @@ export function scheduleProcessing(delay = 0) {
 	processingProgress.set(undefined);
 	if (previous?.settingsHash === hash) {
 		if (workerNeedsReplacement) terminateProcessingWorker();
+		persistWhenSettled();
 		return;
 	}
 	const schedule: ProcessingSchedule = {

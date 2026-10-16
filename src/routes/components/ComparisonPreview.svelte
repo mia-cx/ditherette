@@ -13,7 +13,11 @@
 		EmptyMedia,
 		EmptyTitle
 	} from '$lib/components/ui/empty';
-	import { buildOutputPyramid, type PreviewLevel } from '$lib/processing/output-preview';
+	import {
+		buildOutputPyramid,
+		withOutputPreviewLevel,
+		type PreviewLevel
+	} from '$lib/processing/output-preview';
 	import { browser } from '$app/environment';
 	import {
 		effectsDrawn,
@@ -482,33 +486,23 @@
 		const outputScale = deviceWidth / original.width;
 		const context = canvas.getContext('2d');
 		if (!context) return;
+		const minified = outputScale < 1;
+		const width = minified ? deviceWidth : original.width;
+		const height = minified ? deviceHeight : original.height;
+		const cacheKey = `${generation}:${width}x${height}:${minified}`;
+		canvas.style.imageRendering = minified ? 'auto' : 'pixelated';
+		// Pan/layout changes can redraw identical pixels. Check before allocating a missing mip.
+		if (canvas.dataset.previewKey === cacheKey) return;
 
 		if (outputScale >= 1) {
-			drawPreviewLevel(
-				canvas,
-				context,
-				original,
-				original.width,
-				original.height,
-				false,
-				generation
-			);
-			canvas.style.imageRendering = 'pixelated';
-			return;
+			drawPreviewLevel(canvas, context, original, original.width, original.height, false);
+		} else {
+			withOutputPreviewLevel(levels, deviceWidth, (level) => {
+				const smoothing = level.width > deviceWidth || level.height > deviceHeight;
+				drawPreviewLevel(canvas, context, level, deviceWidth, deviceHeight, smoothing);
+			});
 		}
-
-		const level = selectPreviewLevel(levels, deviceWidth);
-		const smoothing = level.width > deviceWidth || level.height > deviceHeight;
-		drawPreviewLevel(canvas, context, level, deviceWidth, deviceHeight, smoothing, generation);
-		canvas.style.imageRendering = 'auto';
-	}
-
-	function selectPreviewLevel(levels: PreviewLevel[], targetWidth: number) {
-		for (let index = levels.length - 1; index >= 0; index--) {
-			const level = levels[index]!;
-			if (level.width >= targetWidth) return level;
-		}
-		return levels[levels.length - 1]!;
+		canvas.dataset.previewKey = cacheKey;
 	}
 
 	function drawPreviewLevel(
@@ -517,11 +511,8 @@
 		level: PreviewLevel,
 		width: number,
 		height: number,
-		smoothing: boolean,
-		generation: number
+		smoothing: boolean
 	) {
-		const cacheKey = `${generation}:${level.width}x${level.height}:${width}x${height}:${smoothing}`;
-		if (canvas.dataset.previewKey === cacheKey) return;
 		if (canvas.width !== width || canvas.height !== height) {
 			canvas.width = width;
 			canvas.height = height;
@@ -530,7 +521,6 @@
 		context.imageSmoothingQuality = 'high';
 		context.clearRect(0, 0, width, height);
 		context.drawImage(level, 0, 0, width, height);
-		canvas.dataset.previewKey = cacheKey;
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {
