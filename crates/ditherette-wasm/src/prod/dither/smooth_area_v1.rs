@@ -6,6 +6,13 @@ use crate::prod::color::packed::{Converter, PackedSpace};
 const EDGE_PROBE_RADIUS: usize = 4;
 const MINIMUM_REGION_DIVISOR: usize = 16;
 
+// Evaluate the cubic before rounding to f32. Intermediate f32 rounding can
+// decrease smoothstep near one, removing pixels as tolerance increases.
+fn smoothstep(t: f32) -> f32 {
+    let t = f64::from(t);
+    (t * t * (3.0 - 2.0 * t)) as f32
+}
+
 /// Pixel records plus three source colour rows, reused as one line queue.
 pub fn scratch_len(dimensions: ImageDimensions) -> usize {
     dimensions.pixel_count().expect("validated dimensions")
@@ -152,7 +159,7 @@ pub fn select<E>(
         for cell in row {
             if cell[1] >= 0.0 {
                 let t = (cell[2] / edge_radius).clamp(0.0, 1.0);
-                cell[1] = t * t * (3.0 - 2.0 * t);
+                cell[1] = smoothstep(t);
             }
         }
         check()?;
@@ -183,7 +190,7 @@ pub fn select<E>(
             cell[2] = if cell[1] < 0.0 {
                 0.0
             } else {
-                cell[1] * t * t * (3.0 - 2.0 * t)
+                cell[1] * smoothstep(t)
             };
         }
         check()?;

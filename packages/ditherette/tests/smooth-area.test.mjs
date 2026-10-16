@@ -2,7 +2,25 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createDitherette } from '../dist/index.js';
-import { areaChecks, areaBudgetChecks, featherChecks } from './smooth-area-fixture.mjs';
+import {
+	areaChecks,
+	areaBudgetChecks,
+	featherChecks,
+	adjacentToleranceChecks
+} from './smooth-area-fixture.mjs';
+
+test('increasing adjacent f32 tolerances preserves selected pixels', async () => {
+	const wasm = await WebAssembly.compile(
+		await readFile(new URL('../dist/wasm/scalar/ditherette_wasm_bg.wasm', import.meta.url))
+	);
+	const processor = await createDitherette({ wasm });
+	try {
+		const { selected } = adjacentToleranceChecks(processor);
+		assert.equal(selected[1][3 * 76 + 52], true);
+	} finally {
+		processor.dispose();
+	}
+});
 
 // Proves soft boundaries, gradient-side edge coverage, texture isolation and unchanged algorithm output.
 test('regional boundaries feather density without losing the gradient side of lineart', async (t) => {
