@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { compileEffects, indexColours, type Effect } from 'ditherette';
+import { applyCompiledEffects, compileEffects, indexColours, type Effect } from 'ditherette';
+import type { LiveEffectsRequest, LiveEffectsResponse } from './live-effects';
 import { packageEffectContext, packageProcessRequest } from './package-adapter';
 import { resolveRecipes } from './recipes';
 import type { EnabledPaletteColor, ProcessingSettings } from './types';
@@ -110,6 +111,57 @@ const CHAINS: Record<string, Effect[]> = {
 		}
 	]
 };
+
+it('shares exact effects and alpha through the real async worker and disposes its session', async () => {
+	const worker = new Worker(new URL('../workers/effects.worker.ts', import.meta.url), {
+		type: 'module'
+	});
+	const responses: LiveEffectsResponse[] = [];
+	const wait = (type: LiveEffectsResponse['type']) =>
+		new Promise<LiveEffectsResponse>((resolve, reject) => {
+			worker.onmessage = ({ data }: MessageEvent<LiveEffectsResponse>) => {
+				responses.push(data);
+				if (data.type === 'failed') reject(new Error(data.message));
+				if (data.type === type) resolve(data);
+			};
+			worker.onerror = reject;
+		});
+	const cpu = await initializePackageProcessor();
+	try {
+		const source = fixture();
+		const indexed = wait('indexed');
+		worker.postMessage({ type: 'source', sourceId: 1, source } satisfies LiveEffectsRequest);
+		await indexed;
+		const compiled = wait('compiled');
+		worker.postMessage({
+			type: 'compile',
+			sourceId: 1,
+			id: 1,
+			key: 'tone',
+			effects: CHAINS.tone!,
+			context: { palette: [], space: 'oklab' }
+		} satisfies LiveEffectsRequest);
+		const reply = await compiled;
+		if (reply.type !== 'compiled') throw new Error('Expected compiled effects');
+		const input = {
+			width: source.width,
+			height: source.height,
+			data: new Uint8Array(source.data.buffer)
+		};
+		const index = indexColours(input);
+		expect(applyCompiledEffects(input, index.indices, reply.results).data).toEqual(
+			cpu.applyEffects({ version: 1, source: input, effects: CHAINS.tone! }).data
+		);
+		expect(reply.execution?.backend).toMatch(/^(gpu|cpu)$/);
+		const disposed = wait('disposed');
+		worker.postMessage({ type: 'dispose' } satisfies LiveEffectsRequest);
+		await disposed;
+		expect(responses.map((response) => response.type)).toEqual(['indexed', 'compiled', 'disposed']);
+	} finally {
+		cpu.dispose();
+		worker.terminate();
+	}
+});
 
 const settings: ProcessingSettings = {
 	output: {
