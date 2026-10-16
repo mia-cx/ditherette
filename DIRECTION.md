@@ -35,10 +35,12 @@ Keep that workflow clear and fast, including large images.
   distance work and is deployed there with exact scalar/threaded output checks.
   Qualified latency measurements remain pending because shared-host browser activity
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
-- The opt-in package GPU effects API uses exact channel lookup with bounded CPU
-  fallback. Website integration, the remaining GPU stages, and physical GPU
-  validation of the new API remain open. Start editor integration now alongside
-  host preview/save memory bounds. Reuse the existing backend and keep CPU fallback.
+- The GPU preview integrates exact channel-lookup effects with bounded CPU fallback.
+  Mia reports that effects are fast, while dithering generally and Adaptive remain slow.
+  Profile the full Celeste image at 1x across every dither mode and colour space,
+  Everywhere and Adaptive, with no effects and two effects chains before choosing
+  further optimizations. The reviewed integration and host memory bounds await merge.
+  Remaining GPU stages and physical browser/device qualification stay open.
   Port generated pointwise effects and recipe application, resize, palette matching,
   ordered/noise dithering, then Yliluoma. Error diffusion comes last because its
   recurrence constrains parallel execution.
@@ -59,7 +61,8 @@ analytics while the pull requests complete their merge gates.
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
-   Optimize accepted adaptive placement with profiling, exact-output checks and benchmarks.
+   Profile general dithering and Adaptive, then optimize the measured bottlenecks
+   while preserving the accepted output.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.
