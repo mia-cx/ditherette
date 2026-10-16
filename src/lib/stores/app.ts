@@ -101,7 +101,14 @@ export const ditherSettings = persistentAtom<DitherSettings>(
 	DEFAULT_DITHER_SETTINGS,
 	{
 		encode: JSON.stringify,
-		decode: (raw) => normalizeDitherSettings(JSON.parse(raw))
+		decode: (raw) => {
+			try {
+				return normalizeDitherSettings(JSON.parse(raw));
+			} catch {
+				// Corrupted saved JSON must not prevent the editor from starting.
+				return DEFAULT_DITHER_SETTINGS;
+			}
+		}
 	}
 );
 
