@@ -30,8 +30,9 @@ Keep that workflow clear and fast, including large images.
   controls spatial scale; contrast tolerance controls the accepted colour jump.
   Edge/ramp detection is visually accepted. The development preview reconstructs rounded
   regions along source-colour boundaries and feathers dither density to reduce hard cutoffs,
-  isolated patches and undithered fringes. Final visual acceptance remains open at
-  https://development.ditherette.mia.cx.
+  isolated patches and undithered fringes. The result is visually accepted at
+  https://development.ditherette.mia.cx. Profiling and measured production optimizations
+  must now make Adaptive responsive without changing that output.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
@@ -48,8 +49,7 @@ Website delivery proceeds independently of npm publication holds.
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
-   Correct adaptive placement through whole-area sampling and adjustable contrast tolerance.
-   Smooth mask boundaries while preserving the accepted detector and algorithm textures.
+   Optimize accepted adaptive placement with profiling, exact-output checks and benchmarks.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.
