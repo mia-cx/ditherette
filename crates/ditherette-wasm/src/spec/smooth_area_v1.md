@@ -74,6 +74,10 @@ colours connect. Otherwise, a step of length d costs
 `d * (1 + sampleSize * (jump / (d * tolerance))^2)`.
 Local variation therefore limits extension into texture. Coverage is the soft
 domain weight times `smoothstep(clamp((2 * sampleSize - distance) / sampleSize, 0, 1))`.
+For both weights, evaluate `t * t * (3 - 2 * t)` in f64 from the clamped f32
+input, then round once to f32. Multiply the two rounded weights in f32.
+Intermediate f32 cubic rounding can decrease near one; this evaluation preserves
+nondecreasing weights for increasing f32 inputs, including adjacent tolerances.
 Full coverage persists within one sample size of trusted centres, then fades.
 This bounded chamfer approximation has rounded contours without a radius-squared
 search. It can conservatively miss a winding route that needs further sweeps.

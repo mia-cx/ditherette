@@ -2270,6 +2270,39 @@
 				}
 			],
 			"contentSha256": "7a5a82d8104e5c9eb8bbf8fc9aa3086126b2db675a1f619280619c5e312f5e89"
+		},
+		{
+			"name": "smooth-area-monotonic-v1",
+			"summary": "Evaluate both smoothstep weights in f64 before rounding to preserve nondecreasing coverage and selected-set inclusion at adjacent f32 tolerances",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "1b434bbc6ea91c585e5623d4f8ebdea9ea4729293ec79c1b46c5b3dd0ddb4f95"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "7302915c41267b7141d16defaeb142577647117f267e5692141788af8786b970"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "86f5399c068f8eeae3a9b5f1e097b44ea13c90d3dce1373250b769f982208967"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "003ca9e56d514b68a87cee854e53d9f921842022a12d66e97b7063aff51ef15b"
+					}
+				}
+			],
+			"contentSha256": "a54d80be4a5f476c99faf4c87e3bc45e0159cde31e622f5a81aff2df5afcb0c5"
 		}
 	]
 }

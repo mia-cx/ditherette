@@ -1,3 +1,42 @@
+/** Proves increasing adjacent valid tolerances preserves the actual selected pixel set. */
+export function adjacentToleranceChecks(processor) {
+	const width = 76,
+		height = 4;
+	const row = [
+		...Array(47).fill(80),
+		...Array.from({ length: 9 }, (_, i) => 81 + i),
+		...Array(20).fill(160)
+	];
+	const data = new Uint8Array(width * height * 4);
+	for (let y = 0; y < height; y++)
+		for (let x = 0; x < width; x++) data.set([row[x], row[x], row[x], 255], (y * width + x) * 4);
+	const source = { width, height, data };
+	const outputs = [0.0037126056849956512, 0.003712605917826295].map(
+		(contrastThreshold) =>
+			processor.perturb({
+				version: 1,
+				source,
+				perturb: {
+					field: { algorithm: 'bayer', size: '16' },
+					space: 'srgb',
+					strength: 8,
+					placement: { mode: 'smooth-area-v1', sampleSize: 4, contrastThreshold }
+				}
+			}).data
+	);
+	const selected = outputs.map((output) =>
+		Array.from({ length: width * height }, (_, i) =>
+			[0, 1, 2].some((c) => output[i * 4 + c] !== data[i * 4 + c])
+		)
+	);
+	for (let i = 0; i < width * height; i++) {
+		if (selected[0][i] && !selected[1][i])
+			throw Error(`Increased tolerance deselected (${i % width},${Math.floor(i / width)}).`);
+	}
+	if (!selected[1][3 * width + 52]) throw Error('Corrected upper threshold must select (52,3).');
+	return { selected, outputs: outputs.map((output) => Array.from(output)) };
+}
+
 /** Proves boundary density, gradient-side coverage, isolated texture and exact output choices. */
 export function featherChecks(processor) {
 	const field = { algorithm: 'bayer', size: '16' };

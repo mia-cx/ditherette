@@ -4,6 +4,55 @@ use ditherette_wasm::{
     spec::smooth_area_v1,
 };
 
+// Proves increasing a valid tolerance cannot lower coverage or deselect a real pixel,
+// even when adjacent f32 thresholds previously straddled its blue-noise cutoff.
+#[test]
+fn adjacent_tolerances_preserve_coverage_and_selected_pixels() {
+    use ditherette_wasm::prod::dither::smooth_area_v1 as production;
+
+    let dims = ImageDimensions::new(76, 4).unwrap();
+    let row: Vec<_> = std::iter::repeat_n(80_u8, 47)
+        .chain(81..=89)
+        .chain(std::iter::repeat_n(160, 20))
+        .flat_map(|v| [v, v, v, 255])
+        .collect();
+    let bytes = row.repeat(4);
+    let source = ImageView::<Rgba8>::packed(&bytes, dims).unwrap();
+    let low = 0.0037126056849956512_f32;
+    let high = f32::from_bits(low.to_bits() + 1);
+    assert_eq!(high, 0.003712605917826295_f32);
+    let mut previous = vec![[0.0; 3]; smooth_area_v1::scratch_len(dims)];
+    let mut current = previous.clone();
+    let mut reference = previous.clone();
+    production::select(source, 4, low, &mut previous, || Ok::<_, ()>(())).unwrap();
+    production::select(source, 4, high, &mut current, || Ok::<_, ()>(())).unwrap();
+    eprintln!(
+        "pixel (52,3): {} -> {}; selected {} -> {}",
+        previous[3 * 76 + 52][2],
+        current[3 * 76 + 52][2],
+        production::covers(previous[3 * 76 + 52][2], 52, 3),
+        production::covers(current[3 * 76 + 52][2], 52, 3)
+    );
+    for (tolerance, actual) in [(low, &previous), (high, &current)] {
+        smooth_area_v1::select(source, 4, tolerance, &mut reference, || Ok::<_, ()>(())).unwrap();
+        for i in 0..76 * 4 {
+            assert_eq!(actual[i][2].to_bits(), reference[i][2].to_bits());
+        }
+    }
+    for i in 0..76 * 4 {
+        let x = (i % 76) as u32;
+        let y = (i / 76) as u32;
+        assert!(
+            current[i][2] >= previous[i][2],
+            "coverage decreased at ({x},{y})"
+        );
+        assert!(
+            !production::covers(previous[i][2], x, y) || production::covers(current[i][2], x, y),
+            "increased tolerance deselected ({x},{y})"
+        );
+    }
+}
+
 #[test]
 fn area_domain_table_matches_complete_square_definition() {
     for (name, w, h, size, tolerance, kind) in [
