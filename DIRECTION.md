@@ -31,8 +31,10 @@ Keep that workflow clear and fast, including large images.
   Edge/ramp detection is visually accepted. The development preview reconstructs rounded
   regions along source-colour boundaries and feathers dither density to reduce hard cutoffs,
   isolated patches and undithered fringes. The result is visually accepted at
-  https://development.ditherette.mia.cx. Profiling and measured production optimizations
-  must now make Adaptive responsive without changing that output.
+  https://development.ditherette.mia.cx. The first production optimization removes redundant
+  distance work and is deployed there with exact scalar/threaded output checks.
+  Qualified latency measurements remain pending because shared-host browser activity
+  prevented a quiet benchmark window. Further performance work must preserve the accepted output.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
   validation of the new API remain open.
