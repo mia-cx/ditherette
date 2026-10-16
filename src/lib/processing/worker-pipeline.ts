@@ -1,12 +1,20 @@
 import {
 	applyCompiledEffects,
+	compileEffectMask,
+	createGpuEffects,
 	indexColours,
+	type Curve,
 	type Ditherette,
+	type GpuEffects,
 	type IndexedColours,
-	type Progress
+	type Progress,
+	type RecolourRecipe,
+	type Rgba8Image
 } from 'ditherette';
+import type { LiveEffectsRequest, LiveEffectsResponse } from './live-effects';
 import type { ProcessingStageTiming } from './metrics';
 import { packageProcessRequest, packageQuantizeResult } from './package-adapter';
+import { measureFits, resolveRecipes, type AnalysedFit } from './recipes';
 import {
 	clampOutputSize,
 	type WorkerProcessRequest,
@@ -29,6 +37,173 @@ type SourceCache = {
 	colours?: IndexedColours;
 	effects?: { key: string; mapped: Pixels };
 };
+
+const EFFECTS_MEMORY_BYTES = 512 * 1024 ** 2;
+// RGB indexing has at most 2^24 entries. Reserve host staging and packed results
+// outside the facade's own snapshot, decoder, upload and readback admission.
+const COLOUR_HOST_BYTES = 2 * (1 << 24) * Uint32Array.BYTES_PER_ELEMENT;
+const COLOUR_ROW = 4096;
+
+/**
+ * One serial effects session for Source and processing. The package selects whole-chain
+ * lookup eligibility and permanently retires its GPU bindings after CPU fallback.
+ * Source changes and cancellation invalidate publication without overlapping facade calls.
+ */
+export class EffectsWorkerPipeline {
+	#loaded: { sourceId: number; image: Rgba8Image; colours: Uint32Array } | undefined;
+	#analyses = new Map<string, RecolourRecipe | readonly Curve[]>();
+	#gpu: Promise<GpuEffects> | undefined;
+	#queue = Promise.resolve();
+	#cancelledThrough = 0;
+	#disposed = false;
+
+	constructor(private post: (response: LiveEffectsResponse, transfer?: Transferable[]) => void) {}
+
+	/** Handle source/cancel messages immediately; serialize all package calls behind active work. */
+	handle(request: LiveEffectsRequest): Promise<void> {
+		if (request.type === 'dispose')
+			return this.dispose().then(() => this.post({ type: 'disposed' }));
+		if (this.#disposed) return this.#queue;
+		if (request.type === 'cancel') {
+			this.#cancelledThrough = Math.max(this.#cancelledThrough, request.id);
+			return Promise.resolve();
+		}
+		if (request.type === 'source') {
+			const image = bytes(request.source);
+			const { colours, indices } = indexColours(image);
+			this.#loaded = { sourceId: request.sourceId, image, colours };
+			this.#analyses = new Map();
+			for (let pixel = 0; pixel < indices.length; pixel++)
+				indices[pixel] = (indices[pixel]! | (image.data[pixel * 4 + 3]! << 24)) >>> 0;
+			this.post(
+				{ type: 'indexed', sourceId: request.sourceId, pixels: indices, count: colours.length },
+				[indices.buffer]
+			);
+			return Promise.resolve();
+		}
+		const loaded = this.#loaded;
+		const analyses = this.#analyses;
+		const current = () =>
+			!this.#disposed &&
+			loaded === this.#loaded &&
+			loaded?.sourceId === request.sourceId &&
+			(request.type !== 'compile' || request.id > this.#cancelledThrough);
+		const { id, sourceId, key } = request;
+		this.#queue = this.#queue.then(async () => {
+			let cpu: Ditherette | undefined;
+			try {
+				if (!current() || !loaded) return;
+				const { effects, context, crop } = request;
+				// Ordinary lookup compiles need no second, resident scalar processor.
+				const needsCpu =
+					request.type !== 'compile' ||
+					effects.some(
+						(step) =>
+							step.enabled &&
+							((step.effect === 'recolour' && step.recipe === null) ||
+								(step.effect === 'palette-fit' && step.curves === null))
+					);
+				cpu = needsCpu ? await initializePackageProcessor() : undefined;
+				if (!current()) return;
+				const fits: AnalysedFit[] = [];
+				const resolved = cpu
+					? resolveRecipes(cpu, loaded.image, effects, context, crop, analyses, fits)
+					: effects;
+				if (request.type === 'measure') {
+					this.post({
+						type: 'measured',
+						id,
+						sourceId,
+						key,
+						fits: measureFits(cpu!, loaded.image, effects, context, crop, analyses)
+					});
+					return;
+				}
+				if (request.type === 'mask') {
+					const results = compileEffectMask(cpu!, {
+						version: 1,
+						colours: loaded.colours,
+						effects: resolved,
+						mask: request.mask,
+						context
+					});
+					this.post({ type: 'masked', id, sourceId, key, results }, [results.buffer]);
+					return;
+				}
+				// Resolved recipes own their curves; release analysis Wasm before GPU or CPU fallback.
+				cpu?.dispose();
+				cpu = undefined;
+				const results = new Uint32Array(loaded.colours.length);
+				let execution: GpuEffects['execution'];
+				if (results.length) {
+					const width = Math.min(results.length, COLOUR_ROW);
+					const height = Math.ceil(results.length / width);
+					const data = new Uint8Array(width * height * 4);
+					for (let pixel = 0; pixel < width * height; pixel++) {
+						const colour = loaded.colours[Math.min(pixel, results.length - 1)]!;
+						data[pixel * 4] = colour & 255;
+						data[pixel * 4 + 1] = (colour >>> 8) & 255;
+						data[pixel * 4 + 2] = (colour >>> 16) & 255;
+						data[pixel * 4 + 3] = 255;
+					}
+					this.#gpu ??= createGpuEffects({
+						memoryLimitBytes: EFFECTS_MEMORY_BYTES - COLOUR_HOST_BYTES
+					}).catch((error: unknown) => {
+						this.#gpu = undefined;
+						throw error;
+					});
+					const gpu = await this.#gpu;
+					if (!current()) return;
+					const output = await gpu.applyEffects({
+						version: 1,
+						source: { width, height, data },
+						effects: resolved,
+						context
+					});
+					if (!current()) return;
+					execution = gpu.execution;
+					for (let pixel = 0; pixel < results.length; pixel++)
+						results[pixel] =
+							output.data[pixel * 4]! |
+							(output.data[pixel * 4 + 1]! << 8) |
+							(output.data[pixel * 4 + 2]! << 16);
+				}
+				this.post({ type: 'compiled', id, sourceId, key, results, fits, execution }, [
+					results.buffer
+				]);
+			} catch (error) {
+				if (current())
+					this.post({
+						type:
+							request.type === 'mask'
+								? 'mask-failed'
+								: request.type === 'measure'
+									? 'measure-failed'
+									: 'failed',
+						id,
+						sourceId,
+						key,
+						message: error instanceof Error ? error.message : 'Effects failed.'
+					});
+			} finally {
+				cpu?.dispose();
+				if (!current() && !this.#disposed)
+					this.post({ type: 'cancelled', id, sourceId, key, operation: request.type });
+			}
+		});
+		return this.#queue;
+	}
+
+	/** Stop publication now, then release package resources after any active readback finishes. */
+	async dispose() {
+		this.#disposed = true;
+		await this.#queue;
+		(await this.#gpu)?.dispose();
+		this.#loaded = undefined;
+		this.#analyses.clear();
+		this.#gpu = undefined;
+	}
+}
 
 export class ProcessorWorkerPipeline {
 	#sourceCache: SourceCache | undefined;

@@ -181,6 +181,79 @@ describe('shown masks', () => {
 });
 
 describe('live effects', () => {
+	it('bounds retiring workers and terminates a readback that never settles', () => {
+		vi.useFakeTimers();
+		try {
+			addEffect('exposure');
+			const first = ControlledWorker.instances[0]!;
+			stop();
+			stop = startLiveEffects();
+			const next = ControlledWorker.instances[1]!;
+			stop();
+			expect(first.terminate).toHaveBeenCalled();
+			expect(next.terminate).not.toHaveBeenCalled();
+			vi.runAllTimers();
+			expect(next.terminate).toHaveBeenCalledOnce();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('cancels superseded GPU work, rejects old waiters and ignores duplicate replies', async () => {
+		const layer = addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		const first = worker.compiles[0]!;
+		const source = sourceImageData.get()!;
+		const old = compiledEffectsFor(source, first.key).catch((error: unknown) => error);
+		updateEffect(layer.id, { effect: 'exposure', enabled: true, stops: 1 });
+		expect(worker.messages.filter((message) => message.type === 'cancel')).toEqual([
+			{ type: 'cancel', id: first.id }
+		]);
+		worker.onmessage?.({
+			data: {
+				type: 'cancelled',
+				operation: 'compile',
+				id: first.id,
+				sourceId: first.sourceId,
+				key: first.key
+			}
+		} as MessageEvent<LiveEffectsResponse>);
+		expect(await old).toMatchObject({ message: 'The effects changed.' });
+		expect(worker.compiles).toHaveLength(2);
+		expect(compiledEffects.get()).toBeUndefined();
+		worker.reply(new Uint32Array([3]), undefined, first);
+		expect(worker.compiles).toHaveLength(2);
+		expect(compiledEffects.get()).toBeUndefined();
+		worker.reply(new Uint32Array([4]));
+		expect(compiledEffects.get()?.key).toBe(currentEffectsKey());
+	});
+
+	it('disposes workers on stop and ignores replies from an earlier worker', () => {
+		addEffect('exposure');
+		const first = ControlledWorker.instances[0]!;
+		const late = first.onmessage!;
+		const request = first.compiles[0]!;
+		stop();
+		expect(first.messages.at(-1)).toEqual({ type: 'dispose' });
+		stop = startLiveEffects();
+		late(
+			new MessageEvent<LiveEffectsResponse>('message', {
+				data: {
+					type: 'compiled',
+					id: request.id,
+					sourceId: request.sourceId,
+					key: request.key,
+					results: new Uint32Array([99])
+				}
+			})
+		);
+		expect(compiledEffects.get()).toBeUndefined();
+		first.onmessage?.({ data: { type: 'disposed' } } as MessageEvent<LiveEffectsResponse>);
+		expect(first.terminate).toHaveBeenCalled();
+		ControlledWorker.instances[1]!.reply(new Uint32Array([1]));
+		expect(compiledEffects.get()?.results).toEqual(new Uint32Array([1]));
+	});
+
 	it('compiles as soon as effects change, and folds edits during a compile into the next', () => {
 		const layer = addEffect('exposure');
 		const worker = ControlledWorker.instances[0]!;
