@@ -19,6 +19,24 @@
 		}
 	],
 	"env": {
+		"gpu": {
+			"name": "ditherette-gpu",
+			"d1_databases": [
+				{
+					"binding": "EVENTS",
+					"database_name": "ditherette-events-preview",
+					"database_id": "84f2508a-8f4c-47a2-b56b-254c27151b0a",
+					"migrations_dir": "migrations"
+				}
+			],
+			"routes": [
+				{
+					"zone_name": "mia.cx",
+					"custom_domain": true,
+					"pattern": "gpu.ditherette.mia.cx"
+				}
+			]
+		},
 		"production": {
 			"d1_databases": [
 				{

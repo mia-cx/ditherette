@@ -52,6 +52,10 @@ https://ditherette.mia.cx. This is the ongoing delivery target for this work.
 Merge changes after required CI and review checks, then deploy the tested source.
 Website delivery proceeds independently of npm publication holds.
 
+GPU testing uses https://gpu.ditherette.mia.cx for the combined reviewed Adaptive,
+output-memory and GPU effects stack. It has a separate Worker and uses preview
+analytics while the pull requests complete their merge gates.
+
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
