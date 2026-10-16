@@ -80,10 +80,12 @@ pub fn select<E>(
             for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
                 let row = &queue[(ny % 3) * width..(ny % 3 + 1) * width];
                 for nx in x.saturating_sub(1)..=(x + 1).min(width - 1) {
-                    fine = fine.max(color_distance(center, row[nx]).min(1.0));
+                    fine = fine.max(color_distance_squared(center, row[nx]));
                 }
             }
-            contrast = contrast.max(fine);
+            // sqrt is monotone on these finite nonnegative sums. Taking it
+            // after the maximum keeps the exact f32 result, once per pixel.
+            contrast = contrast.max(fine.sqrt().min(1.0));
             cells[y * width + x][1] = if cells[y * width + x][0].is_sign_negative() {
                 -contrast - 1.0
             } else {
@@ -284,6 +286,9 @@ fn geometric_distance<E>(
             for sx in 0..width {
                 let x = if reverse { width - 1 - sx } else { sx };
                 let mut value = cells[y * width + x][2];
+                if value == 0.0 {
+                    continue;
+                }
                 for (dx, dy) in [(-1_isize, 0_isize), (-1, -1), (0, -1), (1, -1)] {
                     let Some(nx) = x.checked_add_signed(if reverse { -dx } else { dx }) else {
                         continue;
@@ -351,7 +356,9 @@ fn spread<E>(
             } else {
                 step_x
             };
-            if cells[y * width + x][2] < 0.0 {
+            // Seed distance is already the nonnegative path minimum. Avoid
+            // revisiting its neighbours in every reconstruction sweep.
+            if cells[y * width + x][2] <= 0.0 {
                 continue;
             }
             let centre = rows[(y % 3) * width + x];
@@ -400,9 +407,17 @@ fn spread<E>(
     Ok(())
 }
 
-fn color_distance(left: [f32; 3], right: [f32; 3]) -> f32 {
+#[inline(always)]
+fn color_distance_squared(left: [f32; 3], right: [f32; 3]) -> f32 {
     let [dl, da, db] = std::array::from_fn(|c| left[c] - right[c]);
-    (dl * dl + da * da + db * db).sqrt()
+    dl * dl + da * da + db * db
+}
+
+// This tiny kernel dominates the public full-image profile. Keep the arithmetic
+// inline instead of copying both triplets through the size-optimized Wasm ABI.
+#[inline(always)]
+fn color_distance(left: [f32; 3], right: [f32; 3]) -> f32 {
+    color_distance_squared(left, right).sqrt()
 }
 
 fn unsigned([l, a, b]: [f32; 3]) -> [f32; 3] {
@@ -428,7 +443,7 @@ fn mark_boundaries<E>(
             for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
                 for nx in x.saturating_sub(1)..=(x + 1).min(width - 1) {
                     let color = unsigned(cells[ny * width + nx]);
-                    fine = fine.max(color_distance(centre, color));
+                    fine = fine.max(color_distance_squared(centre, color));
                     for c in 0..3 {
                         minimum[c] = minimum[c].min(color[c]);
                         maximum[c] = maximum[c].max(color[c]);
@@ -452,7 +467,7 @@ fn mark_boundaries<E>(
                     }
                 }
             }
-            if fine > 0.0 && 2.0 * fine >= color_distance(minimum, maximum) {
+            if fine > 0.0 && 2.0 * fine.sqrt() >= color_distance(minimum, maximum) {
                 cells[y * width + x][0] = -centre[0];
             }
         }
