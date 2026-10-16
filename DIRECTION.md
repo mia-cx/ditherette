@@ -37,7 +37,11 @@ Keep that workflow clear and fast, including large images.
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
 - The opt-in package GPU effects API uses exact channel lookup with bounded CPU
   fallback. Website integration, the remaining GPU stages, and physical GPU
-  validation of the new API remain open.
+  validation of the new API remain open. Start editor integration now alongside
+  host preview/save memory bounds. Reuse the existing backend and keep CPU fallback.
+  Port generated pointwise effects and recipe application, resize, palette matching,
+  ordered/noise dithering, then Yliluoma. Error diffusion comes last because its
+  recurrence constrains parallel execution.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 
