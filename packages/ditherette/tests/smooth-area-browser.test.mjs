@@ -20,10 +20,10 @@ test('installed package preserves complete area footprints across scalar/threade
 					fileURLToPath(new URL(name, import.meta.url))
 				])
 			),
-			driver: async ({ page, server, input, t }) => {
+			driver: async ({ page, server, t }) => {
 				await page.goto(server.url);
 				const result = await page.evaluate(
-					(input) =>
+					() =>
 						new Promise((resolve, reject) => {
 							const worker = new Worker('/__tests__/smooth-area-worker.mjs', {
 								type: 'module'
@@ -36,9 +36,7 @@ test('installed package preserves complete area footprints across scalar/threade
 								worker.terminate();
 								resolve(data);
 							};
-							worker.postMessage(input);
-						}),
-					input
+						})
 				);
 				const { budgetMinima, ...summary } = result;
 				t.diagnostic(
