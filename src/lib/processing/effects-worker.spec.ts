@@ -9,7 +9,17 @@ import {
 	type GpuEffects
 } from 'ditherette';
 import { installGpuTransport } from '../../../packages/ditherette/tests/gpu-transport.mjs';
-import type { LiveEffectsRequest, LiveEffectsResponse } from './live-effects';
+import { sourceImageData } from '$lib/stores/app';
+import { addEffect, effectLayers, updateEffect } from '$lib/stores/effects';
+import {
+	compiledEffects,
+	compiledEffectsFor,
+	currentEffectsKey,
+	shownMask,
+	startLiveEffects,
+	type LiveEffectsRequest,
+	type LiveEffectsResponse
+} from './live-effects';
 import { EffectsWorkerPipeline } from './worker-pipeline';
 
 vi.mock('ditherette', async (original) => ({
@@ -102,6 +112,95 @@ afterEach(async () => {
 	await pipeline.dispose();
 	vi.unstubAllGlobals();
 	vi.clearAllMocks();
+});
+
+it('keeps current source/key waiters through cancellation after A → B → A edits', async () => {
+	vi.stubGlobal('navigator', {});
+	let release!: () => void;
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let started!: () => void;
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	let first = true;
+	const create = vi.mocked(createGpuEffects).getMockImplementation()!;
+	vi.mocked(createGpuEffects).mockImplementation(async (options) => {
+		const facade = await create(options);
+		const apply = facade.applyEffects.bind(facade);
+		facade.applyEffects = async (request) => {
+			const result = await apply(request);
+			if (first) {
+				first = false;
+				started();
+				await gate;
+			}
+			return result;
+		};
+		return facade;
+	});
+	const bridges: WorkerBridge[] = [];
+	const responses: LiveEffectsResponse[] = [];
+	class WorkerBridge {
+		onmessage?: (event: MessageEvent<LiveEffectsResponse>) => void;
+		pipeline = new EffectsWorkerPipeline((response, transfer = []) => {
+			const data = structuredClone(response, { transfer });
+			responses.push(data);
+			queueMicrotask(() => this.onmessage?.(new MessageEvent('message', { data })));
+		});
+		constructor() {
+			bridges.push(this);
+		}
+		postMessage(message: LiveEffectsRequest) {
+			const request = structuredClone(message);
+			queueMicrotask(() => void this.pipeline.handle(request));
+		}
+		terminate() {}
+	}
+	vi.stubGlobal('Worker', WorkerBridge);
+	effectLayers.set([]);
+	shownMask.set(undefined);
+	const image = {
+		width: 1,
+		height: 1,
+		data: new Uint8ClampedArray([64, 80, 96, 123])
+	} as ImageData;
+	sourceImageData.set(image);
+	const stop = startLiveEffects();
+	try {
+		const layer = addEffect('exposure');
+		await waiting;
+		const originalKey = currentEffectsKey();
+		updateEffect(layer.id, { effect: 'exposure', enabled: true, stops: 1 });
+		const superseded = compiledEffectsFor(image, currentEffectsKey()).catch(
+			(error: unknown) => error
+		);
+		updateEffect(layer.id, { effect: 'exposure', enabled: true, stops: 0 });
+		expect(currentEffectsKey()).toBe(originalKey);
+		const current = compiledEffectsFor(image, currentEffectsKey());
+		release();
+		await expect(current).resolves.toEqual(new Uint32Array([0x605040]));
+		expect(await superseded).toMatchObject({ message: 'The effects changed.' });
+		expect(compiledEffects.get()).toEqual({
+			source: image,
+			key: originalKey,
+			results: new Uint32Array([0x605040])
+		});
+		expect(responses.map((response) => response.type)).toEqual([
+			'indexed',
+			'cancelled',
+			'compiled'
+		]);
+		expect(createGpuEffects).toHaveBeenCalledOnce();
+		expect(transport.observations.devices).toBe(0);
+	} finally {
+		release();
+		stop();
+		await Promise.all(bridges.map((bridge) => bridge.pipeline.dispose()));
+		effectLayers.set([]);
+		sourceImageData.set(undefined);
+	}
 });
 
 // Ordinary CPU package builds intentionally omit GPU assets. `vite build` and

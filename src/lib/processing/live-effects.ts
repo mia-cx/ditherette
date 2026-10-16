@@ -449,9 +449,9 @@ export function startLiveEffects() {
 		if (data.type === 'cancelled') {
 			if (data.operation === 'compile') {
 				if (data.id !== compiling?.id) return;
-				settle(compiling.source, data.key, new Error('The effects changed.'));
 				busy = false;
 				compiling = undefined;
+				// Returning to this source/key can add waiters for the replacement compile.
 				for (const waiter of waiters) {
 					if (waiter.source === source && waiter.key === currentEffectsKey()) continue;
 					waiters.delete(waiter);
