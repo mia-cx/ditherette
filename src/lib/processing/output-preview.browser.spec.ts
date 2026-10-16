@@ -1,5 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { buildOutputPyramid, outputPyramidBitmaps, releaseLevels } from './output-preview';
+import {
+	buildOutputPyramid,
+	outputPyramidBitmaps,
+	releaseLevels,
+	withOutputPreviewLevel
+} from './output-preview';
 import type { ProcessedImage } from './types';
 import { drawProcessedImage, processedToImageData } from './render';
 import { processedImage, setOutputPreview } from '$lib/stores/app';
@@ -117,6 +122,30 @@ it('releases a newly allocated canvas when context acquisition throws', () => {
 	expect(() => buildOutputPyramid(image())).toThrow('context failed');
 	const allocated = contexts.mock.contexts[0] as OffscreenCanvas;
 	expect([allocated.width, allocated.height]).toEqual([0, 0]);
+});
+
+it('disposes a reconstructed prefilter when the final consumer fails without releasing retained pixels', () => {
+	const levels = [new OffscreenCanvas(16, 16), new OffscreenCanvas(2, 2)];
+	const contexts = vi.spyOn(OffscreenCanvas.prototype, 'getContext');
+	try {
+		expect(() =>
+			withOutputPreviewLevel(levels, 3, () => {
+				throw new Error('destination failed');
+			})
+		).toThrow('destination failed');
+		expect(
+			contexts.mock.results.map(({ value }) => [value.canvas.width, value.canvas.height])
+		).toEqual([
+			[0, 0],
+			[0, 0]
+		]);
+		expect(levels.map((level) => [level.width, level.height])).toEqual([
+			[16, 16],
+			[2, 2]
+		]);
+	} finally {
+		releaseLevels(levels);
+	}
 });
 
 it('closes transferred bitmaps and releases all canvases when a later transfer fails', () => {

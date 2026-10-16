@@ -72,6 +72,38 @@ export function releaseLevels(levels: readonly PreviewLevel[]) {
 	}
 }
 
+/**
+ * Draw with the complete pyramid's prefilter, rebuilding omitted levels temporarily.
+ * The synchronous callback borrows its level until it returns; retained pixels remain owned by the caller.
+ */
+export function withOutputPreviewLevel(
+	levels: readonly PreviewLevel[],
+	targetWidth: number,
+	draw: (level: PreviewLevel) => void
+) {
+	const retained =
+		levels.findLast((level) => level.width >= targetWidth) ?? levels[levels.length - 1];
+	let current = retained;
+	try {
+		// Do not scale across a gap in the retained pyramid: high-quality browser smoothing
+		// still aliases 1px dithering. Recreate the old 2x2 prefilter before the final draw.
+		// Largest temporary level: ceil(retained.width/2) * ceil(retained.height/2) * 4 bytes.
+		// A step holds its previous temporary, optional even-size padding, and successor.
+		// Each previous/padded canvas is discarded immediately; none survive this draw.
+		while (
+			(current.width > 1 || current.height > 1) &&
+			Math.ceil(current.width / 2) >= targetWidth
+		) {
+			const next = halve(current);
+			if (current !== retained) releaseLevels([current]);
+			current = next;
+		}
+		draw(current);
+	} finally {
+		if (current !== retained) releaseLevels([current]);
+	}
+}
+
 function firstRetainedMip(width: number, height: number) {
 	const bytes: number[] = [];
 	while (width > 1 || height > 1) {
@@ -85,7 +117,7 @@ function firstRetainedMip(width: number, height: number) {
 	return first + 1;
 }
 
-function halve(current: Surface): Surface {
+function halve(current: PreviewLevel): Surface {
 	const source = evenSized(current);
 	let half: Surface | undefined;
 	try {
@@ -128,7 +160,7 @@ function unavailable(): never {
  * Pad an odd side by repeating its last row or column. Bilinear sampling at exactly half size then
  * averages whole 2×2 blocks; at any other scale it can skip thin lines.
  */
-function evenSized(level: Surface): Surface {
+function evenSized(level: PreviewLevel): PreviewLevel {
 	const width = level.width + (level.width % 2);
 	const height = level.height + (level.height % 2);
 	if (width === level.width && height === level.height) return level;
