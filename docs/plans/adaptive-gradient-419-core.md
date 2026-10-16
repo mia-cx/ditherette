@@ -42,7 +42,7 @@ Diffusion keeps its ordinary continuous
 recurrence and masks only visible output: selected indices equal Everywhere, excluded indices
 equal plain matching. Preserved transparent pixels keep the existing sink semantics.
 
-One call-owned allocation stores 12 bytes/pixel plus 12 bytes times max(3 * width, height).
+One call-owned allocation stores 12 bytes/pixel plus 12 bytes times max(3 \* width, height).
 Pixel records hold Oklab, coarse colour, local contrast, row maxima, square maxima and coverage.
 Line records hold original values for running box sums, then three source colour rows,
 then the monotone queue. A dead pixel lane stores the component queue as exact u32 bits.
