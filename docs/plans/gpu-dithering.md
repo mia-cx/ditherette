@@ -129,13 +129,16 @@ checks against the unchanged CPU algorithms.
 | Lifetime                      | Owned storage                                                                                   |
 | ----------------------------- | ----------------------------------------------------------------------------------------------- |
 | Source capture through upload | Host snapshot, Wasm copy, GPU packed RGBA                                                       |
-| Complete analysis             | Packed f32 triplet cells and one triplet work plane                                             |
+| Complete analysis             | Immutable Oklab triplets, packed f32 triplet cells and one triplet work plane                   |
 | Region retention              | Work plane reused for integer parents and component counts                                      |
-| Reconstruction                | Cells plus source; work plane becomes available for output                                      |
+| Reconstruction                | Cells plus immutable Oklab coordinates; work plane becomes available for output                 |
 | Final readback                | Work plane reused for packed coverage or indices; mapped staging and independently owned result |
 | Dispatch setup                | Immutable aligned uniforms on host and GPU, dispatch metadata and bounded palette/settings      |
 
 `AreaMemory` and `IndexedMemory` admit these lifetimes before workspace creation.
+The coordinate plane adds twelve requested bytes per pixel to cold analysis,
+then dies with the job. It replaces repeated source conversion during contrast
+and the four reconstruction sweeps; retained coverage keeps its existing bound.
 Native full Celeste coverage at 20/64/100 px differs by 1/1/0 pixels respectively.
 Real Chromium workers pass 363 field/matching/alpha/diffusion cases with no index
 differences. The 32 full-size Celeste cases compare 346,777,600 indices, with 406
@@ -169,3 +172,17 @@ physical adapter and execution backend. Separate cold creation, upload, dispatch
 readback, CPU reconstruction and warm setting changes. Compare against the optimized
 CPU artifact using the existing exclusive lease and per-pair host evidence. Busy-host
 observations remain diagnostic; no speedup claim comes from profiling samples alone.
+
+## Complete package backend policy
+
+The remaining ports cover all resize filters, Yliluoma, every continuous diffusion
+kernel and enabled effect chains. Keep CPU implementations available in the package.
+The synchronous CPU interface remains compatible; its GPU counterpart is asynchronous.
+Backend, fallback and execution tiling are independent client choices. A GPU-only
+request must reject an unavailable stage, including a CPU-only hybrid, instead of
+silently returning CPU output. The website consumes these package choices.
+
+Tiling preserves global coordinates, filter halos, alpha coverage and continuous
+diffusion state. It must neither restart diffusion at tile boundaries nor turn off
+serpentine scanning. Admit all live buffers before allocating; a tile option must
+select an actual execution path rather than being accepted and ignored.

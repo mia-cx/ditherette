@@ -16,7 +16,7 @@ use crate::{
 
 use super::indexed_shader::WGSL as SHADER;
 
-/// Includes source snapshots and wire storage, both GPU work planes, immutable
+/// Includes source snapshots and wire storage, all three GPU work planes, immutable
 /// dispatch uniforms, packed index staging and independent host/JS output.
 #[derive(Debug, Clone, Copy)]
 pub struct IndexedMemory {

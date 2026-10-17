@@ -3,7 +3,7 @@
 pub(super) const WGSL: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<f32>;
 
 fn cell_color(i: u32) -> vec3<f32> {
-    return vec3(cells[3u*i], cells[3u*i+1u], cells[3u*i+2u]);
+    return oklab(i);
 }
 fn coarse_color(i: u32) -> vec3<f32> {
     return vec3(abs(work[3u*i]), work[3u*i+1u], work[3u*i+2u]);
@@ -32,10 +32,10 @@ fn density(t: f32) -> f32 {
 fn colors(@builtin(global_invocation_id) id: vec3<u32>) {
     if id.x >= p.width || id.y >= p.height { return; }
     let i = id.y*p.width + id.x;
-    let c = oklab(i);
-    cells[3u*i] = c.x;
-    cells[3u*i+1u] = c.y;
-    cells[3u*i+2u] = c.z;
+    let c = oklab_rgb(rgb(i));
+    lab_values[3u*i] = c.x;
+    lab_values[3u*i+1u] = c.y;
+    lab_values[3u*i+2u] = c.z;
 }
 @compute @workgroup_size(8, 8)
 fn boundaries(@builtin(global_invocation_id) id: vec3<u32>) {
