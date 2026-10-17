@@ -195,6 +195,7 @@ test('dimension validation enforces integer side and pixel limits before reading
 test('options retain custom inputs and enforce explicit scalar/memory settings', () => {
 	assert.deepEqual(validateOptions(undefined), {
 		threads: 'disabled',
+		tiling: 'auto',
 		memoryLimitBytes: 1_610_612_736,
 		wasm: undefined
 	});

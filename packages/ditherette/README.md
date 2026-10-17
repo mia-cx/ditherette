@@ -256,6 +256,10 @@ effectsProcessor.dispose();
 ```
 
 `wasm` supplies an alternate scalar artifact; `gpuWasm` supplies an alternate GPU artifact.
+Set `fallback: 'error'` on either GPU facade to require GPU execution. Unavailable
+hardware, missing assets, unsupported stages and memory rejection then throw a
+structured error rather than allocating a CPU processor. GPU-only dithering also
+rejects the current hybrid CPU diffusion path. The default remains `fallback: 'cpu'`.
 Neither setting changes the other artifact. Missing WebGPU, optional assets, failed startup verification,
 unsupported/masked/mixed chains, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
 The facade reuses one verified device for repeated eligible calls. Any CPU fallback releases the device
@@ -498,6 +502,11 @@ Other resize calls return independent images. Identity calls still enforce dispo
 - `wasm` accepts bytes, an offset byte view, a URL/string, a Request, a Response, or a compiled `WebAssembly.Module`.
   Caller Response/Request bodies are cloned before initialization. Default assets resolve relative to the package.
   Custom inputs must match the selected variant. Preferred fallback retries the supplied input with scalar bindings; incompatible bytes remain an initialization error.
+- `tiling` independently selects `'auto'` (default), `'disabled'` for whole-image
+  execution, or `{ height, workers? }` for explicit row bands in resize, indexed
+  matching/fields and Yliluoma. Heights are 1–32768 rows; workers are 1–8 and
+  clamp to the initialized pool. Scalar instances execute bands sequentially.
+  All choices retain global coordinates and the continuous diffusion scan.
 
 Threads require cross-origin isolation, shared Wasm memory, module workers, and a caller context that permits blocking waits.
 Synchronous threaded methods run in a processing worker. Browser main JS supports scalar execution;

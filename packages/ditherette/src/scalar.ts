@@ -17,7 +17,8 @@ import type {
 	Curve,
 	FitMeasurements,
 	EffectMaskRequest,
-	RecolourRecipe
+	RecolourRecipe,
+	TilingPolicy
 } from './types.js';
 import { normalizeInitInput, validateResize, validateQuantize } from './validation.js';
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
@@ -49,7 +50,7 @@ export type Bindings = Pick<
 	| 'privateMeasurePaletteFit'
 	| 'privateEffectMask'
 > &
-	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse'>>;
+	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse' | 'privateExecutionPolicy'>>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
 
@@ -163,12 +164,13 @@ function failure(
 export async function createScalar(options: {
 	wasm?: InitInput;
 	memoryLimitBytes: number;
+	tiling?: TilingPolicy;
 }): Promise<Ditherette> {
 	try {
 		const { createScalarBindings } = await import('./wasm/scalar/ditherette_wasm.factory.js');
 		const bindings = createScalarBindings();
 		await bindings.default({ module_or_path: normalizeWasmInput(options.wasm) });
-		return initializeProcessor(bindings, options.memoryLimitBytes);
+		return initializeProcessor(bindings, options.memoryLimitBytes, undefined, options.tiling);
 	} catch (error) {
 		if (error instanceof DitheretteError) throw error;
 		const code = error instanceof RangeError ? 'wasm-memory-unavailable' : 'initialization';
@@ -185,7 +187,8 @@ export function normalizeWasmInput(wasm: InitInput | undefined): InitInput | und
 export function initializeProcessor(
 	bindings: Bindings,
 	memoryLimitBytes: number,
-	release?: () => void
+	release?: () => void,
+	tiling: TilingPolicy = 'auto'
 ): Ditherette {
 	let status: number;
 	try {
@@ -198,6 +201,24 @@ export function initializeProcessor(
 		);
 	}
 	if (status !== 0) throw failure(bindings, status);
+	if (tiling !== 'auto') {
+		try {
+			if (!bindings.privateExecutionPolicy)
+				throw new DitheretteError('capability', 'tiling', 'This artifact has no tiling controls.');
+			for (let stage = 0; stage < 3; stage++) {
+				const status = bindings.privateExecutionPolicy(
+					stage,
+					tiling === 'disabled' ? 0 : tiling.height,
+					tiling === 'disabled' ? 1 : (tiling.workers ?? 8),
+					8
+				);
+				if (status !== 0) throw failure(bindings, status);
+			}
+		} catch (error) {
+			bindings.privateDispose();
+			throw error;
+		}
+	}
 	return new Processor(bindings, release);
 }
 

@@ -18,8 +18,12 @@ const mime = {
 	'.jpg': 'image/jpeg'
 };
 
-async function startServer(t, missingGpu = false) {
+async function startServer(t, missingGpu = false, isolated = false) {
 	const server = createServer(async (request, response) => {
+		if (isolated) {
+			response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+			response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+		}
 		try {
 			const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
 			if (path === '/') return response.end('<title>GPU package effects test</title>');
@@ -471,6 +475,34 @@ test(
 		assert.deepEqual(result.actual, result.wanted);
 		assert.equal(result.execution.backend, 'cpu');
 		assert.equal(result.execution.fallback, result.capable ? 'Initialization' : 'NoAdapter');
+	}
+);
+
+test(
+	'explicit CPU tiling works in real scalar and threaded browser workers',
+	{ timeout: 60000 },
+	async (t) => {
+		const origin = await startServer(t, false, true);
+		const { tab, errors } = await browser(t, origin, false);
+		const result = await tab.evaluate(async () => {
+			const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+				type: 'module'
+			});
+			try {
+				return await new Promise((resolve, reject) => {
+					worker.onmessage = (event) => {
+						if (event.currentTarget === worker) resolve(event.data);
+					};
+					worker.onerror = (event) => reject(Error(event.message));
+					worker.postMessage({ tiling: true });
+				});
+			} finally {
+				worker.terminate();
+			}
+		});
+		assert.deepEqual(errors, []);
+		assert.equal(result.error, undefined, result.error);
+		assert.equal(result.calls, 18);
 	}
 );
 

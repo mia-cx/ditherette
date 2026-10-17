@@ -10,7 +10,12 @@ import {
 } from './validation.js';
 import { kernels, spaces, tiles, validateDitherAndQuantize } from './validation-fields.js';
 import { validateProcess } from './validation-process.js';
-import { gpuEffectsDecoderBytes, type GpuEffectsOptions } from './gpu-effects.js';
+import {
+	fallbackPolicy,
+	gpuFallbackError,
+	gpuEffectsDecoderBytes,
+	type GpuEffectsOptions
+} from './gpu-effects.js';
 import type {
 	DitherAndQuantizeRequest,
 	Ditherette,
@@ -222,7 +227,7 @@ function output(input: ProcessInput): ResizeRequest['output'] {
 export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDither> {
 	const input = object(
 		options === undefined ? {} : options,
-		['memoryLimitBytes', 'wasm', 'gpuWasm'],
+		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback'],
 		'invalid-settings',
 		''
 	);
@@ -231,6 +236,7 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 		wasm: field(input, 'wasm')
 	});
 	const gpu = validateOptions({ wasm: field(input, 'gpuWasm') });
+	const fallbackMode = fallbackPolicy(field(input, 'fallback'));
 	let bindings: GpuDitherBindings | undefined;
 	let fallback = 'NoAdapter';
 	if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
@@ -248,13 +254,13 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 			fallback = 'Initialization';
 		}
 	}
-	return initializeGpuDither(bindings, normalized, fallback);
+	return initializeGpuDither(bindings, { ...normalized, fallback: fallbackMode }, fallback);
 }
 
 /** Owns one GPU attempt and a persistent scalar fallback; source capture precedes every await. */
 export function initializeGpuDither(
 	bindings: GpuDitherBindings | undefined,
-	options: { wasm?: InitInput; memoryLimitBytes: number },
+	options: { wasm?: InitInput; memoryLimitBytes: number; fallback?: 'cpu' | 'error' },
 	initialFallback = 'NoAdapter'
 ): GpuDither {
 	let active = false;
@@ -308,6 +314,7 @@ export function initializeGpuDither(
 			const d = input.dither;
 			const unsupported =
 				d.family === 3 ||
+				(d.family === 2 && options.fallback === 'error') ||
 				d.placement === 1 ||
 				(d.placement === 2 && d.radius > 100) ||
 				(d.family === 1 && d.strength > 4) ||
@@ -330,6 +337,7 @@ export function initializeGpuDither(
 				}
 				if (reason) retire(reason);
 			}
+			if (reason && options.fallback === 'error') throw gpuFallbackError(reason);
 			const bytes = input.data.byteLength;
 			// Scalar process fallback decodes the same effects representation.
 			// Reserve its outer canonical copy/JS tree before either string ABI.
@@ -509,6 +517,7 @@ export function initializeGpuDither(
 				return value;
 			}
 			retire(reason || 'Failed');
+			if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
 			retained = undefined;
 			coverage = undefined;
 			cpu ??= await createScalar({

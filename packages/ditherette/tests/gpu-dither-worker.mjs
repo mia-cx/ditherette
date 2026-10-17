@@ -24,6 +24,71 @@ self.onmessage = async (event) => {
 			{ kind: 'color', rgb: [90, 120, 100] },
 			{ kind: 'transparent' }
 		];
+		if (event.data.tiling) {
+			// Proves explicit schedules reach both real scalar and shared-memory artifacts.
+			const input = {
+				version: 1,
+				source,
+				palette,
+				matching: 'oklab-euclidean',
+				alpha: { mode: 'preserve', threshold: 128 },
+				onProgress() {}
+			};
+			const calls = [
+				(cpu) =>
+					cpu.resize({
+						version: 1,
+						source,
+						output: {
+							width: 31,
+							height: 23,
+							resize: { algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' }
+						},
+						onProgress() {}
+					}).data,
+				(cpu) =>
+					cpu.ditherAndQuantize({
+						...input,
+						dither: {
+							family: 'separable',
+							perturb: {
+								field: { algorithm: 'bayer', size: '16' },
+								space: 'oklab',
+								strength: 0.3,
+								placement: { mode: 'everywhere' }
+							}
+						}
+					}).indices,
+				(cpu) =>
+					cpu.ditherAndQuantize({
+						...input,
+						dither: { family: 'yliluoma', size: '4', placement: { mode: 'everywhere' } }
+					}).indices
+			];
+			const baseline = await createDitherette({ tiling: 'disabled' });
+			let expected;
+			try {
+				expected = calls.map((call) => call(baseline).join(','));
+			} finally {
+				baseline.dispose();
+			}
+			let count = 0;
+			for (const threads of ['disabled', 'required'])
+				for (const tiling of ['auto', 'disabled', { height: 3, workers: 2 }]) {
+					const cpu = await createDitherette({ threads, tiling });
+					try {
+						for (const [i, call] of calls.entries()) {
+							if (call(cpu).join(',') !== expected[i])
+								throw Error(`Schedule changed output: ${threads}/${JSON.stringify(tiling)}/${i}`);
+							count++;
+						}
+					} finally {
+						cpu.dispose();
+					}
+				}
+			self.postMessage({ calls: count });
+			return;
+		}
 		const matching = [
 			'srgb-euclidean',
 			'srgb-compuphase',

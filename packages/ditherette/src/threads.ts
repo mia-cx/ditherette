@@ -1,11 +1,12 @@
 import { initializeProcessor, normalizeWasmInput } from './scalar.js';
-import type { Ditherette, InitInput } from './types.js';
+import type { Ditherette, InitInput, TilingPolicy } from './types.js';
 import { WorkerPool } from './worker-pool.js';
 
 /** One fresh shared memory and global Rayon pool per public processor. */
 export async function createThreaded(options: {
 	wasm?: InitInput;
 	memoryLimitBytes: number;
+	tiling?: TilingPolicy;
 }): Promise<Ditherette> {
 	const pool = new WorkerPool();
 	try {
@@ -14,7 +15,12 @@ export async function createThreaded(options: {
 			pool.start(module, memory, builder, (value) => bindings.abandonThreadPool(value))
 		);
 		await bindings.default({ module_or_path: normalizeWasmInput(options.wasm) });
-		const processor = initializeProcessor(bindings, options.memoryLimitBytes, () => pool.dispose());
+		const processor = initializeProcessor(
+			bindings,
+			options.memoryLimitBytes,
+			() => pool.dispose(),
+			options.tiling
+		);
 		const available = typeof navigator === 'undefined' ? 1 : navigator.hardwareConcurrency;
 		try {
 			await bindings.initThreadPool(bindings.privateThreadCount(available));
