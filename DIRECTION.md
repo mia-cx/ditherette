@@ -44,6 +44,10 @@ Keep that workflow clear and fast, including large images.
   and reconstruction first, then matching/diffusion; investigate Yliluoma separately.
   Shared-host timings are diagnostic, not qualified benchmarks. The reviewed
   integration and host memory bounds await merge.
+  A further CPU selector candidate expands hot three-channel loops, prunes
+  uncompetitive reconstruction paths and converts colours lazily in the existing
+  row workspace. Exact mask, checkpoint and budget checks pass; review and
+  deployment remain separate.
   Remaining GPU stages and physical browser/device qualification stay open.
   Port generated pointwise effects and recipe application, resize, palette matching,
   ordered/noise dithering, then Yliluoma. Error diffusion comes last because its

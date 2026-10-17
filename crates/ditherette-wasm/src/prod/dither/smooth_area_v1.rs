@@ -296,22 +296,14 @@ fn geometric_distance<E>(
                 if value == 0.0 {
                     continue;
                 }
-                for (dx, dy) in [(-1_isize, 0_isize), (-1, -1), (0, -1), (1, -1)] {
-                    let Some(nx) = x.checked_add_signed(if reverse { -dx } else { dx }) else {
-                        continue;
-                    };
-                    let Some(ny) = y.checked_add_signed(if reverse { -dy } else { dy }) else {
-                        continue;
-                    };
+                for (nx, ny, step) in neighbours(x, y, reverse, reverse) {
                     if nx >= width || ny >= height {
                         continue;
                     }
-                    let step = if dx != 0 && dy != 0 {
-                        std::f32::consts::SQRT_2
-                    } else {
-                        1.0
-                    };
-                    value = value.min(cells[ny * width + nx][2] + step);
+                    let candidate = cells[ny * width + nx][2] + step;
+                    if candidate < value {
+                        value = candidate;
+                    }
                 }
                 cells[y * width + x][2] = value;
             }
@@ -347,12 +339,10 @@ fn spread<E>(
             if tags[ny % 3] == ny {
                 continue;
             }
-            let input = source.row(ny as u32).expect("validated row");
-            for (pixel, target) in input
-                .chunks_exact(4)
-                .zip(&mut rows[(ny % 3) * width..(ny % 3 + 1) * width])
-            {
-                *target = convert([pixel[0], pixel[1], pixel[2]]);
+            // Keep the existing three-row colour workspace, but convert only
+            // pixels reached by an unsettled path. Seeds need no colour work.
+            for target in &mut rows[(ny % 3) * width..(ny % 3 + 1) * width] {
+                target[0] = f32::NAN;
             }
             tags[ny % 3] = ny;
             check()?;
@@ -368,44 +358,44 @@ fn spread<E>(
             if cells[y * width + x][2] <= 0.0 {
                 continue;
             }
-            let centre = rows[(y % 3) * width + x];
+            let centre = source_color(source, rows, x, y, convert);
             let mut distance = cells[y * width + x][2];
-            for (dx, dy) in [(-1_isize, 0_isize), (-1, -1), (0, -1), (1, -1)] {
-                let Some(nx) = x.checked_add_signed(if reverse_x { -dx } else { dx }) else {
-                    continue;
-                };
-                let Some(ny) = y.checked_add_signed(if reverse_y { -dy } else { dy }) else {
-                    continue;
-                };
+            for (nx, ny, step) in neighbours(x, y, reverse_x, reverse_y) {
                 if nx >= width || ny >= height {
                     continue;
                 }
-                if cells[ny * width + nx][2] < 0.0 {
+                let neighbour = cells[ny * width + nx][2];
+                let diagonal = nx != x && ny != y;
+                // Colour variation only increases this geometric lower bound.
+                // Skip its conversions and square roots when even the cheapest
+                // possible path cannot improve the current distance.
+                if neighbour < 0.0 || neighbour + step >= distance {
                     continue;
                 }
-                let jump = color_distance(centre, rows[(ny % 3) * width + nx]).min(1.0);
+                let jump =
+                    color_distance(centre, source_color(source, rows, nx, ny, convert)).min(1.0);
                 if jump > tolerance {
                     continue;
                 }
-                let diagonal = dx != 0 && dy != 0;
                 if diagonal
-                    && (color_distance(centre, rows[(y % 3) * width + nx]).min(1.0) > tolerance
-                        || color_distance(centre, rows[(ny % 3) * width + x]).min(1.0) > tolerance)
+                    && (color_distance(centre, source_color(source, rows, nx, y, convert)).min(1.0)
+                        > tolerance
+                        || color_distance(centre, source_color(source, rows, x, ny, convert))
+                            .min(1.0)
+                            > tolerance)
                 {
                     continue;
                 }
-                let step = if diagonal {
-                    std::f32::consts::SQRT_2
-                } else {
-                    1.0
-                };
                 let variation = if tolerance == 0.0 {
                     0.0
                 } else {
                     jump / (step * tolerance)
                 };
                 let cost = step * (1.0 + reach * variation * variation);
-                distance = distance.min(cells[ny * width + nx][2] + cost);
+                let candidate = neighbour + cost;
+                if candidate < distance {
+                    distance = candidate;
+                }
             }
             cells[y * width + x][2] = distance;
         }
@@ -415,8 +405,45 @@ fn spread<E>(
 }
 
 #[inline(always)]
+fn source_color(
+    source: ImageView<'_, Rgba8>,
+    rows: &mut [[f32; 3]],
+    x: usize,
+    y: usize,
+    convert: &impl Fn([u8; 3]) -> [f32; 3],
+) -> [f32; 3] {
+    let index = (y % 3) * source.dimensions().width_usize() + x;
+    if rows[index][0].is_nan() {
+        let row = source.row(y as u32).expect("validated row");
+        let start = x * 4;
+        rows[index] = convert([row[start], row[start + 1], row[start + 2]]);
+    }
+    rows[index]
+}
+
+// Underflow maps outside the validated image. Each caller performs one bounds
+// test, instead of repeating signed overflow checks for every neighbour.
+#[inline(always)]
+fn neighbours(x: usize, y: usize, reverse_x: bool, reverse_y: bool) -> [(usize, usize, f32); 4] {
+    let (before, after) = if reverse_x {
+        (x + 1, x.wrapping_sub(1))
+    } else {
+        (x.wrapping_sub(1), x + 1)
+    };
+    let previous = if reverse_y { y + 1 } else { y.wrapping_sub(1) };
+    [
+        (before, y, 1.0),
+        (before, previous, std::f32::consts::SQRT_2),
+        (x, previous, 1.0),
+        (after, previous, std::f32::consts::SQRT_2),
+    ]
+}
+
+#[inline(always)]
 fn color_distance_squared(left: [f32; 3], right: [f32; 3]) -> f32 {
-    let [dl, da, db] = std::array::from_fn(|c| left[c] - right[c]);
+    let dl = left[0] - right[0];
+    let da = left[1] - right[1];
+    let db = left[2] - right[2];
     dl * dl + da * da + db * db
 }
 
@@ -427,6 +454,7 @@ fn color_distance(left: [f32; 3], right: [f32; 3]) -> f32 {
     color_distance_squared(left, right).sqrt()
 }
 
+#[inline(always)]
 fn unsigned([l, a, b]: [f32; 3]) -> [f32; 3] {
     [l.abs(), a, b]
 }
@@ -442,45 +470,98 @@ fn mark_boundaries<E>(
     let width = dimensions.width_usize();
     let height = dimensions.height_usize();
     for y in 0..height {
-        for x in 0..width {
+        let far_rows = [
+            y.saturating_sub(EDGE_PROBE_RADIUS),
+            y,
+            (y + EDGE_PROBE_RADIUS).min(height - 1),
+        ];
+        'pixels: for x in 0..width {
             let centre = unsigned(cells[y * width + x]);
             let mut minimum = centre;
             let mut maximum = centre;
             let mut fine = 0.0_f32;
             for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
-                for nx in x.saturating_sub(1)..=(x + 1).min(width - 1) {
-                    let color = unsigned(cells[ny * width + nx]);
-                    fine = fine.max(color_distance_squared(centre, color));
-                    for c in 0..3 {
-                        minimum[c] = minimum[c].min(color[c]);
-                        maximum[c] = maximum[c].max(color[c]);
+                let start = ny * width + x.saturating_sub(1);
+                let end = ny * width + (x + 2).min(width);
+                for &point in &cells[start..end] {
+                    let color = unsigned(point);
+                    let distance = color_distance_squared(centre, color);
+                    if distance > fine {
+                        fine = distance;
                     }
+                    extend_range(&mut minimum, &mut maximum, color);
                 }
             }
-            for ny in [
-                y.saturating_sub(EDGE_PROBE_RADIUS),
-                y,
-                (y + EDGE_PROBE_RADIUS).min(height - 1),
-            ] {
+            // A constant fine neighbourhood cannot witness a concentrated edge.
+            // Its broader colour range cannot change that decision.
+            if fine == 0.0 {
+                continue;
+            }
+            let concentrated = 2.0 * fine.sqrt();
+            for ny in far_rows {
+                let row = &cells[ny * width..(ny + 1) * width];
                 for nx in [
                     x.saturating_sub(EDGE_PROBE_RADIUS),
                     x,
                     (x + EDGE_PROBE_RADIUS).min(width - 1),
                 ] {
-                    let color = unsigned(cells[ny * width + nx]);
-                    for c in 0..3 {
-                        minimum[c] = minimum[c].min(color[c]);
-                        maximum[c] = maximum[c].max(color[c]);
+                    let color = unsigned(row[nx]);
+                    extend_range(&mut minimum, &mut maximum, color);
+                    // The enclosing colour range can only grow. A smooth
+                    // neighbourhood often rules out an edge on the first
+                    // coarse probe, so its remaining probes add no information.
+                    if color_distance(minimum, maximum) > concentrated {
+                        continue 'pixels;
                     }
                 }
             }
-            if fine > 0.0 && 2.0 * fine.sqrt() >= color_distance(minimum, maximum) {
-                cells[y * width + x][0] = -centre[0];
-            }
+            cells[y * width + x][0] = -centre[0];
         }
         check()?;
     }
     Ok(())
+}
+
+// Oklab coordinates from encoded RGB are finite. Ordered comparisons avoid
+// generic min/max's NaN handling in this full-image neighbourhood kernel.
+#[inline(always)]
+fn extend_range(minimum: &mut [f32; 3], maximum: &mut [f32; 3], color: [f32; 3]) {
+    // Spell out three channels: the frozen size-oriented compiler otherwise
+    // retains a loop here for every neighbour of every image pixel.
+    *minimum = [
+        if color[0] < minimum[0] {
+            color[0]
+        } else {
+            minimum[0]
+        },
+        if color[1] < minimum[1] {
+            color[1]
+        } else {
+            minimum[1]
+        },
+        if color[2] < minimum[2] {
+            color[2]
+        } else {
+            minimum[2]
+        },
+    ];
+    *maximum = [
+        if color[0] > maximum[0] {
+            color[0]
+        } else {
+            maximum[0]
+        },
+        if color[1] > maximum[1] {
+            color[1]
+        } else {
+            maximum[1]
+        },
+        if color[2] > maximum[2] {
+            color[2]
+        } else {
+            maximum[2]
+        },
+    ];
 }
 
 // Symmetrically shrink the box at image boundaries, so truncation cannot create
@@ -517,19 +598,26 @@ fn average_line(
         let start = position - span;
         let end = position + span + 1;
         while right < end {
-            for c in 0..3 {
-                sum[c] += f64::from(queue[right][c]);
-            }
+            let color = queue[right];
+            sum[0] += f64::from(color[0]);
+            sum[1] += f64::from(color[1]);
+            sum[2] += f64::from(color[2]);
             right += 1;
         }
         while left < start {
-            for c in 0..3 {
-                sum[c] -= f64::from(queue[left][c]);
-            }
+            let color = queue[left];
+            sum[0] -= f64::from(color[0]);
+            sum[1] -= f64::from(color[1]);
+            sum[2] -= f64::from(color[2]);
             left += 1;
         }
         let marked = cells[index(position)][0].is_sign_negative();
-        let mut mean = sum.map(|v| (v / (end - start) as f64) as f32);
+        let length = (end - start) as f64;
+        let mut mean = [
+            (sum[0] / length) as f32,
+            (sum[1] / length) as f32,
+            (sum[2] / length) as f32,
+        ];
         if marked {
             mean[0] = -mean[0];
         }
@@ -580,6 +668,7 @@ fn maximum_line(
     }
 }
 
+#[inline(always)]
 fn line_value(
     cells: &[[f32; 3]],
     width: usize,

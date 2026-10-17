@@ -4,6 +4,102 @@ use ditherette_wasm::{
     spec::smooth_area_v1,
 };
 
+// Proves the optimized selector preserves coverage bits, cancellation checkpoints,
+// and scratch reuse on narrow, padded, textured and smooth source regions.
+#[test]
+fn optimized_selection_preserves_reference_and_cancellation() {
+    use ditherette_wasm::prod::dither::smooth_area_v1 as production;
+
+    let mut random = 0x419_u32;
+    for (w, h) in [
+        (1, 1),
+        (1, 17),
+        (17, 1),
+        (2, 3),
+        (3, 2),
+        (9, 13),
+        (37, 31),
+        (65, 47),
+    ] {
+        let dims = ImageDimensions::new(w, h).unwrap();
+        let stride = w as usize * 4 + 7;
+        let mut bytes = vec![0; stride * (h as usize - 1) + w as usize * 4];
+        for y in 0..h {
+            for x in 0..w {
+                random ^= random << 13;
+                random ^= random >> 17;
+                random ^= random << 5;
+                let rgb = if x < w / 2 {
+                    [48 + (x / 3) as u8, 96 + (y / 4) as u8, 152 + (x / 8) as u8]
+                } else if y < h / 2 {
+                    [random as u8, (random >> 8) as u8, (random >> 16) as u8]
+                } else {
+                    [112, 128, 144]
+                };
+                let start = y as usize * stride + x as usize * 4;
+                bytes[start..start + 4].copy_from_slice(&[
+                    rgb[0],
+                    rgb[1],
+                    rgb[2],
+                    (random >> 24) as u8,
+                ]);
+            }
+        }
+        let source =
+            ImageView::<Rgba8>::new(&bytes, dims, RowStride::new(stride).unwrap()).unwrap();
+        let mut expected = vec![[0.0; 3]; smooth_area_v1::scratch_len(dims)];
+        let mut actual = expected.clone();
+        for size in [4, 64, 32768] {
+            for tolerance in [0.0, f32::from_bits(1), 0.12, 1.0] {
+                let mut reference_checks = 0;
+                smooth_area_v1::select(source, size, tolerance, &mut expected, || {
+                    reference_checks += 1;
+                    Ok::<_, usize>(())
+                })
+                .unwrap();
+                let mut production_checks = 0;
+                production::select(source, size, tolerance, &mut actual, || {
+                    production_checks += 1;
+                    Ok::<_, usize>(())
+                })
+                .unwrap();
+                assert_eq!(production_checks, reference_checks);
+                for i in 0..(w * h) as usize {
+                    assert_eq!(
+                        actual[i][2].to_bits(),
+                        expected[i][2].to_bits(),
+                        "{w}x{h}/{size}/{tolerance}/{i}"
+                    );
+                }
+                // Aborted rows can leave the reused colour workspace partially filled.
+                // A subsequent call must still produce the same complete mask.
+                for stop in [1, h as usize + 1, reference_checks / 2, reference_checks] {
+                    let mut checks = 0;
+                    let result = production::select(source, size, tolerance, &mut actual, || {
+                        checks += 1;
+                        if checks == stop {
+                            Err(stop)
+                        } else {
+                            Ok(())
+                        }
+                    });
+                    assert_eq!(result, Err(stop));
+                    assert_eq!(checks, stop);
+                }
+                production::select(source, size, tolerance, &mut actual, || Ok::<_, ()>(()))
+                    .unwrap();
+                for i in 0..(w * h) as usize {
+                    assert_eq!(
+                        actual[i][2].to_bits(),
+                        expected[i][2].to_bits(),
+                        "reuse/{w}x{h}/{size}/{tolerance}/{i}"
+                    );
+                }
+            }
+        }
+    }
+}
+
 // Proves increasing a valid tolerance cannot lower coverage or deselect a real pixel,
 // even when adjacent f32 thresholds previously straddled its blue-noise cutoff.
 #[test]
