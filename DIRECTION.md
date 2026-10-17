@@ -36,10 +36,14 @@ Keep that workflow clear and fast, including large images.
   Qualified latency measurements remain pending because shared-host browser activity
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
 - The GPU preview integrates exact channel-lookup effects with bounded CPU fallback.
-  Mia reports that effects are fast, while dithering generally and Adaptive remain slow.
-  Profile the full Celeste image at 1x across every dither mode and colour space,
-  Everywhere and Adaptive, with no effects and two effects chains before choosing
-  further optimizations. The reviewed integration and host memory bounds await merge.
+  Full-resolution Celeste profiling covers all 27 modes, 15 matching spaces, both
+  placements and three effects profiles: 2,610 terminal cases, including 177 timeouts.
+  Effects execute on GPU; dithering, matching and Adaptive selection remain scalar CPU.
+  Adaptive selection dominates common calls; matching and diffusion dominate ordinary
+  Sierra, with expensive matching behind most timeouts. Optimize the exact selector
+  and reconstruction first, then matching/diffusion; investigate Yliluoma separately.
+  Shared-host timings are diagnostic, not qualified benchmarks. The reviewed
+  integration and host memory bounds await merge.
   Remaining GPU stages and physical browser/device qualification stay open.
   Port generated pointwise effects and recipe application, resize, palette matching,
   ordered/noise dithering, then Yliluoma. Error diffusion comes last because its
@@ -61,8 +65,8 @@ analytics while the pull requests complete their merge gates.
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
-   Profile general dithering and Adaptive, then optimize the measured bottlenecks
-   while preserving the accepted output.
+   Use the completed profile to prioritize exact Adaptive selector/reconstruction
+   work, then matching/diffusion, while preserving accepted output and storage bounds.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.
