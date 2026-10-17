@@ -8,13 +8,13 @@
 	import DitherAlgorithmSelect from './DitherAlgorithmSelect.svelte';
 	import DitherToggleControls from './DitherToggleControls.svelte';
 	import { ditherSettings, updateDitherSettings } from '$lib/stores/app';
+	import { MAX_ADAPTIVE_SAMPLE_SIZE } from '$lib/processing/types';
 	import DiceIcon from 'phosphor-svelte/lib/DiceFive';
 
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
 	const PLACEMENT_SAMPLE_SIZE_MIN = 4;
-	const PLACEMENT_SAMPLE_SIZE_MAX = 512;
 	const PLACEMENT_PERCENT_MIN = 0;
 	const PLACEMENT_PERCENT_MAX = 100;
 	const initial = ditherSettings.get();
@@ -120,7 +120,7 @@
 			bind:placementContrastThreshold
 			{supportsPlacement}
 			placementSampleSizeMin={PLACEMENT_SAMPLE_SIZE_MIN}
-			placementSampleSizeMax={PLACEMENT_SAMPLE_SIZE_MAX}
+			placementSampleSizeMax={MAX_ADAPTIVE_SAMPLE_SIZE}
 			placementPercentMin={PLACEMENT_PERCENT_MIN}
 			placementPercentMax={PLACEMENT_PERCENT_MAX}
 		/>
