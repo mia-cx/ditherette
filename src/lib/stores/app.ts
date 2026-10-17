@@ -27,6 +27,7 @@ import type {
 	ProcessedImage,
 	SourceImageRecord
 } from '$lib/processing/types';
+import { MAX_ADAPTIVE_SAMPLE_SIZE } from '$lib/processing/types';
 
 export const outputSettings = persistentJSON<OutputSettings>('ditherette:output', {
 	width: 512,
@@ -81,7 +82,7 @@ export function normalizeDitherSettings(value: unknown): DitherSettings {
 					: 'adaptive',
 		placementSampleSize:
 			typeof sampleSize === 'number' && Number.isFinite(sampleSize)
-				? Math.min(512, Math.max(4, Math.round(sampleSize)))
+				? Math.min(MAX_ADAPTIVE_SAMPLE_SIZE, Math.max(4, Math.round(sampleSize)))
 				: DEFAULT_DITHER_SETTINGS.placementSampleSize,
 		placementContrastThreshold:
 			typeof contrast === 'number' && Number.isFinite(contrast)

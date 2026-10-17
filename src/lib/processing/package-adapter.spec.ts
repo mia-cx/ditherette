@@ -238,7 +238,9 @@ describe('website package request', () => {
 			] of [
 				[64, 12, 64, 0.12],
 				[3.6, 0, 4, 0],
-				[40000, 150, 32768, 1]
+				[20, 6, 20, 0.06],
+				[60, 12, 60, 0.12],
+				[40000, 150, 100, 1]
 			] as const) {
 				const { recipe } = packageProcessRequest(
 					source,

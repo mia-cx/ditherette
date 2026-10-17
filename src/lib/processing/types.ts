@@ -6,6 +6,7 @@ export const MAX_OUTPUT_SIDE = 16_384;
 export const MAX_SOURCE_PIXELS = MAX_OUTPUT_PIXELS;
 export const MAX_SOURCE_SIDE = 32_768;
 export const MAX_SOURCE_BYTES = 75 * 1024 * 1024;
+export const MAX_ADAPTIVE_SAMPLE_SIZE = 100;
 
 export const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
 const ACCEPTED_IMAGE_TYPE_SET = new Set<string>(ACCEPTED_IMAGE_TYPES);
