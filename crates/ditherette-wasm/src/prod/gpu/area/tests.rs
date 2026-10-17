@@ -117,6 +117,7 @@ fn skew_tiles_keep_all_four_reconstruction_orders() {
             upload(&job, &cells);
             let mut parameters = Parameters::new(dimensions, 64, 0.12);
             parameters.mode = mode;
+            job.pixel_pass(ANALYSIS, "colors", parameters);
             let directions = if mode == 0 {
                 vec![(false, false), (true, true)]
             } else {
