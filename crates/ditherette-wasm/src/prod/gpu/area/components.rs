@@ -1,4 +1,6 @@
-@group(0) @binding(2) var<storage, read_write> work: array<atomic<u32>>;
+//! Embedded WGSL keeps GPU programs within the audited source tree.
+
+pub(super) const WGSL: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<atomic<u32>>;
 
 // Parents exist before union begins. Every update strictly lowers a parent;
 // no invocation waits for another workgroup to be scheduled.
@@ -62,3 +64,4 @@ fn retain(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     cells[3u*i + 2u] = distance;
 }
+"#;

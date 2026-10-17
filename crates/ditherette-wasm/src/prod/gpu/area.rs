@@ -6,11 +6,17 @@ use crate::image::ImageDimensions;
 
 use super::{device::map_read, Fallback, Gpu, JobControl};
 
-const COMMON: &str = include_str!("area/common.wgsl");
-const COMPONENTS: &str = include_str!("area/components.wgsl");
-const SWEEPS: &str = include_str!("area/sweeps.wgsl");
-const ANALYSIS: &str = include_str!("area/analysis.wgsl");
-const PACK: &str = include_str!("area/pack.wgsl");
+mod analysis;
+mod common;
+mod components;
+mod indexed_shader;
+mod pack;
+mod sweeps;
+use analysis::WGSL as ANALYSIS;
+use common::WGSL as COMMON;
+use components::WGSL as COMPONENTS;
+use pack::WGSL as PACK;
+use sweeps::WGSL as SWEEPS;
 mod indexed;
 pub use indexed::IndexedMemory;
 

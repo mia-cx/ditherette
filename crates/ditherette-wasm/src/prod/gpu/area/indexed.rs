@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-const SHADER: &str = include_str!("indexed.wgsl");
+use super::indexed_shader::WGSL as SHADER;
 
 /// Includes source snapshots and wire storage, both GPU work planes, immutable
 /// dispatch uniforms, packed index staging and independent host/JS output.

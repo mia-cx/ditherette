@@ -1,4 +1,6 @@
-struct Parameters {
+//! Embedded WGSL keeps GPU programs within the audited source tree.
+
+pub(super) const WGSL: &str = r#"struct Parameters {
     width: u32,
     height: u32,
     sample_size: u32,
@@ -42,3 +44,4 @@ fn jump(a: u32, b: u32) -> f32 {
     let delta = oklab(a) - oklab(b);
     return min(sqrt(dot(delta, delta)), 1.0);
 }
+"#;

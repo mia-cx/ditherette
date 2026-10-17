@@ -1,4 +1,6 @@
-@group(0) @binding(2) var<storage, read_write> work: array<f32>;
+//! Embedded WGSL keeps GPU programs within the audited source tree.
+
+pub(super) const WGSL: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<f32>;
 
 fn cell_color(i: u32) -> vec3<f32> {
     return vec3(cells[3u*i], cells[3u*i+1u], cells[3u*i+2u]);
@@ -154,3 +156,4 @@ fn finish(@builtin(global_invocation_id) id: vec3<u32>) {
     let t = clamp((2.0*p.reach-cells[3u*i+2u])/p.reach, 0.0, 1.0);
     cells[3u*i+2u] = select(cells[3u*i+1u]*density(t), 0.0, cells[3u*i+1u] < 0.0);
 }
+"#;

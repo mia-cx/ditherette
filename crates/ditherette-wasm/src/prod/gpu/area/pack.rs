@@ -1,4 +1,6 @@
-@group(0) @binding(2) var<storage, read_write> work: array<u32>;
+//! Embedded WGSL keeps GPU programs within the audited source tree.
+
+pub(super) const WGSL: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<u32>;
 @compute @workgroup_size(64)
 fn pack(@builtin(global_invocation_id) id: vec3<u32>) {
     let word = id.x;
@@ -16,3 +18,4 @@ fn pack(@builtin(global_invocation_id) id: vec3<u32>) {
     // One writer owns the whole word, including the partial final word.
     work[word] = bits;
 }
+"#;

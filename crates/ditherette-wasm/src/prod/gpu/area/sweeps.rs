@@ -1,4 +1,6 @@
-@group(0) @binding(2) var<storage, read_write> work: array<u32>;
+//! Embedded WGSL keeps GPU programs within the audited source tree.
+
+pub(super) const WGSL: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<u32>;
 var<workgroup> tile: array<f32, 256>;
 
 fn coordinate(u: i32, y: i32) -> vec2<i32> {
@@ -67,3 +69,4 @@ fn sweep(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) 
     }
     if valid { cells[3u*index(xy) + 2u] = tile[slot]; }
 }
+"#;
