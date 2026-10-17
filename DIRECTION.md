@@ -65,6 +65,10 @@ Keep that workflow clear and fast, including large images.
   would retain the dominant delay. Preserve ordinary serpentine diffusion while
   investigating its scheduling separately; GPU Adaptive masks can also feed CPU diffusion.
   Read [the port plan](docs/plans/gpu-dithering.md) before implementing those stages.
+  The native GPU candidate now computes the complete accepted Adaptive mask and
+  palette-index output for independent fields in all 15 matching spaces. Full
+  Celeste coverage differs at at most one pixel in native checks. Browser wiring,
+  cancellation and mixed GPU-analysis/CPU-diffusion qualification remain in progress.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

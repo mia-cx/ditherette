@@ -119,6 +119,27 @@ kernels on CPU; declare their backend explicitly in evidence.
 
 ## 5. Admit memory and qualify the complete call
 
+The in-progress implementation is `prod/gpu/area.rs`. Its skew coordinates
+`u=x+y` turn each sweep's predecessors into `(-1,0), (-2,-1), (-1,-1), (0,-1)`.
+Dispatches advance tile diagonals; barriers advance diagonals within a tile.
+Atomic union/find retains complete eight-connected regions without iterative
+one-pixel label propagation. These schedules pass native cross-tile/diagonal/thin-path
+checks against the unchanged CPU algorithms.
+
+| Lifetime | Owned storage |
+| --- | --- |
+| Source capture through upload | Host snapshot, Wasm copy, GPU packed RGBA |
+| Complete analysis | Packed f32 triplet cells and one triplet work plane |
+| Region retention | Work plane reused for integer parents and component counts |
+| Reconstruction | Cells plus source; work plane becomes available for output |
+| Final readback | Work plane reused for packed coverage or indices; mapped staging and independently owned result |
+| Dispatch setup | Immutable aligned uniforms on host and GPU, dispatch metadata and bounded palette/settings |
+
+`AreaMemory` and `IndexedMemory` admit these lifetimes before workspace creation.
+Native full Celeste coverage at 20/64/100 px differs by 1/1/0 pixels respectively;
+180 field/matching/alpha fixture cases have zero differing indices. This is preliminary
+native validation, not browser qualification or completion of the integration milestone.
+
 Create a resource-lifetime table before allocation: source snapshots, Wasm wire copies,
 GPU source, coordinate/contrast/distance planes, component labels/counts, staging and
 readback. Reuse dead workspaces, honor actual device binding/texture/dispatch limits,

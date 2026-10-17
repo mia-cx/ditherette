@@ -8,12 +8,14 @@
 //!
 //! Results come back only through mapped buffers, never a canvas, because
 //! privacy features such as Helium's add noise to canvas readback.
-//! The GPU never decides palette indices yet: palette output stays exact.
+//! Indexed jobs return palette indices; palette colours stay exact.
 //!
 //! The opt-in package effects processor uses [`ChannelLookup::from_effects`]
 //! and [`Backend::lookup`] for complete enabled per-channel chains. Other
-//! stages still run on CPU and are qualified separately with [`Gpu::parity`].
+//! [`Backend::dither_and_quantize`] runs independent fields, matching and complete
+//! Adaptive selection. Scan-sensitive diffusion remains on CPU.
 
+mod area;
 mod device;
 mod lookup;
 mod memory;
@@ -22,6 +24,7 @@ mod stage;
 #[cfg(test)]
 mod tests;
 
+pub use area::{AreaMemory, IndexedMemory};
 pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
 pub use memory::LookupMemory;
@@ -49,6 +52,8 @@ pub enum Fallback {
     TooLarge,
     /// Planned owned capacity exceeds the caller's memory limit. The GPU stays usable.
     MemoryLimit,
+    /// This dither family or placement is retained on the CPU.
+    UnsupportedStage,
 }
 
 /// Where stages run. Starts from [`Backend::detect`]; a failed GPU call demotes it to the CPU.

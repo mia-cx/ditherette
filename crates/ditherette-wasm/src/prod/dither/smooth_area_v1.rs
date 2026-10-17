@@ -221,7 +221,7 @@ pub fn covers(mask: f32, x: u32, y: u32) -> bool {
 
 // Queue indices occupy one dead lane as u32 bits, never floating arithmetic.
 // Validated dimensions have at most 2^30 pixels; their index bit patterns are finite.
-fn retain_regions<E>(
+pub(crate) fn retain_regions<E>(
     dimensions: ImageDimensions,
     minimum: usize,
     limit: f32,
@@ -292,7 +292,7 @@ fn retain_regions<E>(
 
 // Source-independent eight-neighbour distance is used only to identify an edge
 // shadow and soften regional boundaries. Image borders are not rejection sites.
-fn geometric_distance<E>(
+pub(crate) fn geometric_distance<E>(
     dimensions: ImageDimensions,
     cells: &mut [[f32; 3]],
     check: &mut impl FnMut() -> Result<(), E>,
@@ -328,7 +328,7 @@ fn geometric_distance<E>(
 // Four bounded chamfer sweeps reconstruct rounded contours along smooth source
 // colours. Hard colour jumps are barriers; local variation makes texture costly.
 #[allow(clippy::too_many_arguments)]
-fn spread<E>(
+pub(crate) fn spread<E>(
     source: ImageView<'_, Rgba8>,
     tolerance: f32,
     reach: f32,
