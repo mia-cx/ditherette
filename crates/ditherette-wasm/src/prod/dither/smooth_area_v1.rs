@@ -96,8 +96,9 @@ pub fn select<E>(
             let mut contrast =
                 (2.0 * color_distance(center, unsigned(cells[y * width + x]))).min(1.0);
             let mut fine = 0.0_f32;
-            visit_fine_neighbours(width, height, x, y, |nx, ny| {
+            visit_square_neighbours(width, height, x, y, 1, |nx, ny| {
                 fine = fine.max(color_distance_squared(center, queue[(ny % 3) * width + nx]));
+                true
             });
             // sqrt is monotone on these finite nonnegative sums. Taking it
             // after the maximum keeps the exact f32 result, once per pixel.
@@ -487,23 +488,24 @@ fn mark_boundaries<E>(
     let width = dimensions.width_usize();
     let height = dimensions.height_usize();
     for y in 0..height {
-        let far_rows = [
-            y.saturating_sub(EDGE_PROBE_RADIUS),
-            y,
-            (y + EDGE_PROBE_RADIUS).min(height - 1),
-        ];
-        'pixels: for x in 0..width {
+        let mut left = column_range(width, height, 0, y, cells);
+        let mut middle = left;
+        for x in 0..width {
+            let right = column_range(width, height, (x + 1).min(width - 1), y, cells);
+            let (mut minimum, mut maximum) = left;
+            extend_bounds(&mut minimum, &mut maximum, middle.0, middle.1);
+            extend_bounds(&mut minimum, &mut maximum, right.0, right.1);
+            left = middle;
+            middle = right;
             let centre = unsigned(cells[y * width + x]);
-            let mut minimum = centre;
-            let mut maximum = centre;
             let mut fine = 0.0_f32;
-            visit_fine_neighbours(width, height, x, y, |nx, ny| {
+            visit_square_neighbours(width, height, x, y, 1, |nx, ny| {
                 let color = unsigned(cells[ny * width + nx]);
                 let distance = color_distance_squared(centre, color);
                 if distance > fine {
                     fine = distance;
                 }
-                extend_range(&mut minimum, &mut maximum, color);
+                true
             });
             // A constant fine neighbourhood cannot witness a concentrated edge.
             // Its broader colour range cannot change that decision.
@@ -511,91 +513,111 @@ fn mark_boundaries<E>(
                 continue;
             }
             let concentrated = 2.0 * fine.sqrt();
-            for ny in far_rows {
-                let row = &cells[ny * width..(ny + 1) * width];
-                for nx in [
-                    x.saturating_sub(EDGE_PROBE_RADIUS),
-                    x,
-                    (x + EDGE_PROBE_RADIUS).min(width - 1),
-                ] {
-                    let color = unsigned(row[nx]);
+            let concentrated_edge =
+                visit_square_neighbours(width, height, x, y, EDGE_PROBE_RADIUS, |nx, ny| {
+                    let color = unsigned(cells[ny * width + nx]);
                     extend_range(&mut minimum, &mut maximum, color);
                     // The enclosing colour range can only grow. A smooth
                     // neighbourhood often rules out an edge on the first
                     // coarse probe, so its remaining probes add no information.
-                    if color_distance(minimum, maximum) > concentrated {
-                        continue 'pixels;
-                    }
-                }
+                    color_distance(minimum, maximum) <= concentrated
+                });
+            if concentrated_edge {
+                cells[y * width + x][0] = -centre[0];
             }
-            cells[y * width + x][0] = -centre[0];
         }
         check()?;
     }
     Ok(())
 }
 
-// Clamp the fixed 3x3 stencil once and expose each visit to the size-optimized
-// compiler. Repeated border pixels are idempotent for both maxima and ranges;
-// the centre is already included by each caller's initial values.
+// Adjacent 3x3 windows share two columns. Carry each column's exact bounds
+// forward instead of rebuilding all nine pixels' bounds for every centre.
 #[inline(always)]
-fn visit_fine_neighbours(
+fn column_range(
     width: usize,
     height: usize,
     x: usize,
     y: usize,
-    mut visit: impl FnMut(usize, usize),
-) {
-    let left = x.saturating_sub(1);
-    let right = (x + 1).min(width - 1);
-    let top = y.saturating_sub(1);
-    let bottom = (y + 1).min(height - 1);
-    visit(left, top);
-    visit(x, top);
-    visit(right, top);
-    visit(left, y);
-    visit(right, y);
-    visit(left, bottom);
-    visit(x, bottom);
-    visit(right, bottom);
+    cells: &[[f32; 3]],
+) -> ([f32; 3], [f32; 3]) {
+    let mut minimum = unsigned(cells[y.saturating_sub(1) * width + x]);
+    let mut maximum = minimum;
+    extend_range(&mut minimum, &mut maximum, unsigned(cells[y * width + x]));
+    extend_range(
+        &mut minimum,
+        &mut maximum,
+        unsigned(cells[(y + 1).min(height - 1) * width + x]),
+    );
+    (minimum, maximum)
+}
+
+// Expose the fixed stencil to the size-optimized compiler. The centre already
+// belongs to each caller's initial bounds. False stops the coarse probe early.
+#[inline(always)]
+fn visit_square_neighbours(
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+    radius: usize,
+    mut visit: impl FnMut(usize, usize) -> bool,
+) -> bool {
+    let left = x.saturating_sub(radius);
+    let right = (x + radius).min(width - 1);
+    let top = y.saturating_sub(radius);
+    let bottom = (y + radius).min(height - 1);
+    visit(left, top)
+        && visit(x, top)
+        && visit(right, top)
+        && visit(left, y)
+        && visit(right, y)
+        && visit(left, bottom)
+        && visit(x, bottom)
+        && visit(right, bottom)
 }
 
 // Oklab coordinates from encoded RGB are finite. Ordered comparisons avoid
 // generic min/max's NaN handling in this full-image neighbourhood kernel.
 #[inline(always)]
 fn extend_range(minimum: &mut [f32; 3], maximum: &mut [f32; 3], color: [f32; 3]) {
+    extend_bounds(minimum, maximum, color, color);
+}
+
+#[inline(always)]
+fn extend_bounds(minimum: &mut [f32; 3], maximum: &mut [f32; 3], lower: [f32; 3], upper: [f32; 3]) {
     // Spell out three channels: the frozen size-oriented compiler otherwise
     // retains a loop here for every neighbour of every image pixel.
     *minimum = [
-        if color[0] < minimum[0] {
-            color[0]
+        if lower[0] < minimum[0] {
+            lower[0]
         } else {
             minimum[0]
         },
-        if color[1] < minimum[1] {
-            color[1]
+        if lower[1] < minimum[1] {
+            lower[1]
         } else {
             minimum[1]
         },
-        if color[2] < minimum[2] {
-            color[2]
+        if lower[2] < minimum[2] {
+            lower[2]
         } else {
             minimum[2]
         },
     ];
     *maximum = [
-        if color[0] > maximum[0] {
-            color[0]
+        if upper[0] > maximum[0] {
+            upper[0]
         } else {
             maximum[0]
         },
-        if color[1] > maximum[1] {
-            color[1]
+        if upper[1] > maximum[1] {
+            upper[1]
         } else {
             maximum[1]
         },
-        if color[2] > maximum[2] {
-            color[2]
+        if upper[2] > maximum[2] {
+            upper[2]
         } else {
             maximum[2]
         },

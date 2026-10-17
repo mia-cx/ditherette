@@ -49,7 +49,9 @@ Keep that workflow clear and fast, including large images.
   row workspace. Exact mask, checkpoint and budget checks pass; review and
   deployment remain separate.
   The follow-up expands fixed neighbourhood visits and reuses consecutive RGB
-  conversions within the call. Further CPU gains remain worthwhile alongside GPU work.
+  conversions within the call. Boundary scans also reuse overlapping column bounds
+  and expand coarse probes without changing masks, checkpoints or storage.
+  Further CPU gains remain worthwhile alongside GPU work.
   Remaining GPU stages and physical browser/device qualification stay open.
   The next dither milestone combines palette matching, ordered/noise fields and
   the complete Adaptive selector/reconstruction on GPU. Keeping selection on CPU
