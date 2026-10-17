@@ -42,6 +42,24 @@ impl Drop for Gpu {
 }
 
 impl Gpu {
+    /// Captures validation/allocation failures from the whole multi-pass job,
+    /// including source and workspace creation before its first dispatch.
+    pub(super) async fn scoped<T>(
+        &self,
+        work: impl Future<Output = Result<T, Fallback>>,
+    ) -> Result<T, Fallback> {
+        let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let result = work.await;
+        let validation = validation.pop();
+        let memory = memory.pop();
+        if let Some(error) = validation.await.or(memory.await) {
+            return Err(Fallback::Failed(error.to_string()));
+        }
+        self.check()?;
+        result
+    }
+
     /// An instance with every backend this build supports.
     pub fn instance() -> wgpu::Instance {
         wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle())
@@ -300,7 +318,7 @@ impl Gpu {
     }
 
     /// Fails once the device was lost or reported an error outside a call.
-    fn check(&self) -> Result<(), Fallback> {
+    pub(super) fn check(&self) -> Result<(), Fallback> {
         match &*self.failure.lock().expect("failure lock is never poisoned") {
             Some(message) => Err(Fallback::Lost(message.clone())),
             None => Ok(()),
@@ -332,7 +350,7 @@ impl Gpu {
         }))
     }
 
-    fn buffer(&self, size: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+    pub(super) fn buffer(&self, size: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
         self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size,
@@ -398,7 +416,7 @@ fn record(failure: &Mutex<Option<String>>, message: String) {
 
 /// Resolves when the slice is mapped. Natively the device must be polled for it to finish;
 /// on the web the browser resolves it from its event loop.
-fn map_read(
+pub(super) fn map_read(
     slice: wgpu::BufferSlice<'_>,
 ) -> impl Future<Output = Result<(), wgpu::BufferAsyncError>> {
     #[derive(Default)]

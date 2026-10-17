@@ -188,6 +188,30 @@ pub struct PreparedDiffusion {
 }
 
 impl PreparedDiffusion {
+    /// Uses internally validated GPU coverage while preserving the ordinary
+    /// recurrence, feedback and global serpentine scan. No float mask is read back.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn execute_gpu_coverage(
+        &mut self,
+        source: ImageView<'_, Rgba8>,
+        indices: &mut [u8],
+        policy: DiffusionPolicy,
+        coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
+        progress: impl FnMut(u32) -> Result<(), Failure>,
+    ) -> Result<(), Failure> {
+        execute_with_coverage_progress(
+            &self.quantizer,
+            &mut self.work,
+            &mut self.rgb_cache,
+            &mut [],
+            coverage,
+            source,
+            indices,
+            policy,
+            progress,
+        )
+    }
+
     /// Counts the record, landed quantizer, and three rows before any allocation.
     pub fn required_capacity_bytes(
         width: u32,

@@ -40,7 +40,10 @@ export function websiteGpu({ worker = false } = {}) {
 		},
 		transform(code, id, options) {
 			if (options?.ssr) return;
-			if (!id.replaceAll('\\', '/').endsWith('/gpu-effects.js') || !code.includes(factoryUrl))
+			if (
+				!/\/gpu-(?:effects|dither)\.js$/.test(id.replaceAll('\\', '/')) ||
+				!code.includes(factoryUrl)
+			)
 				return;
 			return code.replace(
 				factoryUrl,

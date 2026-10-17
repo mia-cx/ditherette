@@ -2,10 +2,13 @@ import {
 	applyCompiledEffects,
 	compileEffectMask,
 	createGpuEffects,
+	createGpuDither,
+	DitheretteError,
 	indexColours,
 	type Curve,
 	type Ditherette,
 	type GpuEffects,
+	type GpuDither,
 	type IndexedColours,
 	type Progress,
 	type RecolourRecipe,
@@ -208,11 +211,13 @@ export class EffectsWorkerPipeline {
 export class ProcessorWorkerPipeline {
 	#sourceCache: SourceCache | undefined;
 	#canceledIds = new Set<number>();
-	#package: Promise<Ditherette> | undefined;
+	#package: Promise<Ditherette | GpuDither> | undefined;
+	#active: { id: number; controller: AbortController } | undefined;
 
 	handle(request: Exclude<WorkerRequest, { type: 'process' }>): WorkerResponse | undefined {
 		if (request.type === 'cancel') {
 			this.#canceledIds.add(request.id);
+			if (this.#active?.id === request.id) this.#active.controller.abort();
 			return undefined;
 		}
 		if (this.#canceledIds.has(request.id)) return undefined;
@@ -241,7 +246,7 @@ export class ProcessorWorkerPipeline {
 		progress('Sizing output', 0.05);
 		const size = clampOutputSize(settings.output.width, settings.output.height);
 		const initializeStart = performance.now();
-		this.#package ??= initializePackageProcessor().catch((error: unknown) => {
+		this.#package ??= initializePackageProcessor(true).catch((error: unknown) => {
 			this.#package = undefined;
 			throw error;
 		});
@@ -254,15 +259,41 @@ export class ProcessorWorkerPipeline {
 		const mapped = packageProcessRequest(source, palette, { ...settings, effects: [] }, size);
 		mark('package request adapter', requestStart);
 		const processStart = performance.now();
-		const output = processor.process({
-			...mapped.request,
-			onProgress({ stage, completed, total }) {
-				progress(stage, stage === 'complete' ? 1 : total ? (completed ?? 0) / total : 0, {
-					completed,
-					total
+		const controller = new AbortController();
+		this.#active = { id, controller };
+		let output;
+		try {
+			const processRequest = {
+				...mapped.request,
+				onProgress({ stage, completed, total }: Progress) {
+					progress(stage, stage === 'complete' ? 1 : total ? (completed ?? 0) / total : 0, {
+						completed,
+						total
+					});
+				}
+			};
+			output =
+				'execution' in processor
+					? await processor.process(processRequest, controller.signal)
+					: processor.process(processRequest);
+		} catch (error) {
+			if (this.#canceledIds.has(id)) return undefined;
+			if (
+				'execution' in processor &&
+				error instanceof DitheretteError &&
+				(error.code === 'initialization' || error.code === 'capability')
+			) {
+				processor.dispose();
+				this.#package = undefined;
+				throw new PackageInitializationError('Wasm could not initialise. Try processing again.', {
+					cause: error
 				});
 			}
-		});
+			throw error;
+		} finally {
+			if (this.#active?.id === id) this.#active = undefined;
+		}
+		if (this.#canceledIds.has(id)) return undefined;
 		mark('package process', processStart);
 		const adapterStart = performance.now();
 		const result = packageQuantizeResult(output, palette, mapped.warnings);
@@ -342,8 +373,10 @@ const bytes = ({ width, height, data }: Pixels) => ({
 /** Signals that a fresh worker must clear cached module or Wasm initialization failures. */
 export class PackageInitializationError extends Error {}
 
-/** Load the package and create a scalar processor, marking failures a fresh worker may clear. */
-export async function initializePackageProcessor() {
+/** Load the requested processor, marking initialization failures a fresh worker may clear. */
+export function initializePackageProcessor(): Promise<Ditherette>;
+export function initializePackageProcessor(gpu: true): Promise<Ditherette | GpuDither>;
+export async function initializePackageProcessor(gpu = false) {
 	const message = 'Wasm could not initialise. Try processing again.';
 	let module;
 	try {
@@ -352,6 +385,8 @@ export async function initializePackageProcessor() {
 		throw new PackageInitializationError(message, { cause: error });
 	}
 	try {
+		if (gpu && typeof navigator !== 'undefined' && 'gpu' in navigator)
+			return await createGpuDither();
 		return await module.createDitherette();
 	} catch (error) {
 		if (

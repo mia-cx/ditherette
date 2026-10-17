@@ -3,7 +3,7 @@ import type { ErrorCode } from './errors.js';
 import type { InitInput, InitOptions, Progress, Rgba8Image } from './types.js';
 
 const maxPixels = 67_108_864;
-const anchors = [
+export const anchors = [
 	'top-left',
 	'top',
 	'top-right',

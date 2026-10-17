@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createDitherette, DitheretteError, type Ditherette, type Effect } from 'ditherette';
+import {
+	createDitherette,
+	createGpuDither,
+	DitheretteError,
+	type Ditherette,
+	type Effect
+} from 'ditherette';
 import {
 	PackageInitializationError,
 	ProcessorWorkerPipeline,
@@ -26,6 +32,7 @@ Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configura
 vi.mock('ditherette', async (importOriginal) => ({
 	...(await importOriginal<typeof import('ditherette')>()),
 	createDitherette: vi.fn(),
+	createGpuDither: vi.fn(),
 	DitheretteError: class extends Error {
 		constructor(
 			public code: string,
@@ -38,6 +45,7 @@ vi.mock('ditherette', async (importOriginal) => ({
 }));
 afterEach(() => {
 	vi.unstubAllEnvs();
+	vi.unstubAllGlobals();
 	vi.resetAllMocks();
 });
 
@@ -114,6 +122,67 @@ function loadedPipeline() {
 }
 
 describe('ProcessorWorkerPipeline', () => {
+	it('aborts an active GPU job and suppresses its stale response', async () => {
+		vi.stubGlobal('navigator', { gpu: {} });
+		let entered!: (signal: AbortSignal) => void;
+		const started = new Promise<AbortSignal>((resolve) => {
+			entered = resolve;
+		});
+		vi.mocked(createGpuDither).mockResolvedValue({
+			execution: undefined,
+			process: async (_request, signal) =>
+				new Promise((_resolve, reject) => {
+					if (!signal) throw new Error('Worker must provide cancellation');
+					entered(signal);
+					signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+				}),
+			ditherAndQuantize: async () => {
+				throw new Error('Expected complete processing');
+			},
+			dispose: vi.fn()
+		});
+		const pipeline = loadedPipeline();
+		const pending = pipeline.handleAsync(processRequest(), () => undefined);
+		const signal = await started;
+		pipeline.handle({ type: 'cancel', id: 2 });
+		expect(signal.aborted).toBe(true);
+		expect(await pending).toBeUndefined();
+		expect(createDitherette).not.toHaveBeenCalled();
+	});
+
+	it('restarts lazy GPU fallback initialization without retaining the failed facade', async () => {
+		vi.stubGlobal('navigator', { gpu: {} });
+		const error = new DitheretteError('initialization', 'wasm', 'Fallback could not load');
+		const dispose = vi.fn();
+		vi.mocked(createGpuDither)
+			.mockResolvedValueOnce({
+				execution: undefined,
+				process: async () => {
+					throw error;
+				},
+				ditherAndQuantize: async () => {
+					throw new Error('Expected complete processing');
+				},
+				dispose
+			})
+			.mockResolvedValue({
+				execution: undefined,
+				process: async (request) => processorMock().process(request),
+				ditherAndQuantize: async () => {
+					throw new Error('Expected complete processing');
+				},
+				dispose: vi.fn()
+			});
+		const pipeline = loadedPipeline();
+		await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toBeInstanceOf(
+			PackageInitializationError
+		);
+		expect(dispose).toHaveBeenCalledOnce();
+		expect(await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined)).toMatchObject({
+			type: 'complete'
+		});
+		expect(createGpuDither).toHaveBeenCalledTimes(2);
+	});
 	it.each(['initialization', 'capability'] as const)(
 		'reports %s failure and retries on the next processing request',
 		async (code) => {

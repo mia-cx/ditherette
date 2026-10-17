@@ -65,6 +65,12 @@ Keep that workflow clear and fast, including large images.
   would retain the dominant delay. Preserve ordinary serpentine diffusion while
   investigating its scheduling separately; GPU Adaptive masks can also feed CPU diffusion.
   Read [the port plan](docs/plans/gpu-dithering.md) before implementing those stages.
+  The GPU candidate now runs matching, independent fields and the complete Adaptive
+  selector in the editor worker. One admitted source/coverage generation is reused
+  across dither settings; cancellation checks run between bounded dispatch batches.
+  Real Chromium and native checks pass, including 32 full-size Celeste cases.
+  Diffusion retains its ordinary CPU recurrence with GPU coverage. Yliluoma, resize
+  and wider package samples fall back to CPU; deployment and release gates remain separate.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

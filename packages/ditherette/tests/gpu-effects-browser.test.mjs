@@ -12,6 +12,7 @@ import { chromium } from 'playwright';
 const root = new URL('../../../', import.meta.url);
 const mime = {
 	'.js': 'text/javascript',
+	'.mjs': 'text/javascript',
 	'.wasm': 'application/wasm',
 	'.png': 'image/png',
 	'.jpg': 'image/jpeg'
@@ -22,12 +23,17 @@ async function startServer(t, missingGpu = false) {
 		try {
 			const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
 			if (path === '/') return response.end('<title>GPU package effects test</title>');
+			if (path === '/__private_gpu_fixture.rgba' && process.env.DITHERETTE_GPU_RGBA) {
+				response.setHeader('content-type', 'application/octet-stream');
+				return response.end(await readFile(process.env.DITHERETTE_GPU_RGBA));
+			}
 			if (missingGpu && path.startsWith('/packages/ditherette/dist/wasm/gpu/')) {
 				response.writeHead(404).end();
 				return;
 			}
 			if (
 				!path.startsWith('/packages/ditherette/dist/') &&
+				path !== '/packages/ditherette/tests/gpu-dither-worker.mjs' &&
 				!path.startsWith('/benchmark-fixtures/')
 			) {
 				response.writeHead(404).end();
@@ -55,6 +61,45 @@ async function startServer(t, missingGpu = false) {
 
 	return `http://127.0.0.1:${server.address().port}`;
 }
+
+for (const mode of ['gpu', 'disabled', 'missing'])
+	test(
+		`real indexed dither worker through Chromium CDP (${mode})`,
+		{ timeout: 180_000 },
+		async (t) => {
+			const origin = await startServer(t, mode === 'missing');
+			const { tab, errors, system } = await browser(t, origin, mode === 'disabled');
+			const result = await tab.evaluate(async (mode) => {
+				const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+					type: 'module'
+				});
+				try {
+					return await new Promise((resolve, reject) => {
+						worker.onmessage = (event) => {
+							if (event.currentTarget === worker) resolve(event.data);
+						};
+						worker.onerror = (event) => reject(Error(event.message));
+						worker.postMessage({ fallback: mode !== 'gpu' });
+					});
+				} finally {
+					worker.terminate();
+				}
+			}, mode);
+			assert.equal(result.error, undefined, result.error);
+			assert.deepEqual(errors, []);
+			if (mode === 'gpu') {
+				assert.equal(result.cases, 363);
+				assert.equal(result.backends.gpu, 315);
+				assert.equal(result.backends.hybrid, 48);
+				assert.equal(result.webgpu.isFallbackAdapter, false);
+				assert.equal(result.cancelled, true);
+				assert.equal(result.callbackRecovered, true);
+				assert.equal(result.analyses, 1);
+				assert.equal(result.reuses, 197);
+			} else assert.equal(result.backends.cpu, 3);
+			t.diagnostic(JSON.stringify({ mode, ...result, system }));
+		}
+	);
 
 async function browser(t, origin, noGpu) {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-gpu-cdp-'));
@@ -88,6 +133,7 @@ async function browser(t, origin, noGpu) {
 	process.stderr.on('data', (chunk) => {
 		stderr = (stderr + chunk).slice(-8000);
 	});
+
 	let connection;
 	t.after(async () => {
 		await connection?.close();
@@ -425,5 +471,106 @@ test(
 		assert.deepEqual(result.actual, result.wanted);
 		assert.equal(result.execution.backend, 'cpu');
 		assert.equal(result.execution.fallback, result.capable ? 'Initialization' : 'NoAdapter');
+	}
+);
+
+test(
+	'full 1x indexed Celeste through the real GPU worker',
+	{ timeout: 360_000, skip: !process.env.DITHERETTE_GPU_RGBA },
+	async (t) => {
+		const origin = await startServer(t);
+		const { tab, errors, system } = await browser(t, origin, false);
+		const text = await readFile(new URL('src/lib/palette/wplace.ts', root), 'utf8');
+		const palette = [...text.matchAll(/\['(?!#)[^']+', '(#[0-9A-F]{6})'\]/g)].map(([, hex]) => ({
+			kind: 'color',
+			rgb: [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16))
+		}));
+		palette.push({ kind: 'transparent' });
+		assert.equal(palette.length, 64);
+		const result = await tab.evaluate(async (palette) => {
+			const data = new Uint8Array(await (await fetch('/__private_gpu_fixture.rgba')).arrayBuffer());
+			const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+				type: 'module'
+			});
+			try {
+				return await new Promise((resolve, reject) => {
+					worker.onmessage = (event) => {
+						if (event.currentTarget === worker) resolve(event.data);
+					};
+					worker.onerror = (event) => reject(Error(event.message));
+					worker.postMessage({ full: true, source: { width: 2600, height: 4168, data }, palette }, [
+						data.buffer
+					]);
+				});
+			} finally {
+				worker.terminate();
+			}
+		}, palette);
+		assert.equal(result.error, undefined, result.error);
+		assert.deepEqual(errors, []);
+		assert.equal(result.cases, 32);
+		assert.deepEqual(result.backends, { gpu: 16, hybrid: 16 });
+		assert.equal(result.analyses, 8);
+		assert.equal(result.reuses, 24);
+		t.diagnostic(JSON.stringify({ ...result, system }));
+	}
+);
+
+test(
+	'indexed benchmark photos use GPU matching, fields and Adaptive analysis',
+	{ timeout: 180_000 },
+	async (t) => {
+		const origin = await startServer(t);
+		const { tab, errors, system } = await browser(t, origin, false);
+		const reports = await tab.evaluate(async () => {
+			const reports = [];
+			for (const photo of [
+				'Celeste_Insta_selfie.png',
+				'Picking_at_thread.jpg',
+				'The_Quilt_banner.png'
+			]) {
+				const bitmap = await createImageBitmap(
+					await (await fetch(`/benchmark-fixtures/${photo}`)).blob(),
+					{
+						premultiplyAlpha: 'none',
+						colorSpaceConversion: 'none'
+					}
+				);
+				const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+				const context = canvas.getContext('2d');
+				context.drawImage(bitmap, 0, 0);
+				const source = {
+					width: bitmap.width,
+					height: bitmap.height,
+					data: new Uint8Array(context.getImageData(0, 0, bitmap.width, bitmap.height).data)
+				};
+				bitmap.close();
+				const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+					type: 'module'
+				});
+				try {
+					const result = await new Promise((resolve, reject) => {
+						worker.onmessage = (event) => {
+							if (event.currentTarget === worker) resolve(event.data);
+						};
+						worker.onerror = (event) => reject(Error(event.message));
+						worker.postMessage({ photo: true, source }, [source.data.buffer]);
+					});
+					reports.push({ photo, ...result });
+				} finally {
+					worker.terminate();
+				}
+			}
+			return reports;
+		});
+		assert.deepEqual(errors, []);
+		for (const report of reports) {
+			assert.equal(report.error, undefined, report.error);
+			assert.equal(report.cases, 3);
+			assert.deepEqual(report.backends, { gpu: 2, hybrid: 1 });
+			assert.equal(report.analyses, 1);
+			assert.equal(report.reuses, 1);
+		}
+		t.diagnostic(JSON.stringify({ reports, system }));
 	}
 );

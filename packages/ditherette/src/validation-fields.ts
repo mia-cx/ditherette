@@ -12,8 +12,8 @@ import {
 export const spaces = ['srgb', 'linear-rgb', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr'];
 const sizes = ['2', '4', '8', '16'];
 /** Private ordered-tile and diffusion-kernel tags, in ABI order. */
-const tiles = ['3x1', '4x1', '4x2', '5x3'];
-const kernels = [
+export const tiles = ['3x1', '4x1', '4x2', '5x3'];
+export const kernels = [
 	'floyd-steinberg',
 	'sierra',
 	'sierra-lite',
