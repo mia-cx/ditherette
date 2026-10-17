@@ -98,9 +98,8 @@ pub fn private_error_path() -> u32 {
     ERROR_PATH.with(|path| path.get() as u32)
 }
 
-/// Forced complete-call candidate for internal browser benchmarks only.
-/// The benchmark host initializes its blocking-capable worker pool before selecting bands.
-#[cfg(feature = "bench-subjects")]
+/// Explicit package row-band selection. Resolution clamps worker requests to
+/// the initialized pool; scalar artifacts execute the same bands sequentially.
 #[wasm_bindgen(js_name = privateExecutionPolicy)]
 pub fn private_execution_policy(
     stage: u32,

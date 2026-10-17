@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { createDitherette, createGpuDither, DitheretteError } from '../dist/index.js';
+import {
+	createDitherette,
+	createGpuDither,
+	createGpuEffects,
+	DitheretteError
+} from '../dist/index.js';
 import { initializeGpuDither } from '../dist/gpu-dither.js';
 
 const wasm = await WebAssembly.compile(
@@ -40,6 +45,56 @@ async function expected(input) {
 		cpu.dispose();
 	}
 }
+
+test('GPU-only calls reject absent hardware and unsupported hybrid work without CPU fallback', async () => {
+	// Proves a client can require GPU execution rather than silently receiving CPU work.
+	const gpu = await createGpuDither({ ...options, fallback: 'error' });
+	try {
+		await assert.rejects(gpu.ditherAndQuantize(request()), (error) => error.code === 'capability');
+		assert.equal(gpu.execution, undefined);
+	} finally {
+		gpu.dispose();
+	}
+	const effects = await createGpuEffects({ ...options, fallback: 'error' });
+	try {
+		await assert.rejects(
+			effects.applyEffects({
+				version: 1,
+				source: request().source,
+				effects: [{ effect: 'exposure', enabled: true, stops: 1 }]
+			}),
+			(error) => error.code === 'capability'
+		);
+	} finally {
+		effects.dispose();
+	}
+	const unsupported = initializeGpuDither(
+		{ privateGpuEffectsDispose() {} },
+		{ ...options, fallback: 'error' }
+	);
+	try {
+		const input = request();
+		input.dither = {
+			family: 'diffusion',
+			kernel: 'sierra',
+			feedback: 'matching',
+			serpentine: true,
+			strength: 1,
+			placement: { mode: 'everywhere' }
+		};
+		await assert.rejects(
+			unsupported.ditherAndQuantize(input),
+			(error) => error.code === 'unsupported-operation'
+		);
+		assert.equal(unsupported.execution, undefined);
+	} finally {
+		unsupported.dispose();
+	}
+	await assert.rejects(
+		createGpuDither({ ...options, fallback: false }),
+		(error) => error.code === 'invalid-settings' && error.path === 'fallback'
+	);
+});
 
 test('async indexed fallback preserves ordinary output, process recipes and owned storage', async () => {
 	const processor = await createGpuDither(options);

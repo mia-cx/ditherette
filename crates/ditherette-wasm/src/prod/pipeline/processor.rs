@@ -163,8 +163,7 @@ impl Processor {
         Ok(())
     }
 
-    /// Override only this stage; None explicitly forces its scalar path.
-    #[cfg(any(test, feature = "bench-subjects"))]
+    /// Override only this stage; None explicitly forces its whole-image path.
     pub fn set_execution_stage(
         &mut self,
         stage: super::execution::ExecutionStage,
@@ -178,7 +177,6 @@ impl Processor {
         Ok(())
     }
 
-    #[cfg(any(test, feature = "bench-subjects"))]
     fn validate_execution_policy(
         &self,
         policy: super::execution::ExecutionPolicy,

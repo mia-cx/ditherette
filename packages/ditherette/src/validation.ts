@@ -1,6 +1,6 @@
 import { DitheretteError } from './errors.js';
 import type { ErrorCode } from './errors.js';
-import type { InitInput, InitOptions, Progress, Rgba8Image } from './types.js';
+import type { InitInput, InitOptions, Progress, Rgba8Image, TilingPolicy } from './types.js';
 
 const maxPixels = 67_108_864;
 export const anchors = [
@@ -130,11 +130,11 @@ export function dimensions(
 /** Validate raw options before loading artifacts or allocating Wasm memory. */
 export function validateOptions(
 	value: unknown
-): Required<Pick<InitOptions, 'threads' | 'memoryLimitBytes'>> & { wasm?: InitInput } {
+): Required<Pick<InitOptions, 'threads' | 'memoryLimitBytes' | 'tiling'>> & { wasm?: InitInput } {
 	try {
 		const options = object(
 			value === undefined ? {} : value,
-			['threads', 'memoryLimitBytes', 'wasm'],
+			['threads', 'tiling', 'memoryLimitBytes', 'wasm'],
 			'invalid-settings',
 			''
 		);
@@ -142,6 +142,23 @@ export function validateOptions(
 		const threads = rawThreads === undefined ? 'disabled' : rawThreads;
 		if (threads !== 'disabled' && threads !== 'preferred' && threads !== 'required') {
 			throw new DitheretteError('invalid-settings', 'threads', 'Unknown thread policy.');
+		}
+		const optionTiling = field(options, 'tiling');
+		const rawTiling = optionTiling === undefined ? 'auto' : optionTiling;
+		let tiling: TilingPolicy;
+		if (rawTiling === 'auto' || rawTiling === 'disabled') tiling = rawTiling;
+		else {
+			const bands = object(rawTiling, ['height', 'workers'], 'invalid-settings', 'tiling');
+			const workers = field(bands, 'workers');
+			tiling = {
+				height: integer(field(bands, 'height'), 32768, 'invalid-settings', 'tiling.height'),
+				workers: integer(
+					workers === undefined ? 8 : workers,
+					8,
+					'invalid-settings',
+					'tiling.workers'
+				)
+			};
 		}
 		const rawLimit = field(options, 'memoryLimitBytes');
 		const memoryLimitBytes = integer(
@@ -157,7 +174,7 @@ export function validateOptions(
 				'wasm',
 				'Unsupported Wasm initialization input.'
 			);
-		return { threads, memoryLimitBytes, wasm };
+		return { threads, tiling, memoryLimitBytes, wasm };
 	} catch (error) {
 		if (error instanceof DitheretteError) throw error;
 		throw new DitheretteError('invalid-settings', '', 'Initialization options could not be read.');

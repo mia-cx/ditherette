@@ -18,6 +18,29 @@ export interface GpuEffectsOptions {
 	readonly memoryLimitBytes?: number;
 	readonly wasm?: InitInput;
 	readonly gpuWasm?: InitInput;
+	/** Reject unavailable GPU work instead of instantiating the CPU fallback. */
+	readonly fallback?: 'cpu' | 'error';
+}
+
+/** One fallback contract for the effects and indexed GPU facades. */
+export function fallbackPolicy(value: unknown): 'cpu' | 'error' {
+	if (value === undefined || value === 'cpu') return 'cpu';
+	if (value === 'error') return value;
+	throw new DitheretteError('invalid-settings', 'fallback', 'Unknown GPU fallback policy.');
+}
+
+export function gpuFallbackError(reason: string): DitheretteError {
+	const code =
+		reason === 'MemoryLimit'
+			? 'memory-limit'
+			: reason === 'UnsupportedStage' || reason === 'UnsupportedChain'
+				? 'unsupported-operation'
+				: reason === 'NoAdapter'
+					? 'capability'
+					: reason === 'Initialization'
+						? 'initialization'
+						: 'runtime';
+	return new DitheretteError(code, 'gpu', `Required GPU processing is unavailable: ${reason}.`);
 }
 
 /** Execution of the last successful call. Adapter text includes the backend and device type. */
@@ -79,7 +102,7 @@ export function gpuEffectsDecoderBytes(effectsBytes: number): number {
 export async function createGpuEffects(options?: GpuEffectsOptions): Promise<GpuEffects> {
 	const input = object(
 		options === undefined ? {} : options,
-		['memoryLimitBytes', 'wasm', 'gpuWasm'],
+		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback'],
 		'invalid-settings',
 		''
 	);
@@ -89,6 +112,7 @@ export async function createGpuEffects(options?: GpuEffectsOptions): Promise<Gpu
 	});
 	const gpuWasm = field(input, 'gpuWasm');
 	const normalizedGpu = validateOptions({ wasm: gpuWasm });
+	const fallbackMode = fallbackPolicy(field(input, 'fallback'));
 	let bindings: GpuEffectsBindings | undefined;
 	let fallback = 'NoAdapter';
 	if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
@@ -109,13 +133,13 @@ export async function createGpuEffects(options?: GpuEffectsOptions): Promise<Gpu
 			fallback = 'Initialization';
 		}
 	}
-	return initializeGpuEffects(bindings, normalized, fallback);
+	return initializeGpuEffects(bindings, { ...normalized, fallback: fallbackMode }, fallback);
 }
 
 /** Share the public boundary with focused failure-path tests, without a second CPU implementation. */
 export function initializeGpuEffects(
 	bindings: GpuEffectsBindings | undefined,
-	options: { wasm?: InitInput; memoryLimitBytes: number },
+	options: { wasm?: InitInput; memoryLimitBytes: number; fallback?: 'cpu' | 'error' },
 	initialFallback = 'NoAdapter'
 ): GpuEffects {
 	let active = false;
@@ -212,6 +236,7 @@ export function initializeGpuEffects(
 				// An unsupported or over-budget request must release the previous
 				// device before allocating even its CPU-bound source snapshot.
 				if (reason) retire(reason);
+				if (reason && options.fallback === 'error') throw gpuFallbackError(reason);
 				// Capture before the first await. Later source edits cannot change this call
 				// or its CPU fallback. Charge this package-owned buffer to either backend.
 				let snapshot: Uint8Array;
@@ -265,6 +290,7 @@ export function initializeGpuEffects(
 				}
 				// No library-owned GPU artifact may coexist with CPU fallback capacity.
 				retire(reason || 'Failed');
+				if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
 				const cpu = await createScalar({
 					wasm: options.wasm,
 					memoryLimitBytes: options.memoryLimitBytes - bytes
