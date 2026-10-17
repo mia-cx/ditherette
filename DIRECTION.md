@@ -48,10 +48,14 @@ Keep that workflow clear and fast, including large images.
   uncompetitive reconstruction paths and converts colours lazily in the existing
   row workspace. Exact mask, checkpoint and budget checks pass; review and
   deployment remain separate.
+  The follow-up expands fixed neighbourhood visits and reuses consecutive RGB
+  conversions within the call. Further CPU gains remain worthwhile alongside GPU work.
   Remaining GPU stages and physical browser/device qualification stay open.
-  Port generated pointwise effects and recipe application, resize, palette matching,
-  ordered/noise dithering, then Yliluoma. Error diffusion comes last because its
-  recurrence constrains parallel execution.
+  The next dither milestone combines palette matching, ordered/noise fields and
+  the complete Adaptive selector/reconstruction on GPU. Keeping selection on CPU
+  would retain the dominant delay. Preserve ordinary serpentine diffusion while
+  investigating its scheduling separately; GPU Adaptive masks can also feed CPU diffusion.
+  Read [the port plan](docs/plans/gpu-dithering.md) before implementing those stages.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 
