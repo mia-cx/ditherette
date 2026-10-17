@@ -106,6 +106,7 @@ impl YliluomaBands {
                     placement,
                     band,
                     &mut [],
+                    None,
                     &mut [],
                     index,
                     |_| Ok(()),

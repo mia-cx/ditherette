@@ -40,6 +40,34 @@ fn hash(domain: &[u8], value: &impl Serialize) -> Result<Identity, Failure> {
     Ok(Identity(writer.0.finalize().into()))
 }
 
+/// Coverage depends on the processed source and area controls, never the dither,
+/// strength, palette, matching space or feedback policy consuming that coverage.
+pub(crate) fn area_coverage(
+    parent: Identity,
+    placement: Placement,
+) -> Result<Option<Identity>, Failure> {
+    let Placement::SmoothAreaV1 {
+        sample_size,
+        contrast_threshold,
+    } = placement
+    else {
+        return Ok(None);
+    };
+    hash(
+        b"ditherette-smooth-area-coverage-v1\0",
+        &(
+            parent,
+            sample_size,
+            if contrast_threshold == 0.0 {
+                0.0
+            } else {
+                contrast_threshold
+            },
+        ),
+    )
+    .map(Some)
+}
+
 // Field order deliberately matches serde_json::Value's sorted object keys.
 #[derive(Serialize)]
 struct Stage<T> {

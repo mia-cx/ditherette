@@ -5,9 +5,9 @@ pub(crate) mod index;
 pub(crate) mod policy;
 mod request;
 pub mod row_bands;
+pub(crate) use request::dither_yiluoma_with_coverage;
 #[cfg(test)]
 pub(crate) use request::dither_yiluoma_with_progress;
-pub(crate) use request::dither_yiluoma_with_progress_indexed;
 pub use request::{dither_yiluoma, dither_yiluoma_into};
 
 use super::ordered::{bayer_value, BayerSize};

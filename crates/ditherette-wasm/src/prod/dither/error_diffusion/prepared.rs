@@ -327,7 +327,34 @@ pub(crate) fn execute_with_placement_progress(
     policy: DiffusionPolicy,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    execute_with_coverage_progress(
+        quantizer,
+        work,
+        rgb_cache,
+        placement_scratch,
+        None,
+        source,
+        indices,
+        policy,
+        progress,
+    )
+}
+
+/// Retained coverage controls visible output; the ordinary diffusion recurrence is unchanged.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn execute_with_coverage_progress(
+    quantizer: &PreparedQuantizer,
+    work: &mut [[f32; 3]],
+    rgb_cache: &mut [u64],
+    placement_scratch: &mut [[f32; 3]],
+    coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
+    source: ImageView<'_, Rgba8>,
+    indices: &mut [u8],
+    policy: DiffusionPolicy,
+    progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     if matches!(policy.placement, Placement::SmoothAreaV1 { .. })
+        && coverage.is_none()
         && placement_scratch.len()
             != crate::prod::dither::smooth_area_v1::scratch_len(source.dimensions())
     {
@@ -343,7 +370,14 @@ pub(crate) fn execute_with_placement_progress(
         work,
         rgb_cache,
     }
-    .execute(source, indices, policy, placement_scratch, progress)
+    .execute(
+        source,
+        indices,
+        policy,
+        placement_scratch,
+        coverage,
+        progress,
+    )
 }
 
 struct BorrowedDiffusion<'a> {
@@ -359,6 +393,7 @@ impl BorrowedDiffusion<'_> {
         indices: &mut [u8],
         policy: DiffusionPolicy,
         placement_scratch: &mut [[f32; 3]],
+        coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
         mut progress: impl FnMut(u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
@@ -377,6 +412,7 @@ impl BorrowedDiffusion<'_> {
                 )),
                 None,
             ),
+            Placement::SmoothAreaV1 { .. } if coverage.is_some() => (None, None),
             Placement::SmoothAreaV1 {
                 sample_size,
                 contrast_threshold,
@@ -416,6 +452,7 @@ impl BorrowedDiffusion<'_> {
                 y,
                 placement_row,
                 smooth,
+                coverage,
             )?;
             if y + ROWS < height {
                 self.fill_row(source, y + ROWS, policy.feedback);
@@ -436,6 +473,7 @@ impl BorrowedDiffusion<'_> {
         y: usize,
         placement_row: Option<AdaptivePlacementRow<'_>>,
         smooth: Option<&[[f32; 3]]>,
+        coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
     ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
         let height = source.dimensions().height_usize();
@@ -495,9 +533,18 @@ impl BorrowedDiffusion<'_> {
             };
             // Placement controls visible output, not the kernel's continuous recurrence.
             // Skipping masked work depletes feedback and destroys the selected Sierra texture.
-            indices[offset] = if smooth.is_some_and(|mask| {
-                !crate::prod::dither::smooth_area_v1::covers(mask[offset][2], x as u32, y as u32)
-            }) {
+            indices[offset] = if coverage.map_or_else(
+                || {
+                    smooth.is_some_and(|mask| {
+                        !crate::prod::dither::smooth_area_v1::covers(
+                            mask[offset][2],
+                            x as u32,
+                            y as u32,
+                        )
+                    })
+                },
+                |mask| !mask.covers(x as u32, y as u32),
+            ) {
                 match self.quantizer.palette().prepare_pixel([
                     row[x * 4],
                     row[x * 4 + 1],

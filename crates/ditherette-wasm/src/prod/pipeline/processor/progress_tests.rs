@@ -142,6 +142,449 @@ fn band_policy(workers: u32, height: u32) -> crate::prod::pipeline::execution::E
     }
 }
 
+// Proves changing the dither preserves exact results without repeating source-only
+// Adaptive analysis, while changed source bytes force that analysis to run again.
+#[test]
+fn adaptive_analysis_survives_dither_changes_but_not_changed_source() {
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+    ];
+    let request = QuantizeRequest {
+        source_width: 32,
+        source_height: 17,
+        palette: &palette,
+        alpha: AlphaPolicy::Premultiplied {},
+        matching: MatchPolicy::OklabEuclidean,
+    };
+    let placement = Placement::SmoothAreaV1 {
+        sample_size: 8,
+        contrast_threshold: 0.12,
+    };
+    let first = DitherPolicy::Separable {
+        perturb: PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Sixteen,
+            },
+            space: WorkingSpace::Oklab,
+            strength: 1.0,
+            placement,
+        },
+    };
+    let second = DitherPolicy::Diffusion {
+        kernel: Diffusion::Sierra,
+        strength: 0.7,
+        feedback: DiffusionFeedback::Matching,
+        serpentine: true,
+        placement,
+    };
+    let mut io = Io::new(true);
+    io.input = (0..32 * 17)
+        .flat_map(|pixel| {
+            let value = 40 + ((pixel % 32) * 4) as u8;
+            [value, value + 10, value + 20, 255]
+        })
+        .collect();
+    let mut processor = Processor::new(8 * 1024 * 1024, 0).unwrap();
+    processor
+        .dither_and_quantize(request, first, &mut io)
+        .unwrap();
+    let before = io.time;
+    io.reset();
+    let actual = processor
+        .dither_and_quantize(request, second, &mut io)
+        .unwrap();
+    let warm_checks = (io.time - before) / 20;
+    let mut cold = Processor::new(8 * 1024 * 1024, 0).unwrap();
+    let mut control = Io::new(false);
+    control.input = io.input.clone();
+    assert_eq!(
+        actual,
+        cold.dither_and_quantize(request, second, &mut control)
+            .unwrap()
+    );
+    assert!(
+        warm_checks < 4 * u64::from(request.source_height),
+        "unchanged input repeated Adaptive analysis ({warm_checks} checkpoints)"
+    );
+    io.input[0] ^= 127;
+    io.reset();
+    let before = io.time;
+    let actual = processor
+        .dither_and_quantize(request, second, &mut io)
+        .unwrap();
+    assert!((io.time - before) / 20 > warm_checks * 2);
+    let mut cold = Processor::new(8 * 1024 * 1024, 0).unwrap();
+    control.input = io.input.clone();
+    assert_eq!(
+        actual,
+        cold.dither_and_quantize(request, second, &mut control)
+            .unwrap()
+    );
+}
+
+// Proves dependencies invalidate coverage, while palette/matching/field changes reuse
+// it across direct dither, process and palette-free perturb routes.
+#[test]
+fn adaptive_coverage_reuse_follows_processed_image_and_controls() {
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+    ];
+    let alternative = [
+        PaletteEntry::Color { rgb: [15, 30, 45] },
+        PaletteEntry::Color {
+            rgb: [215, 230, 245],
+        },
+    ];
+    for scenario in [
+        "palette-and-space",
+        "sample-size",
+        "contrast",
+        "dimensions",
+        "resize",
+        "perturb",
+        "failed-completion",
+    ] {
+        let placement = Placement::SmoothAreaV1 {
+            sample_size: 8,
+            contrast_threshold: 0.12,
+        };
+        let field = PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Sixteen,
+            },
+            space: WorkingSpace::Oklab,
+            strength: 1.0,
+            placement,
+        };
+        let request = QuantizeRequest {
+            source_width: 32,
+            source_height: 17,
+            palette: &palette,
+            alpha: AlphaPolicy::Premultiplied {},
+            matching: MatchPolicy::OklabEuclidean,
+        };
+        let mut io = Io::new(true);
+        io.input = (0..32 * 17)
+            .flat_map(|p| {
+                let v = 40 + (p % 32 * 4) as u8;
+                [v, v + 10, v + 20, 255]
+            })
+            .collect();
+        let mut processor = Processor::new(8 * 1024 * 1024, 0).unwrap();
+        if scenario == "failed-completion" {
+            io.fail_stage = Some(Stage::Complete);
+        }
+        let result = processor.dither_and_quantize(
+            request,
+            DitherPolicy::Separable { perturb: field },
+            &mut io,
+        );
+        if scenario == "failed-completion" {
+            assert!(result.is_err());
+            assert_eq!(
+                processor.preparation.stats().0,
+                0,
+                "failed work must not publish coverage"
+            );
+        } else {
+            result.unwrap();
+        }
+        io.fail_stage = None;
+        io.reset();
+        let before = io.time;
+        let placement = match scenario {
+            "sample-size" => Placement::SmoothAreaV1 {
+                sample_size: 12,
+                contrast_threshold: 0.12,
+            },
+            "contrast" => Placement::SmoothAreaV1 {
+                sample_size: 8,
+                contrast_threshold: 0.06,
+            },
+            _ => placement,
+        };
+        let field = PerturbPolicy {
+            field: Field::BlueNoise {},
+            space: WorkingSpace::Srgb,
+            strength: 0.3,
+            placement,
+        };
+        let request = QuantizeRequest {
+            palette: if scenario == "palette-and-space" {
+                &alternative
+            } else {
+                &palette
+            },
+            matching: MatchPolicy::SrgbEuclidean,
+            source_width: if scenario == "dimensions" { 17 } else { 32 },
+            source_height: if scenario == "dimensions" { 32 } else { 17 },
+            ..request
+        };
+        let run = |processor: &mut Processor, io: &mut Io| {
+            if scenario == "perturb" {
+                processor.perturb(
+                    PerturbRequest {
+                        source_width: 32,
+                        source_height: 17,
+                        perturb: field,
+                    },
+                    io,
+                )
+            } else {
+                processor.process(
+                    ProcessRequest {
+                        source_width: request.source_width,
+                        source_height: request.source_height,
+                        palette: request.palette,
+                        recipe: RecipeV1 {
+                            version: 1,
+                            alpha: request.alpha,
+                            matching: request.matching,
+                            output: Output {
+                                width: if scenario == "resize" {
+                                    25
+                                } else {
+                                    request.source_width
+                                },
+                                height: request.source_height,
+                                resize: ResizePolicy::Nearest {
+                                    anchor: Anchor::Center,
+                                },
+                            },
+                            dither: DitherPolicy::Separable { perturb: field },
+                        },
+                    },
+                    io,
+                )
+            }
+        };
+        let actual = run(&mut processor, &mut io).unwrap();
+        let checks = (io.time - before) / 20;
+        let reused = matches!(scenario, "palette-and-space" | "perturb");
+        assert_eq!(
+            checks < 6 * u64::from(request.source_height),
+            reused,
+            "{scenario}: {checks} checkpoints"
+        );
+        let mut cold = Processor::new(8 * 1024 * 1024, 0).unwrap();
+        let mut control = Io::new(false);
+        control.input = io.input.clone();
+        assert_eq!(actual, run(&mut cold, &mut control).unwrap(), "{scenario}");
+    }
+}
+
+// Proves optional retention cannot make an admitted render fail at its exact budget.
+#[test]
+fn adaptive_coverage_retention_miss_keeps_tight_budget_calls_usable() {
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+    ];
+    let request = QuantizeRequest {
+        source_width: 32,
+        source_height: 17,
+        palette: &palette,
+        alpha: AlphaPolicy::Premultiplied {},
+        matching: MatchPolicy::OklabEuclidean,
+    };
+    let field = |strength| DitherPolicy::Separable {
+        perturb: PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Sixteen,
+            },
+            space: WorkingSpace::Oklab,
+            strength,
+            placement: Placement::SmoothAreaV1 {
+                sample_size: 8,
+                contrast_threshold: 0.12,
+            },
+        },
+    };
+    let input: Vec<_> = (0..32 * 17)
+        .flat_map(|p| {
+            let v = 40 + (p % 32 * 4) as u8;
+            [v, v + 10, v + 20, 255]
+        })
+        .collect();
+    let mut low = Processor::bookkeeping_bytes(0);
+    let mut high = 128 * 1024;
+    while low < high {
+        let middle = (low + high) / 2;
+        let mut processor = Processor::new(middle, 0).unwrap();
+        let mut io = Io::new(false);
+        io.input = input.clone();
+        match processor.dither_and_quantize(request, field(1.0), &mut io) {
+            Ok(_) => high = middle,
+            Err(error) => {
+                assert_eq!(error.code, ErrorCode::MemoryLimit);
+                low = middle + 1;
+            }
+        }
+    }
+    let mut processor = Processor::new(high, 0).unwrap();
+    let mut io = Io::new(true);
+    io.input = input.clone();
+    processor
+        .dither_and_quantize(request, field(1.0), &mut io)
+        .unwrap();
+    io.reset();
+    let before = io.time;
+    let actual = processor
+        .dither_and_quantize(request, field(0.3), &mut io)
+        .unwrap();
+    assert!((io.time - before) / 20 > 6 * u64::from(request.source_height));
+    assert!(processor.peak_capacity_bytes() <= high);
+    let mut cold = Processor::new(128 * 1024, 0).unwrap();
+    let mut control = Io::new(false);
+    control.input = input;
+    assert_eq!(
+        actual,
+        cold.dither_and_quantize(request, field(0.3), &mut control)
+            .unwrap()
+    );
+}
+
+// Proves retained coverage is exact for every matching space and all diffusion
+// recurrences, plus field and Yliluoma consumers, including alpha and a partial last byte.
+#[test]
+fn retained_adaptive_coverage_is_exact_across_consumers_and_matching_spaces() {
+    let palette = [
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color { rgb: [192, 32, 80] },
+    ];
+    let placement = Placement::SmoothAreaV1 {
+        sample_size: 4,
+        contrast_threshold: 0.12,
+    };
+    let field = |field| DitherPolicy::Separable {
+        perturb: PerturbPolicy {
+            field,
+            space: WorkingSpace::Oklab,
+            strength: 0.7,
+            placement,
+        },
+    };
+    let mut policies = vec![
+        field(Field::Bayer {
+            size: BayerSize::Four,
+        }),
+        field(Field::BlueNoise {}),
+        DitherPolicy::Yliluoma {
+            size: BayerSize::Two,
+            placement,
+        },
+        DitherPolicy::Yliluoma {
+            size: BayerSize::Four,
+            placement,
+        },
+    ];
+    for kernel in [
+        Diffusion::FloydSteinberg,
+        Diffusion::Sierra,
+        Diffusion::SierraLite,
+        Diffusion::Atkinson,
+        Diffusion::JarvisJudiceNinke,
+        Diffusion::Stucki,
+        Diffusion::Burkes,
+        Diffusion::TwoRowSierra,
+        Diffusion::Fan,
+        Diffusion::ShiauFan,
+        Diffusion::ShiauFan2,
+        Diffusion::Simple2d,
+    ] {
+        for feedback in [DiffusionFeedback::Matching, DiffusionFeedback::SrgbBytes] {
+            policies.push(DitherPolicy::Diffusion {
+                kernel,
+                feedback,
+                strength: 0.7,
+                placement,
+                serpentine: true,
+            });
+        }
+    }
+    let mut processor = Processor::new(8 * 1024 * 1024, 0).unwrap();
+    let mut io = Io::new(true);
+    io.input = (0..11 * 9)
+        .flat_map(|p| {
+            let v = 40 + (p % 11 * 8) as u8;
+            [
+                v,
+                v + 10,
+                v + 20,
+                if p % 5 == 0 {
+                    0
+                } else if p % 3 == 0 {
+                    127
+                } else {
+                    255
+                },
+            ]
+        })
+        .collect();
+    let request = QuantizeRequest {
+        source_width: 11,
+        source_height: 9,
+        palette: &palette,
+        alpha: AlphaPolicy::Preserve { threshold: 127.5 },
+        matching: MatchPolicy::OklabEuclidean,
+    };
+    processor
+        .dither_and_quantize(
+            request,
+            field(Field::Bayer {
+                size: BayerSize::Sixteen,
+            }),
+            &mut io,
+        )
+        .unwrap();
+    for matching in [
+        MatchPolicy::SrgbEuclidean,
+        MatchPolicy::SrgbCompuphase,
+        MatchPolicy::SrgbRec601,
+        MatchPolicy::SrgbRec709,
+        MatchPolicy::LinearRgbEuclidean,
+        MatchPolicy::OklabEuclidean,
+        MatchPolicy::OklchEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::OklchHueArc,
+        MatchPolicy::CielabEuclidean,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchEuclidean,
+        MatchPolicy::CielchCircularHue,
+        MatchPolicy::CielchHueArc,
+        MatchPolicy::YcbcrEuclidean,
+    ] {
+        for &policy in &policies {
+            let request = QuantizeRequest {
+                matching,
+                ..request
+            };
+            io.reset();
+            let before = io.time;
+            let actual = processor
+                .dither_and_quantize(request, policy, &mut io)
+                .unwrap();
+            assert!(
+                (io.time - before) / 20 < 6 * 9,
+                "{matching:?}/{policy:?} recomputed coverage"
+            );
+            let mut cold = Processor::new(8 * 1024 * 1024, 0).unwrap();
+            let mut control = Io::new(false);
+            control.input = io.input.clone();
+            assert_eq!(
+                actual,
+                cold.dither_and_quantize(request, policy, &mut control)
+                    .unwrap(),
+                "{matching:?}/{policy:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn automatic_field_calls_preserve_scalar_bytes_metadata_and_cache_identity() {
     let check = || {

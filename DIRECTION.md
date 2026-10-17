@@ -44,10 +44,25 @@ Keep that workflow clear and fast, including large images.
   and reconstruction first, then matching/diffusion; investigate Yliluoma separately.
   Shared-host timings are diagnostic, not qualified benchmarks. The reviewed
   integration and host memory bounds await merge.
+  A further CPU selector candidate expands hot three-channel loops, prunes
+  uncompetitive reconstruction paths and converts colours lazily in the existing
+  row workspace. Exact mask, checkpoint and budget checks pass; review and
+  deployment remain separate.
+  The follow-up expands fixed neighbourhood visits and reuses consecutive RGB
+  conversions within the call. Boundary scans also reuse overlapping column bounds
+  and expand coarse probes without changing masks, checkpoints or storage.
+  Further CPU gains remain worthwhile alongside GPU work.
+  Mia's CPU target is Adaptive below twice the matching ordinary dither call.
+  The CPU candidate reuses source-only coverage across algorithm, strength, palette and matching changes;
+  invalidate it for processed-input, sample-size or contrast-tolerance changes.
+  Retention uses the existing bounded cache and success-only publication.
+  Warm Celeste edits meet that target in diagnostic checks; first-call analysis still needs work.
   Remaining GPU stages and physical browser/device qualification stay open.
-  Port generated pointwise effects and recipe application, resize, palette matching,
-  ordered/noise dithering, then Yliluoma. Error diffusion comes last because its
-  recurrence constrains parallel execution.
+  The next dither milestone combines palette matching, ordered/noise fields and
+  the complete Adaptive selector/reconstruction on GPU. Keeping selection on CPU
+  would retain the dominant delay. Preserve ordinary serpentine diffusion while
+  investigating its scheduling separately; GPU Adaptive masks can also feed CPU diffusion.
+  Read [the port plan](docs/plans/gpu-dithering.md) before implementing those stages.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

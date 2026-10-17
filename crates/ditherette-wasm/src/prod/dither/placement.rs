@@ -177,7 +177,8 @@ impl AdaptivePlacementWork {
                 * std::mem::size_of::<[f32; 3]>() as u64
     }
     /// Area placement owns pixel records plus max(3 * width, height) line records.
-    /// Box-sum lines and three source colour rows become one queue. No analysis is cached.
+    /// Box-sum lines and three source colour rows become one queue. A retained coverage
+    /// hit bypasses this allocation; misses own it only for the current call.
     /// A conservative 4 KiB fixed reserve covers the serial selector's live scalar records.
     /// Legacy row storage remains optional; smooth storage fails before execution when it cannot fit.
     pub(crate) fn try_for_image(
