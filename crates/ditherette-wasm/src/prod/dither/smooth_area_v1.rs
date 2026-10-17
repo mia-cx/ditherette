@@ -33,20 +33,32 @@ pub fn select<E>(
     let height = dimensions.height_usize();
     assert_eq!(scratch.len(), scratch_len(dimensions));
     let (cells, queue) = scratch.split_at_mut(width * height);
-    cells.fill([0.0; 3]);
+    // The first pass overwrites every record, including reused scratch.
     let sample_width = (sample_size as usize).min(width);
     let sample_height = (sample_size as usize).min(height);
     let columns = width - sample_width + 1;
     let rows = height - sample_height + 1;
     let radius = sample_size as usize / 2;
     let converter = Converter::new(PackedSpace::Oklab);
+    // Quantized ramps and flat fills repeat RGB bytes. Reuse the immediately
+    // preceding conversion in registers; nothing survives this selector call.
+    let mut previous_rgb = u32::MAX;
+    let mut previous_coordinates = [0.0; 3];
+    let mut convert = |rgb: [u8; 3]| {
+        let key = u32::from_le_bytes([rgb[0], rgb[1], rgb[2], 0]);
+        if key != previous_rgb {
+            previous_coordinates = converter.coordinates(rgb);
+            previous_rgb = key;
+        }
+        previous_coordinates
+    };
     for y in 0..height {
         let row = source.row(y as u32).expect("validated row");
         for (pixel, target) in row
             .chunks_exact(4)
             .zip(&mut cells[y * width..(y + 1) * width])
         {
-            *target = converter.coordinates([pixel[0], pixel[1], pixel[2]]);
+            *target = convert([pixel[0], pixel[1], pixel[2]]);
         }
         check()?;
     }
@@ -73,7 +85,7 @@ pub fn select<E>(
                 .chunks_exact(4)
                 .zip(&mut queue[slot * width..(slot + 1) * width])
             {
-                *target = converter.coordinates([pixel[0], pixel[1], pixel[2]]);
+                *target = convert([pixel[0], pixel[1], pixel[2]]);
             }
             next_row += 1;
             check()?;
@@ -84,12 +96,9 @@ pub fn select<E>(
             let mut contrast =
                 (2.0 * color_distance(center, unsigned(cells[y * width + x]))).min(1.0);
             let mut fine = 0.0_f32;
-            for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
-                let row = &queue[(ny % 3) * width..(ny % 3 + 1) * width];
-                for nx in x.saturating_sub(1)..=(x + 1).min(width - 1) {
-                    fine = fine.max(color_distance_squared(center, row[nx]));
-                }
-            }
+            visit_fine_neighbours(width, height, x, y, |nx, ny| {
+                fine = fine.max(color_distance_squared(center, queue[(ny % 3) * width + nx]));
+            });
             // sqrt is monotone on these finite nonnegative sums. Taking it
             // after the maximum keeps the exact f32 result, once per pixel.
             contrast = contrast.max(fine.sqrt().min(1.0));
@@ -180,7 +189,7 @@ pub fn select<E>(
             direction,
             cells,
             queue,
-            &|rgb| converter.coordinates(rgb),
+            &mut convert,
             &mut check,
         )?;
     }
@@ -296,15 +305,15 @@ fn geometric_distance<E>(
                 if value == 0.0 {
                     continue;
                 }
-                for (nx, ny, step) in neighbours(x, y, reverse, reverse) {
+                visit_neighbours(x, y, reverse, reverse, |nx, ny, step| {
                     if nx >= width || ny >= height {
-                        continue;
+                        return;
                     }
                     let candidate = cells[ny * width + nx][2] + step;
                     if candidate < value {
                         value = candidate;
                     }
-                }
+                });
                 cells[y * width + x][2] = value;
             }
             check()?;
@@ -323,7 +332,7 @@ fn spread<E>(
     (reverse_y, reverse_x): (bool, bool),
     cells: &mut [[f32; 3]],
     rows: &mut [[f32; 3]],
-    convert: &impl Fn([u8; 3]) -> [f32; 3],
+    convert: &mut impl FnMut([u8; 3]) -> [f32; 3],
     check: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<(), E> {
     let width = source.dimensions().width_usize();
@@ -358,11 +367,10 @@ fn spread<E>(
             if cells[y * width + x][2] <= 0.0 {
                 continue;
             }
-            let centre = source_color(source, rows, x, y, convert);
             let mut distance = cells[y * width + x][2];
-            for (nx, ny, step) in neighbours(x, y, reverse_x, reverse_y) {
+            visit_neighbours(x, y, reverse_x, reverse_y, |nx, ny, step| {
                 if nx >= width || ny >= height {
-                    continue;
+                    return;
                 }
                 let neighbour = cells[ny * width + nx][2];
                 let diagonal = nx != x && ny != y;
@@ -370,12 +378,15 @@ fn spread<E>(
                 // Skip its conversions and square roots when even the cheapest
                 // possible path cannot improve the current distance.
                 if neighbour < 0.0 || neighbour + step >= distance {
-                    continue;
+                    return;
                 }
+                // An unsettled pixel may still have no competitive incoming
+                // path. Convert its source only after that cheap rejection.
+                let centre = source_color(source, rows, x, y, convert);
                 let jump =
                     color_distance(centre, source_color(source, rows, nx, ny, convert)).min(1.0);
                 if jump > tolerance {
-                    continue;
+                    return;
                 }
                 if diagonal
                     && (color_distance(centre, source_color(source, rows, nx, y, convert)).min(1.0)
@@ -384,7 +395,7 @@ fn spread<E>(
                             .min(1.0)
                             > tolerance)
                 {
-                    continue;
+                    return;
                 }
                 let variation = if tolerance == 0.0 {
                     0.0
@@ -396,7 +407,7 @@ fn spread<E>(
                 if candidate < distance {
                     distance = candidate;
                 }
-            }
+            });
             cells[y * width + x][2] = distance;
         }
         check()?;
@@ -410,7 +421,7 @@ fn source_color(
     rows: &mut [[f32; 3]],
     x: usize,
     y: usize,
-    convert: &impl Fn([u8; 3]) -> [f32; 3],
+    convert: &mut impl FnMut([u8; 3]) -> [f32; 3],
 ) -> [f32; 3] {
     let index = (y % 3) * source.dimensions().width_usize() + x;
     if rows[index][0].is_nan() {
@@ -424,19 +435,25 @@ fn source_color(
 // Underflow maps outside the validated image. Each caller performs one bounds
 // test, instead of repeating signed overflow checks for every neighbour.
 #[inline(always)]
-fn neighbours(x: usize, y: usize, reverse_x: bool, reverse_y: bool) -> [(usize, usize, f32); 4] {
+fn visit_neighbours(
+    x: usize,
+    y: usize,
+    reverse_x: bool,
+    reverse_y: bool,
+    mut visit: impl FnMut(usize, usize, f32),
+) {
     let (before, after) = if reverse_x {
         (x + 1, x.wrapping_sub(1))
     } else {
         (x.wrapping_sub(1), x + 1)
     };
     let previous = if reverse_y { y + 1 } else { y.wrapping_sub(1) };
-    [
-        (before, y, 1.0),
-        (before, previous, std::f32::consts::SQRT_2),
-        (x, previous, 1.0),
-        (after, previous, std::f32::consts::SQRT_2),
-    ]
+    // Four explicit visits avoid a temporary neighbour array and its loop in
+    // the size-optimized Wasm build. Keep the frozen relaxation order.
+    visit(before, y, 1.0);
+    visit(before, previous, std::f32::consts::SQRT_2);
+    visit(x, previous, 1.0);
+    visit(after, previous, std::f32::consts::SQRT_2);
 }
 
 #[inline(always)]
@@ -480,18 +497,14 @@ fn mark_boundaries<E>(
             let mut minimum = centre;
             let mut maximum = centre;
             let mut fine = 0.0_f32;
-            for ny in y.saturating_sub(1)..=(y + 1).min(height - 1) {
-                let start = ny * width + x.saturating_sub(1);
-                let end = ny * width + (x + 2).min(width);
-                for &point in &cells[start..end] {
-                    let color = unsigned(point);
-                    let distance = color_distance_squared(centre, color);
-                    if distance > fine {
-                        fine = distance;
-                    }
-                    extend_range(&mut minimum, &mut maximum, color);
+            visit_fine_neighbours(width, height, x, y, |nx, ny| {
+                let color = unsigned(cells[ny * width + nx]);
+                let distance = color_distance_squared(centre, color);
+                if distance > fine {
+                    fine = distance;
                 }
-            }
+                extend_range(&mut minimum, &mut maximum, color);
+            });
             // A constant fine neighbourhood cannot witness a concentrated edge.
             // Its broader colour range cannot change that decision.
             if fine == 0.0 {
@@ -520,6 +533,31 @@ fn mark_boundaries<E>(
         check()?;
     }
     Ok(())
+}
+
+// Clamp the fixed 3x3 stencil once and expose each visit to the size-optimized
+// compiler. Repeated border pixels are idempotent for both maxima and ranges;
+// the centre is already included by each caller's initial values.
+#[inline(always)]
+fn visit_fine_neighbours(
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+    mut visit: impl FnMut(usize, usize),
+) {
+    let left = x.saturating_sub(1);
+    let right = (x + 1).min(width - 1);
+    let top = y.saturating_sub(1);
+    let bottom = (y + 1).min(height - 1);
+    visit(left, top);
+    visit(x, top);
+    visit(right, top);
+    visit(left, y);
+    visit(right, y);
+    visit(left, bottom);
+    visit(x, bottom);
+    visit(right, bottom);
 }
 
 // Oklab coordinates from encoded RGB are finite. Ordered comparisons avoid
