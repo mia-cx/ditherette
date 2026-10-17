@@ -31,6 +31,19 @@ pub use memory::LookupMemory;
 pub use parity::Parity;
 pub use stage::Stage;
 
+/// Cancellation is checked between GPU batches and ordinary CPU diffusion rows.
+pub(crate) trait JobControl {
+    fn check(&mut self) -> Result<(), Fallback>;
+    fn row(&mut self, _completed: u32) -> Result<(), Fallback> {
+        self.check()
+    }
+}
+impl<F: FnMut() -> Result<(), Fallback>> JobControl for F {
+    fn check(&mut self) -> Result<(), Fallback> {
+        self()
+    }
+}
+
 use crate::image::ImageDimensions;
 
 /// Why the CPU ran instead of the GPU.
@@ -54,6 +67,10 @@ pub enum Fallback {
     MemoryLimit,
     /// This dither family or placement is retained on the CPU.
     UnsupportedStage,
+    /// The host cancelled this job; no result may be published.
+    Cancelled,
+    /// A caller progress/control callback threw. This is not a GPU failure.
+    Callback,
 }
 
 /// Where stages run. Starts from [`Backend::detect`]; a failed GPU call demotes it to the CPU.
@@ -84,7 +101,13 @@ impl Backend {
     /// Releases a failed device, keeping request-specific size/budget rejections recoverable.
     pub(crate) fn retire_failure<T>(&mut self, result: &Result<T, Fallback>) {
         if let Err(reason) = result {
-            if !matches!(reason, Fallback::TooLarge | Fallback::MemoryLimit) {
+            if !matches!(
+                reason,
+                Fallback::TooLarge
+                    | Fallback::MemoryLimit
+                    | Fallback::Cancelled
+                    | Fallback::Callback
+            ) {
                 *self = Self::Cpu(reason.clone());
             }
         }

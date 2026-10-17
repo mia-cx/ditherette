@@ -1407,4 +1407,6 @@ mod tests {
 #[cfg(all(feature = "gpu", target_arch = "wasm32"))]
 mod gpu;
 #[cfg(all(feature = "gpu", target_arch = "wasm32"))]
+mod gpu_dither;
+#[cfg(all(feature = "gpu", target_arch = "wasm32"))]
 mod gpu_effects;

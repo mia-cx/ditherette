@@ -4,7 +4,7 @@ use std::{collections::HashMap, num::NonZeroU64};
 
 use crate::image::ImageDimensions;
 
-use super::{device::map_read, Fallback, Gpu};
+use super::{device::map_read, Fallback, Gpu, JobControl};
 
 const COMMON: &str = include_str!("area/common.wgsl");
 const COMPONENTS: &str = include_str!("area/components.wgsl");
@@ -35,9 +35,10 @@ impl AreaMemory {
             * 8
             + 16;
         // Two immutable uniform copies plus bounded Vec dispatch metadata.
-        let fixed = Self::FIXED_BYTES + dispatches * 640;
+        let fixed =
+            Self::FIXED_BYTES + dispatches * (512 + 2 * std::mem::size_of::<Dispatch>() as u64);
         Self {
-            required_bytes: fixed + pixels * 36 + coverage_bytes * 4,
+            required_bytes: fixed + pixels * 40 + coverage_bytes * 4,
             coverage_bytes,
         }
     }
@@ -56,6 +57,27 @@ impl super::Backend {
         contrast_threshold: f32,
         memory_limit: u64,
     ) -> Result<Vec<u8>, Fallback> {
+        self.adaptive_coverage_checked(
+            dimensions,
+            rgba,
+            sample_size,
+            contrast_threshold,
+            memory_limit,
+            &mut || Ok(()),
+        )
+        .await
+    }
+
+    pub(crate) async fn adaptive_coverage_checked(
+        &mut self,
+        dimensions: ImageDimensions,
+        rgba: &[u8],
+        sample_size: u32,
+        contrast_threshold: f32,
+        memory_limit: u64,
+        check: &mut dyn JobControl,
+    ) -> Result<Vec<u8>, Fallback> {
+        check.check()?;
         let memory = AreaMemory::new(dimensions);
         if memory.required_bytes > memory_limit {
             return Err(Fallback::MemoryLimit);
@@ -79,7 +101,8 @@ impl super::Backend {
                         parameters,
                         groups: [(memory.coverage_bytes / 4).div_ceil(64) as u32, 1],
                     });
-                    job.execute_read(&job.work, memory.coverage_bytes).await
+                    job.execute_read_checked(&job.work, memory.coverage_bytes, check)
+                        .await
                 })
                 .await
             }
@@ -158,12 +181,14 @@ struct Dispatch {
 /// per-pass readback is involved; the work plane becomes union/find storage.
 struct AreaJob<'a> {
     gpu: &'a Gpu,
+    #[cfg(test)]
     dimensions: ImageDimensions,
     source: wgpu::Buffer,
     cells: wgpu::Buffer,
     work: wgpu::Buffer,
     dispatches: Vec<Dispatch>,
     settings: Vec<u8>,
+    coverage: Vec<u8>,
 }
 
 impl Drop for AreaJob<'_> {
@@ -214,6 +239,15 @@ impl<'a> AreaJob<'a> {
     }
 
     fn new(gpu: &'a Gpu, dimensions: ImageDimensions, source: &[u8]) -> Result<Self, Fallback> {
+        Self::new_with_analysis(gpu, dimensions, source, true)
+    }
+
+    fn new_with_analysis(
+        gpu: &'a Gpu,
+        dimensions: ImageDimensions,
+        source: &[u8],
+        analysis: bool,
+    ) -> Result<Self, Fallback> {
         gpu.check()?;
         let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
         let limits = gpu.device.limits();
@@ -222,6 +256,7 @@ impl<'a> AreaJob<'a> {
             || dimensions.width().div_ceil(8) > limits.max_compute_workgroups_per_dimension
             || dimensions.height().div_ceil(8) > limits.max_compute_workgroups_per_dimension
             || limits.min_uniform_buffer_offset_alignment > 256
+            || pixels.div_ceil(256) > u64::from(limits.max_compute_workgroups_per_dimension)
         {
             return Err(Fallback::TooLarge);
         }
@@ -235,12 +270,24 @@ impl<'a> AreaJob<'a> {
         gpu.queue.write_buffer(&source_buffer, 0, source);
         Ok(Self {
             gpu,
+            #[cfg(test)]
             dimensions,
             source: source_buffer,
-            cells: gpu.buffer(pixels * 12, storage | wgpu::BufferUsages::COPY_SRC),
-            work: gpu.buffer(pixels * 12, storage | wgpu::BufferUsages::COPY_SRC),
+            cells: gpu.buffer(
+                if analysis { pixels * 12 } else { 4 },
+                storage | wgpu::BufferUsages::COPY_SRC,
+            ),
+            work: gpu.buffer(
+                if analysis {
+                    pixels * 12
+                } else {
+                    pixels.div_ceil(4) * 4
+                },
+                storage | wgpu::BufferUsages::COPY_SRC,
+            ),
             dispatches: Vec::new(),
             settings: vec![0; 4],
+            coverage: vec![0; 4],
         })
     }
 
@@ -277,15 +324,27 @@ impl<'a> AreaJob<'a> {
         }
     }
 
+    #[cfg(test)]
     async fn execute_read(
         &self,
         output: &wgpu::Buffer,
         output_bytes: u64,
     ) -> Result<Vec<u8>, Fallback> {
+        self.execute_read_checked(output, output_bytes, &mut || Ok(()))
+            .await
+    }
+
+    async fn execute_read_checked(
+        &self,
+        output: &wgpu::Buffer,
+        output_bytes: u64,
+        check: &mut dyn JobControl,
+    ) -> Result<Vec<u8>, Fallback> {
         let device = &self.gpu.device;
         let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        let stride = u64::from(device.limits().min_uniform_buffer_offset_alignment).max(48);
+        let alignment = u64::from(device.limits().min_uniform_buffer_offset_alignment);
+        let stride = 48u64.div_ceil(alignment) * alignment;
         let mut bytes = vec![0; self.dispatches.len() * stride as usize];
         for (dispatch, target) in self
             .dispatches
@@ -304,12 +363,18 @@ impl<'a> AreaJob<'a> {
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         );
         self.gpu.queue.write_buffer(&settings, 0, &self.settings);
+        let coverage = self.gpu.buffer(
+            self.coverage.len() as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        );
+        self.gpu.queue.write_buffer(&coverage, 0, &self.coverage);
         let entries = [
             (0, true, false),
             (1, false, false),
             (2, false, false),
             (3, false, true),
             (4, true, false),
+            (5, true, false),
         ]
         .map(|(binding, read_only, uniform)| wgpu::BindGroupLayoutEntry {
             binding,
@@ -362,6 +427,10 @@ impl<'a> AreaJob<'a> {
                     binding: 4,
                     resource: settings.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: coverage.as_entire_binding(),
+                },
             ],
         });
         let mut pipelines = HashMap::new();
@@ -396,38 +465,70 @@ impl<'a> AreaJob<'a> {
             output_bytes,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
-        let mut encoder = device.create_command_encoder(&Default::default());
-        {
-            let mut pass = encoder.begin_compute_pass(&Default::default());
-            for (i, dispatch) in self.dispatches.iter().enumerate() {
-                pass.set_pipeline(&pipelines[dispatch.entry]);
-                pass.set_bind_group(0, &bindings, &[(i as u64 * stride) as u32]);
-                pass.dispatch_workgroups(dispatch.groups[0], dispatch.groups[1], 1);
-            }
-        }
-        encoder.copy_buffer_to_buffer(output, 0, &readback, 0, output_bytes);
-        self.gpu.queue.submit([encoder.finish()]);
+        let checkpoint = self.gpu.buffer(
+            4,
+            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        );
         let memory = memory.pop();
         let validation = validation.pop();
+        let mut readback_mapped = false;
         let result = async {
             if let Some(error) = validation.await.or(memory.await) {
                 return Err(Fallback::Failed(error.to_string()));
             }
+            // A bounded batch completes before the host checks cancellation.
+            // No workgroup spins on work owned by an unscheduled workgroup.
+            for (batch, dispatches) in self.dispatches.chunks(64).enumerate() {
+                check.check()?;
+                let mut encoder = device.create_command_encoder(&Default::default());
+                {
+                    let mut pass = encoder.begin_compute_pass(&Default::default());
+                    for (local, dispatch) in dispatches.iter().enumerate() {
+                        pass.set_pipeline(&pipelines[dispatch.entry]);
+                        pass.set_bind_group(
+                            0,
+                            &bindings,
+                            &[((batch * 64 + local) as u64 * stride) as u32],
+                        );
+                        pass.dispatch_workgroups(dispatch.groups[0], dispatch.groups[1], 1);
+                    }
+                }
+                encoder.copy_buffer_to_buffer(&self.cells, 0, &checkpoint, 0, 4);
+                self.gpu.queue.submit([encoder.finish()]);
+                let mapping = map_read(checkpoint.slice(..));
+                super::device::unwound(|| device.poll(wgpu::PollType::wait_indefinitely()))?
+                    .map_err(|error| Fallback::Failed(error.to_string()))?;
+                mapping
+                    .await
+                    .map_err(|error| Fallback::Failed(error.to_string()))?;
+                checkpoint.unmap();
+                self.gpu.check()?;
+                check.check()?;
+            }
+            let mut encoder = device.create_command_encoder(&Default::default());
+            encoder.copy_buffer_to_buffer(output, 0, &readback, 0, output_bytes);
+            self.gpu.queue.submit([encoder.finish()]);
             let mapping = map_read(readback.slice(..));
             super::device::unwound(|| device.poll(wgpu::PollType::wait_indefinitely()))?
                 .map_err(|error| Fallback::Failed(error.to_string()))?;
             mapping
                 .await
                 .map_err(|error| Fallback::Failed(error.to_string()))?;
+            readback_mapped = true;
             let mapped = super::device::unwound(|| readback.slice(..).get_mapped_range().to_vec())?;
             self.gpu.check()?;
+            check.check()?;
             Ok(mapped)
         }
         .await;
-        readback.unmap();
+        if readback_mapped {
+            readback.unmap();
+        }
         readback.destroy();
         parameters.destroy();
         settings.destroy();
+        coverage.destroy();
+        checkpoint.destroy();
         result
     }
 

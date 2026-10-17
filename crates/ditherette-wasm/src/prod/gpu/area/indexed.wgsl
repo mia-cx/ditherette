@@ -1,5 +1,6 @@
 @group(0) @binding(2) var<storage, read_write> work: array<u32>;
 @group(0) @binding(4) var<storage, read> settings: array<u32>;
+@group(0) @binding(5) var<storage, read> coverage: array<u32>;
 const PI: f32 = 3.141592653589793;
 const TAU: f32 = 6.283185307179586;
 
@@ -180,7 +181,9 @@ fn palette_index(i: u32) -> u32 {
     let x=i%p.width;
     let y=i/p.width;
     var selected=true;
-    if settings[6] != 0u {
+    if settings[6] == 2u {
+        selected = (coverage[i/32u] & (1u << (i%32u))) != 0u;
+    } else if settings[6] == 1u {
         let rank=BLUE_NOISE[((x+17u)%32u)*32u+(y+11u)%32u];
         selected=cells[3u*i+2u] > (f32(rank)+0.5)/1024.0;
     }

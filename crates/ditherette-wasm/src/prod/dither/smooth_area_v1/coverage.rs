@@ -8,6 +8,22 @@ pub(crate) struct Coverage {
 }
 
 impl Coverage {
+    /// Takes coverage produced by the admitted GPU job for this exact image.
+    /// The bridge never accepts a mask independently from its captured source.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn from_gpu(dimensions: ImageDimensions, mut bits: Vec<u8>) -> Self {
+        let bytes = Self::required_bytes(dimensions) as usize;
+        assert!(bits.len() >= bytes && bits.len() < bytes + 4);
+        bits.truncate(bytes);
+        Self { dimensions, bits }
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn into_bits(mut self) -> Vec<u8> {
+        self.bits.resize(self.bits.len().div_ceil(4) * 4, 0);
+        self.bits
+    }
+
     pub(crate) fn required_bytes(dimensions: ImageDimensions) -> u64 {
         dimensions
             .pixel_count()

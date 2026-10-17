@@ -5,6 +5,8 @@ import type { Ditherette, InitOptions } from './types.js';
 
 export { DitheretteError } from './errors.js';
 export { createGpuEffects } from './gpu-effects.js';
+export { createGpuDither } from './gpu-dither.js';
+export type { DitherExecution, GpuDither, GpuDitherOptions } from './gpu-dither.js';
 export type { EffectsExecution, GpuEffects, GpuEffectsOptions } from './gpu-effects.js';
 export {
 	applyCompiledEffects,

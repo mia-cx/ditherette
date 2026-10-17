@@ -309,6 +309,27 @@ Progress callback exceptions report `callback`, and `execution` updates only aft
 The host owns its source/slider generation guard and checks that guard before publishing an awaited image.
 This API applies effects only. Resize, dithering, palette indices, and indexed PNG export remain with the existing processor.
 
+## Optional GPU dithering
+
+`createGpuDither(options)` uses the same optional artifact and scalar fallback inputs as
+`createGpuEffects`. Its asynchronous `ditherAndQuantize(request, signal?)` accepts the
+ordinary request and returns owned indices with the exact supplied palette. All 15 matching
+metrics, Bayer/rectangular/blue-noise/random fields, and complete `smooth-area-v1` analysis
+run on GPU. Error diffusion uses GPU coverage with the unchanged CPU feedback and scan.
+GPU arithmetic may select a different palette entry at numerical boundaries.
+
+`process(request, signal?)` uses GPU dithering for prepared 1:1 images. Effects and resized
+outputs currently use scalar fallback. A CPU fallback retires GPU ownership for that facade;
+create a fresh facade to retry GPU. Cancellation rejects with `AbortError`, preserves the
+verified device, and publishes no image. The normal synchronous API remains unchanged.
+
+The facade retains at most one byte-verified source snapshot and packed coverage, within
+the smaller of 256 MiB and one quarter of its memory limit. Algorithm, strength,
+palette, alpha policy and matching changes reuse coverage; changed source bytes, dimensions,
+sample size or contrast require new analysis. Cache publication follows successful output
+copy and completion callbacks. Disposal/fallback releases retention. `execution` reports
+`gpu`, `hybrid` or `cpu`, with `analysisReused` for Adaptive jobs.
+
 ## Direct quantization
 
 ```ts

@@ -307,55 +307,57 @@ fn indexed_gpu_fields_keep_palette_alpha_ties_and_all_matching_policies() {
     let mut differences = 0;
     for matching in matching {
         for field in fields {
-            for alpha in [
-                AlphaPolicy::Preserve { threshold: 127.9 },
-                AlphaPolicy::Premultiplied {},
-                AlphaPolicy::Matte { rgb: [7, 200, 90] },
-            ] {
-                let request = DitherQuantizeRequest {
-                    quantize: QuantizeRequest {
-                        version: 1,
-                        source: Source {
-                            width: 23,
-                            height: 17,
-                            data: &data,
+            for strength in [0.3, 96.0 / 63.75, 4.0] {
+                for alpha in [
+                    AlphaPolicy::Preserve { threshold: 127.9 },
+                    AlphaPolicy::Premultiplied {},
+                    AlphaPolicy::Matte { rgb: [7, 200, 90] },
+                ] {
+                    let request = DitherQuantizeRequest {
+                        quantize: QuantizeRequest {
+                            version: 1,
+                            source: Source {
+                                width: 23,
+                                height: 17,
+                                data: &data,
+                            },
+                            palette: &palette,
+                            alpha,
+                            matching,
                         },
-                        palette: &palette,
-                        alpha,
-                        matching,
-                    },
-                    dither: DitherPolicy::Separable {
-                        perturb: PerturbPolicy {
-                            field,
-                            space: matching.space(),
-                            strength: 0.3,
-                            placement: Placement::Everywhere {},
+                        dither: DitherPolicy::Separable {
+                            perturb: PerturbPolicy {
+                                field,
+                                space: matching.space(),
+                                strength,
+                                placement: Placement::Everywhere {},
+                            },
                         },
-                    },
-                };
-                let expected = cpu(request);
-                let actual =
-                    block_on(backend.dither_and_quantize(request, 128 * 1024 * 1024)).unwrap();
-                assert_eq!(actual.palette, expected.palette);
-                assert_eq!(actual.warnings, expected.warnings);
-                let changed = actual
-                    .indices
-                    .data()
-                    .iter()
-                    .zip(expected.indices.data())
-                    .filter(|(a, b)| a != b)
-                    .count();
-                assert!(
-                    changed <= 4,
-                    "{matching:?}, {field:?}, {alpha:?}: {changed}/391 differing indices"
-                );
-                assert!(actual
-                    .indices
-                    .data()
-                    .iter()
-                    .all(|&i| (i as usize) < palette.len() && i != 5));
-                differences += changed;
-                comparisons += 1;
+                    };
+                    let expected = cpu(request);
+                    let actual =
+                        block_on(backend.dither_and_quantize(request, 128 * 1024 * 1024)).unwrap();
+                    assert_eq!(actual.palette, expected.palette);
+                    assert_eq!(actual.warnings, expected.warnings);
+                    let changed = actual
+                        .indices
+                        .data()
+                        .iter()
+                        .zip(expected.indices.data())
+                        .filter(|(a, b)| a != b)
+                        .count();
+                    assert!(
+                        changed <= 4,
+                        "{matching:?}, {field:?}, {alpha:?}: {changed}/391 differing indices"
+                    );
+                    assert!(actual
+                        .indices
+                        .data()
+                        .iter()
+                        .all(|&i| (i as usize) < palette.len() && i != 5));
+                    differences += changed;
+                    comparisons += 1;
+                }
             }
         }
     }
@@ -363,6 +365,239 @@ fn indexed_gpu_fields_keep_palette_alpha_ties_and_all_matching_policies() {
         "indexed parity: {differences} differing indices / {} pixels across {comparisons} cases",
         comparisons * 391
     );
+}
+
+#[test]
+fn gpu_masks_preserve_every_diffusion_kernel_and_scan_order() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    // Proves moving analysis to GPU does not restart or approximate diffusion.
+    let kernels = [
+        Diffusion::FloydSteinberg,
+        Diffusion::Sierra,
+        Diffusion::SierraLite,
+        Diffusion::Atkinson,
+        Diffusion::JarvisJudiceNinke,
+        Diffusion::Stucki,
+        Diffusion::Burkes,
+        Diffusion::TwoRowSierra,
+        Diffusion::Fan,
+        Diffusion::ShiauFan,
+        Diffusion::ShiauFan2,
+        Diffusion::Simple2d,
+    ];
+    let source: Vec<_> = (0..53 * 37u32)
+        .flat_map(|i| {
+            let x = i % 53;
+            let y = i / 53;
+            let shade = if x == 28 { 5 } else { (64 + x + y / 3) as u8 };
+            [shade, shade.saturating_add(25), 110, 255]
+        })
+        .collect();
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+        PaletteEntry::Color {
+            rgb: [160, 90, 120],
+        },
+    ];
+    for kernel in kernels {
+        for feedback in [DiffusionFeedback::Matching, DiffusionFeedback::SrgbBytes] {
+            for serpentine in [false, true] {
+                let request = DitherQuantizeRequest {
+                    quantize: QuantizeRequest {
+                        version: 1,
+                        source: Source {
+                            width: 53,
+                            height: 37,
+                            data: &source,
+                        },
+                        palette: &palette,
+                        matching: MatchPolicy::OklabEuclidean,
+                        alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+                    },
+                    dither: DitherPolicy::Diffusion {
+                        kernel,
+                        feedback,
+                        serpentine,
+                        strength: 1.0,
+                        placement: Placement::SmoothAreaV1 {
+                            sample_size: 20,
+                            contrast_threshold: 0.12,
+                        },
+                    },
+                };
+                assert_eq!(
+                    block_on(backend.dither_and_quantize(request, 128 * 1024 * 1024)).unwrap(),
+                    cpu(request),
+                    "{kernel:?}, {feedback:?}, serpentine {serpentine}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn cancelled_batches_leave_no_result_and_keep_the_device_usable() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    // Proves a cancellation between bounded dispatch batches releases work and
+    // leaves the single device usable, rather than publishing partial bytes.
+    let dimensions = ImageDimensions::new(193, 127).unwrap();
+    let source = vec![128; 193 * 127 * 4];
+    let mut checks = 0;
+    let result = block_on(backend.adaptive_coverage_checked(
+        dimensions,
+        &source,
+        20,
+        0.12,
+        128 * 1024 * 1024,
+        &mut || {
+            checks += 1;
+            if checks == 4 {
+                Err(Fallback::Cancelled)
+            } else {
+                Ok(())
+            }
+        },
+    ));
+    assert_eq!(result, Err(Fallback::Cancelled));
+    assert!(matches!(backend, super::super::Backend::Gpu(_)));
+    assert!(
+        block_on(backend.adaptive_coverage(dimensions, &source, 20, 0.12, 128 * 1024 * 1024))
+            .is_ok()
+    );
+}
+
+#[test]
+fn retained_gpu_coverage_bypasses_analysis_across_fields_and_diffusion() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    let source: Vec<_> = (0..53 * 37u32)
+        .flat_map(|i| [64 + (i % 53) as u8, 100 + (i / 53) as u8, 120, 255])
+        .collect();
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+    ];
+    let quantize = QuantizeRequest {
+        version: 1,
+        source: Source {
+            width: 53,
+            height: 37,
+            data: &source,
+        },
+        palette: &palette,
+        alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+        matching: MatchPolicy::OklabEuclidean,
+    };
+    let area = Placement::SmoothAreaV1 {
+        sample_size: 20,
+        contrast_threshold: 0.12,
+    };
+    let field = DitherPolicy::Separable {
+        perturb: PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Sixteen,
+            },
+            space: WorkingSpace::Oklab,
+            strength: 0.3,
+            placement: area,
+        },
+    };
+    let mut cold_checks = 0;
+    let (cold, coverage) = block_on(backend.dither_prepared_checked(
+        DitherQuantizeRequest {
+            quantize,
+            dither: field,
+        },
+        128 * 1024 * 1024,
+        None,
+        true,
+        &mut || {
+            cold_checks += 1;
+            Ok(())
+        },
+    ))
+    .unwrap();
+    assert_eq!(
+        cold,
+        cpu(DitherQuantizeRequest {
+            quantize,
+            dither: field
+        })
+    );
+    let coverage = coverage.expect("successful analysis exports pending coverage");
+    for dither in [
+        DitherPolicy::Separable {
+            perturb: PerturbPolicy {
+                field: Field::BlueNoise {},
+                space: WorkingSpace::Cielab,
+                strength: 1.0,
+                placement: area,
+            },
+        },
+        DitherPolicy::Diffusion {
+            kernel: Diffusion::Sierra,
+            feedback: DiffusionFeedback::Matching,
+            serpentine: true,
+            strength: 1.0,
+            placement: area,
+        },
+    ] {
+        #[derive(Default)]
+        struct Control {
+            checks: usize,
+            rows: usize,
+        }
+        impl JobControl for Control {
+            fn check(&mut self) -> Result<(), Fallback> {
+                self.checks += 1;
+                Ok(())
+            }
+            fn row(&mut self, _row: u32) -> Result<(), Fallback> {
+                self.rows += 1;
+                Ok(())
+            }
+        }
+        let mut control = Control::default();
+        let request = DitherQuantizeRequest { quantize, dither };
+        let (warm, pending) = block_on(backend.dither_prepared_checked(
+            request,
+            128 * 1024 * 1024,
+            Some(coverage.clone()),
+            true,
+            &mut control,
+        ))
+        .unwrap();
+        assert_eq!(warm, cpu(request));
+        assert!(
+            control.checks < cold_checks,
+            "warm {}, cold {cold_checks}",
+            control.checks
+        );
+        assert_eq!(
+            control.rows,
+            if matches!(dither, DitherPolicy::Diffusion { .. }) {
+                37
+            } else {
+                0
+            }
+        );
+        assert!(
+            pending.is_none(),
+            "reuse does not republish a duplicate mask"
+        );
+    }
 }
 
 #[test]
