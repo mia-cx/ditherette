@@ -17,7 +17,7 @@ use crate::{
             lifecycle::Stage,
             request::{BayerSize, DiffusionFeedback, DitherPolicy, Output, Placement},
         },
-        dither::error_diffusion::prepared::{execute_with_placement_progress, DiffusionPolicy},
+        dither::error_diffusion::prepared::{execute_with_coverage_progress, DiffusionPolicy},
         dither::placement::AdaptivePlacementWork,
         dither::yiluoma::row_bands::YliluomaBands,
     },
@@ -202,8 +202,16 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         DitherPolicy::Yliluoma { placement, .. } if mixing_policy.is_none() => placement,
         _ => Placement::Everywhere {},
     };
-    let smooth_capacity =
-        AdaptivePlacementWork::required_for_image(output_dimensions, placement_policy);
+    let coverage_key = rgba_key
+        .map(|parent| identity::area_coverage(parent, placement_policy))
+        .transpose()?
+        .flatten();
+    let coverage_hit = call.take_coverage(coverage_key);
+    let smooth_capacity = if coverage_hit {
+        0
+    } else {
+        AdaptivePlacementWork::required_for_image(output_dimensions, placement_policy)
+    };
     call.charge_working_capacity(smooth_capacity, peak)?;
     call.prepare(
         Some(request),
@@ -259,15 +267,19 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     let band_rows_capacity = bands.as_ref().map_or(0, |(_, rows)| *rows);
     call.charge_optional_capacity(band_rows_capacity, peak)?;
     let mut bands = bands.map(|(buffers, _)| buffers);
-    let mut placement = AdaptivePlacementWork::try_for_image(
-        output_dimensions,
-        placement_policy,
-        if smooth_capacity > 0 {
-            smooth_capacity
-        } else {
-            call.available_working_capacity()
-        },
-    )?;
+    let mut placement = if coverage_hit {
+        None
+    } else {
+        AdaptivePlacementWork::try_for_image(
+            output_dimensions,
+            placement_policy,
+            if smooth_capacity > 0 {
+                smooth_capacity
+            } else {
+                call.available_working_capacity()
+            },
+        )?
+    };
     let placement_capacity = placement
         .as_ref()
         .map_or(0, AdaptivePlacementWork::capacity_bytes);
@@ -345,7 +357,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 .as_ref()
                 .map_or(0, perturb::BayerBytes::capacity_bytes);
             call.charge_optional_capacity(bayer_capacity, peak)?;
-            let (_, _, images, scratch) = call.image_parts();
+            let (_, _, coverage, images, scratch) = call.image_parts();
             let [source, resized, perturbed, _] = &mut scratch.buffers;
             let rgba = images[0].map_or_else(
                 || {
@@ -386,6 +398,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                             .as_mut()
                             .map_or(&mut [], AdaptivePlacementWork::scratch),
                         bayer.as_ref(),
+                        coverage,
                         |completed| report(u64::from(completed)),
                     )?;
                 }
@@ -400,6 +413,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                         .as_mut()
                         .map_or(&mut [], AdaptivePlacementWork::scratch),
                     bayer.as_ref(),
+                    coverage,
                     |_| Ok(()),
                 )?;
             }
@@ -445,7 +459,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     };
     let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
     call.charge_optional_capacity(rgb_cache_capacity, peak)?;
-    let (prepared, mix_index, images, scratch) = call.image_parts();
+    let (prepared, mix_index, coverage, images, scratch) = call.image_parts();
     let prepared = prepared.expect("requested palette");
     let [source, resized, perturbed, indices] = &mut scratch.buffers;
     let rgba = if policy.is_some() {
@@ -479,7 +493,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         )
     };
     match dither {
-        DitherPolicy::Diffusion { .. } if enabled => execute_with_placement_progress(
+        DitherPolicy::Diffusion { .. } if enabled => execute_with_coverage_progress(
             prepared,
             &mut scratch.diffusion,
             match &mut rgb_cache {
@@ -489,12 +503,13 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             placement
                 .as_mut()
                 .map_or(&mut [], AdaptivePlacementWork::scratch),
+            coverage,
             view,
             indices,
             DiffusionPolicy::new(dither)?,
             &mut report_row,
         )?,
-        DitherPolicy::Diffusion { .. } => execute_with_placement_progress(
+        DitherPolicy::Diffusion { .. } => execute_with_coverage_progress(
             prepared,
             &mut scratch.diffusion,
             match &mut rgb_cache {
@@ -504,6 +519,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             placement
                 .as_mut()
                 .map_or(&mut [], AdaptivePlacementWork::scratch),
+            coverage,
             view,
             indices,
             DiffusionPolicy::new(dither)?,
@@ -538,25 +554,27 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     &mut report_row,
                 )?;
             } else if enabled {
-                crate::prod::dither::yiluoma::dither_yiluoma_with_progress_indexed(
+                crate::prod::dither::yiluoma::dither_yiluoma_with_coverage(
                     view,
                     prepared,
                     indices,
                     matrix,
                     mix_placement,
                     placement_rows,
+                    coverage,
                     mixes,
                     mix_index,
                     &mut report_row,
                 )?;
             } else {
-                crate::prod::dither::yiluoma::dither_yiluoma_with_progress_indexed(
+                crate::prod::dither::yiluoma::dither_yiluoma_with_coverage(
                     view,
                     prepared,
                     indices,
                     matrix,
                     mix_placement,
                     placement_rows,
+                    coverage,
                     mixes,
                     mix_index,
                     |_| Ok(()),
@@ -580,6 +598,9 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     }
     drop(rgb_cache);
     call.release_working_capacity(rgb_cache_capacity);
+    if let Some(placement) = &mut placement {
+        call.retain_coverage(coverage_key, output_dimensions, placement.scratch(), peak);
+    }
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);

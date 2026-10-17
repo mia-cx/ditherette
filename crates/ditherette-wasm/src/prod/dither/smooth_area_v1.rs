@@ -3,6 +3,8 @@
 use crate::image::{ImageDimensions, ImageView, Rgba8};
 use crate::prod::color::packed::{Converter, PackedSpace};
 
+pub(crate) mod coverage;
+
 const EDGE_PROBE_RADIUS: usize = 4;
 const MINIMUM_REGION_DIVISOR: usize = 16;
 

@@ -19,6 +19,7 @@ use crate::{
             lifecycle::{MAX_CACHE_BYTES, MAX_CACHE_ENTRIES},
             request::Output,
         },
+        dither::smooth_area_v1::coverage::Coverage,
         dither::yiluoma::index::MixIndex,
         quantize::PreparedQuantizer,
         resize::common::allocation::CapacityBudget,
@@ -30,6 +31,7 @@ enum Value {
     Resize(Vec<PreparedResize>),
     Image(Vec<ImageStage>),
     Mix(Vec<MixIndex>),
+    Coverage(Vec<Coverage>),
 }
 
 struct Entry {
@@ -54,6 +56,9 @@ impl Entry {
             }
             Value::Mix(value) => {
                 value[0].capacity_bytes() + value.capacity() as u64 * size_of::<MixIndex>() as u64
+            }
+            Value::Coverage(value) => {
+                value[0].capacity_bytes() + value.capacity() as u64 * size_of::<Coverage>() as u64
             }
         }
     }
@@ -342,6 +347,8 @@ pub(super) struct Call<'a> {
     resize_hit: bool,
     mix: Option<Entry>,
     mix_hit: bool,
+    coverage: Option<Entry>,
+    coverage_hit: bool,
     images: [Option<Entry>; 3],
     image_hits: [bool; 3],
     pub scratch: Scratch,
@@ -463,6 +470,8 @@ impl<'a> Call<'a> {
             resize: None,
             mix: None,
             mix_hit: false,
+            coverage: None,
+            coverage_hit: false,
             images: std::array::from_fn(|_| None),
             image_hits: [false; 3],
             scratch: std::mem::take(&mut store.scratch),
@@ -600,6 +609,7 @@ impl<'a> Call<'a> {
         }
         let limit = call.limit;
         let overhead = call.overhead
+            + call.coverage.as_ref().map_or(0, Entry::capacity)
             + call
                 .images
                 .iter()
@@ -838,6 +848,7 @@ impl<'a> Call<'a> {
     ) -> (
         Option<&PreparedQuantizer>,
         Option<&MixIndex>,
+        Option<&Coverage>,
         [Option<&ImageStage>; 3],
         &mut Scratch,
     ) {
@@ -855,7 +866,65 @@ impl<'a> Call<'a> {
                 _ => unreachable!(),
             })
         });
-        (palette, mix, images, &mut self.scratch)
+        let coverage = self.coverage.as_ref().map(|entry| match &entry.value {
+            Value::Coverage(value) => &value[0],
+            _ => unreachable!("typed area coverage identity"),
+        });
+        (palette, mix, coverage, images, &mut self.scratch)
+    }
+
+    pub(super) fn take_coverage(&mut self, key: Option<Identity>) -> bool {
+        assert!(self.coverage.is_none());
+        self.coverage = key.and_then(|key| self.store.take(key));
+        self.coverage_hit = self.coverage.is_some();
+        self.coverage_hit
+    }
+
+    /// Pack completed coverage into the existing bounded, success-only LRU.
+    /// A hit stays pinned through the render; allocation/retention misses simply recompute next time.
+    pub(super) fn retain_coverage(
+        &mut self,
+        key: Option<Identity>,
+        dimensions: ImageDimensions,
+        cells: &[[f32; 3]],
+        peak: &mut u64,
+    ) {
+        let Some(key) = key else { return };
+        if self.coverage.is_some() {
+            return;
+        }
+        let record_bytes = size_of::<Coverage>() as u64;
+        let needed = Coverage::required_bytes(dimensions) + record_bytes;
+        if needed + size_of::<Entry>() as u64 > MAX_CACHE_BYTES.min(self.limit / 4) {
+            return;
+        }
+        // Use spare capacity only; optional coverage must not evict work needed by this render.
+        let available = self.available_working_capacity();
+        if needed > available {
+            return;
+        }
+        let Ok(mut record) = CapacityBudget::new(available).vector::<Coverage>(1) else {
+            return;
+        };
+        let record_bytes = record.capacity() as u64 * size_of::<Coverage>() as u64;
+        let Some(coverage) =
+            Coverage::try_new(dimensions, cells, available.saturating_sub(record_bytes))
+        else {
+            return;
+        };
+        let capacity = record_bytes + coverage.capacity_bytes();
+        if capacity > available
+            || capacity + size_of::<Entry>() as u64 > MAX_CACHE_BYTES.min(self.limit / 4)
+        {
+            return;
+        }
+        record.push(coverage);
+        self.coverage = Some(Entry {
+            key,
+            used: 0,
+            value: Value::Coverage(record),
+        });
+        *peak = (*peak).max(self.active_capacity() + self.store.capacity());
     }
 
     /// Pins the retained Yliluoma index for this palette preparation and level count, or
@@ -992,6 +1061,7 @@ impl<'a> Call<'a> {
             + self.palette.as_ref().map_or(0, Entry::capacity)
             + self.resize.as_ref().map_or(0, Entry::capacity)
             + self.mix.as_ref().map_or(0, Entry::capacity)
+            + self.coverage.as_ref().map_or(0, Entry::capacity)
             + self
                 .images
                 .iter()
@@ -1089,6 +1159,7 @@ impl Drop for Call<'_> {
             (&mut self.palette, self.palette_hit),
             (&mut self.resize, self.resize_hit),
             (&mut self.mix, self.mix_hit),
+            (&mut self.coverage, self.coverage_hit),
         ] {
             if let Some(mut entry) = entry.take() {
                 if self.success {

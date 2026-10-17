@@ -178,12 +178,13 @@ pub(super) fn execute_with_scratch(
     policy: PerturbPolicy,
     scratch: &mut [[f32; 3]],
     bayer: Option<&BayerBytes>,
+    coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
     if let Some(bayer) = bayer {
         return bayer.execute(source, output, progress);
     }
-    crate::prod::dither::perturb::perturb_by_field_with_scratch(
+    crate::prod::dither::perturb::perturb_by_field_with_coverage(
         source,
         output,
         policy.space,
@@ -191,6 +192,7 @@ pub(super) fn execute_with_scratch(
         policy.placement,
         RowBand::new(0, source.dimensions().height()).expect("validated dimensions"),
         scratch,
+        coverage,
         |x, y, index| field_value(policy.field, x, y, index),
         progress,
     )
@@ -289,8 +291,13 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         .as_ref()
         .map_or(0, |plan| plan.additional_capacity());
     call.charge_working_capacity(band_capacity, peak)?;
-    let smooth_capacity =
-        AdaptivePlacementWork::required_for_image(dimensions, request.perturb.placement);
+    let coverage_key = super::identity::area_coverage(parent, request.perturb.placement)?;
+    let coverage_hit = call.take_coverage(coverage_key);
+    let smooth_capacity = if coverage_hit {
+        0
+    } else {
+        AdaptivePlacementWork::required_for_image(dimensions, request.perturb.placement)
+    };
     call.charge_working_capacity(smooth_capacity, peak)?;
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
     let bands = band_plan
@@ -300,7 +307,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     let band_rows_capacity = bands.as_ref().map_or(0, |(_, rows)| *rows);
     call.charge_optional_capacity(band_rows_capacity, peak)?;
     let mut bands = bands.map(|(buffers, _)| buffers);
-    let mut placement = if bands.is_none() {
+    let mut placement = if bands.is_none() && !coverage_hit {
         AdaptivePlacementWork::try_for_image(
             dimensions,
             request.perturb.placement,
@@ -328,7 +335,8 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     };
     let bayer_capacity = bayer.as_ref().map_or(0, BayerBytes::capacity_bytes);
     call.charge_optional_capacity(bayer_capacity, peak)?;
-    let [source, output, _, _] = &mut call.scratch.buffers;
+    let (_, _, coverage, _, scratch) = call.image_parts();
+    let [source, output, _, _] = &mut scratch.buffers;
     let source = ImageView::packed(source, dimensions).expect("validated source storage");
     if bands.is_some() || enabled {
         progress.report(
@@ -357,6 +365,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
                     .as_mut()
                     .map_or(&mut [], AdaptivePlacementWork::scratch),
                 bayer.as_ref(),
+                coverage,
                 |completed| report(u64::from(completed)),
             )?;
         }
@@ -370,11 +379,15 @@ pub(super) fn run<B: Boundary, A: Allocator>(
                 .as_mut()
                 .map_or(&mut [], AdaptivePlacementWork::scratch),
             bayer.as_ref(),
+            coverage,
             |_| Ok(()),
         )?;
     }
     drop(bayer);
     call.release_working_capacity(bayer_capacity);
+    if let Some(placement) = &mut placement {
+        call.retain_coverage(coverage_key, dimensions, placement.scratch(), peak);
+    }
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);

@@ -52,6 +52,11 @@ Keep that workflow clear and fast, including large images.
   conversions within the call. Boundary scans also reuse overlapping column bounds
   and expand coarse probes without changing masks, checkpoints or storage.
   Further CPU gains remain worthwhile alongside GPU work.
+  Mia's CPU target is Adaptive below twice the matching ordinary dither call.
+  The CPU candidate reuses source-only coverage across algorithm, strength, palette and matching changes;
+  invalidate it for processed-input, sample-size or contrast-tolerance changes.
+  Retention uses the existing bounded cache and success-only publication.
+  Warm Celeste edits meet that target in diagnostic checks; first-call analysis still needs work.
   Remaining GPU stages and physical browser/device qualification stay open.
   The next dither milestone combines palette matching, ordered/noise fields and
   the complete Adaptive selector/reconstruction on GPU. Keeping selection on CPU
