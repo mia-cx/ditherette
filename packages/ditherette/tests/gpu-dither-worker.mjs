@@ -1,4 +1,4 @@
-import { createDitherette, createGpuDither } from '../dist/index.js';
+import { createDitherette, createGpuDither, createGpuEffects } from '../dist/index.js';
 
 self.onmessage = async (event) => {
 	if (event.origin && event.origin !== self.location.origin) return;
@@ -24,6 +24,89 @@ self.onmessage = async (event) => {
 			{ kind: 'color', rgb: [90, 120, 100] },
 			{ kind: 'transparent' }
 		];
+		if (event.data.pixels) {
+			// Proves standalone RGBA calls use GPU execution, preserve alpha/hidden
+			// colours and retain their ordinary result across row-band policies.
+			const cpu = await createDitherette();
+			const gpu = await createGpuDither({ fallback: 'error', tiling: 'disabled' });
+			const tiled = await createGpuDither({ fallback: 'error', tiling: { height: 3 } });
+			const masks = await createGpuEffects({ fallback: 'error', tiling: { height: 3 } });
+			let calls = 0,
+				maximum = 0;
+			const compare = (actual, expected) => {
+				if (actual.width !== source.width || actual.height !== source.height)
+					throw Error('RGBA dimensions differ');
+				for (let i = 0; i < expected.data.length; i++) {
+					maximum = Math.max(maximum, Math.abs(actual.data[i] - expected.data[i]));
+					if (i % 4 === 3 && actual.data[i] !== source.data[i]) throw Error('Alpha changed');
+				}
+				calls++;
+			};
+			try {
+				for (const space of ['srgb', 'linear-rgb', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr'])
+					for (const field of [
+						{ algorithm: 'bayer', size: '16' },
+						{ algorithm: 'blue-noise' },
+						{ algorithm: 'random', seed: 4294967281 },
+						{ algorithm: 'ordered', tile: '5x3' }
+					])
+						for (const placement of [
+							{ mode: 'everywhere' },
+							{ mode: 'smooth-area-v1', sampleSize: 20, contrastThreshold: 0.12 }
+						]) {
+							const request = {
+								version: 1,
+								source,
+								perturb: { space, field, strength: 0.3, placement }
+							};
+							const expected = cpu.perturb(request),
+								actual = await gpu.perturb(request);
+							compare(actual, expected);
+							const banded = await tiled.perturb(request);
+							if (actual.data.some((value, i) => value !== banded.data[i]))
+								throw Error('Tile phase differs');
+							if (gpu.execution.backend !== 'gpu' || tiled.execution.backend !== 'gpu')
+								throw Error('RGBA left GPU');
+						}
+				for (const effects of [
+					[],
+					[{ effect: 'exposure', enabled: true, stops: 0.33 }],
+					[
+						{ effect: 'exposure', enabled: true, stops: 2 },
+						{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: 0.2, lightness: 0 }
+					]
+				])
+					for (const mask of [
+						[],
+						[
+							{
+								x: { model: 'srgb', channel: 'red' },
+								points: [
+									[0, 0],
+									[0.4, 0.8],
+									[1, 1]
+								]
+							}
+						]
+					]) {
+						const request = { version: 1, source, effects, mask };
+						const actual = await masks.effectMask(request);
+						compare(actual, cpu.effectMask(request));
+						if (masks.execution.backend !== 'gpu') throw Error('Mask left GPU');
+						for (let i = 0; i < actual.data.length; i += 4)
+							if (actual.data[i] !== actual.data[i + 1] || actual.data[i] !== actual.data[i + 2])
+								throw Error('Mask is not grey');
+					}
+				if (maximum > 1) throw Error(`RGBA difference ${maximum}`);
+				self.postMessage({ calls, maximum, exactTiles: true, alphaPreserved: true });
+			} finally {
+				cpu.dispose();
+				gpu.dispose();
+				tiled.dispose();
+				masks.dispose();
+			}
+			return;
+		}
 		if (event.data.gpuTiling) {
 			const whole = await createGpuDither({ fallback: 'error', tiling: 'disabled' });
 			const tiled = await createGpuDither({ fallback: 'error', tiling: { height: 3 } });

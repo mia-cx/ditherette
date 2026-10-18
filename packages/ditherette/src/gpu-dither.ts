@@ -10,7 +10,13 @@ import {
 	validateQuantize,
 	validateResize
 } from './validation.js';
-import { kernels, spaces, tiles, validateDitherAndQuantize } from './validation-fields.js';
+import {
+	kernels,
+	spaces,
+	tiles,
+	validateDitherAndQuantize,
+	validatePerturb
+} from './validation-fields.js';
 import { validateProcess } from './validation-process.js';
 import {
 	fallbackPolicy,
@@ -30,6 +36,7 @@ import type {
 	Matching,
 	PaletteEntry,
 	Placement,
+	PerturbRequest,
 	ProcessRequest,
 	Progress,
 	QuantizeRequest,
@@ -64,6 +71,8 @@ export interface GpuDither {
 	resize(request: ResizeRequest, signal?: AbortSignal): Promise<Rgba8Image>;
 	/** Match directly on GPU without a dither field. */
 	quantize(request: QuantizeRequest, signal?: AbortSignal): Promise<IndexedImage>;
+	/** Apply fields without quantisation, preserving original alpha and hidden RGB. */
+	perturb(request: PerturbRequest, signal?: AbortSignal): Promise<Rgba8Image>;
 	ditherAndQuantize(request: DitherAndQuantizeRequest, signal?: AbortSignal): Promise<IndexedImage>;
 	/** Apply resolved effects, coverage-aware resize, then indexed processing on the chosen backends. */
 	process(request: ProcessRequest, signal?: AbortSignal): Promise<IndexedImage>;
@@ -97,6 +106,7 @@ export interface GpuDitherBindings extends Omit<GpuEffectsBindings, 'privateGpuE
 		sink: { value?: Rgba8Image; check(completed?: number): boolean }
 	): Promise<string>;
 	privateGpuDitherPlan(width: number, height: number): number;
+	privateGpuPerturbPlan(width: number, height: number): number;
 	privateGpuYliluomaPlan(width: number, height: number, entries: number, size: number): number;
 	privateGpuDiffusionPlan(width: number, height: number): number;
 	privateGpuDitherDetect(memoryLimit: number): Promise<string>;
@@ -120,11 +130,16 @@ export interface GpuDitherBindings extends Omit<GpuEffectsBindings, 'privateGpuE
 		radius: number,
 		threshold: number,
 		softness: number,
+		rgbaOutput: boolean,
 		gpuDiffusion: boolean,
 		coverage: Uint8Array | undefined,
 		retain: boolean,
 		memoryLimit: number,
-		sink: { value?: IndexedImage; coverage?: Uint8Array; check(completed?: number): boolean },
+		sink: {
+			value?: IndexedImage | Rgba8Image;
+			coverage?: Uint8Array;
+			check(completed?: number): boolean;
+		},
 		rows: number
 	): Promise<string>;
 }
@@ -361,11 +376,24 @@ export function initializeGpuDither(
 			unavailable = reason;
 		}
 	};
-	const run = async (
+	function run(
 		input: Normalized,
 		process: ProcessInput | undefined,
-		signal: AbortSignal | undefined
-	) => {
+		signal: AbortSignal | undefined,
+		rgba: true
+	): Promise<Rgba8Image>;
+	function run(
+		input: Normalized,
+		process: ProcessInput | undefined,
+		signal: AbortSignal | undefined,
+		rgba?: false
+	): Promise<IndexedImage>;
+	async function run(
+		input: Normalized,
+		process: ProcessInput | undefined,
+		signal: AbortSignal | undefined,
+		rgba = false
+	): Promise<IndexedImage | Rgba8Image> {
 		requireIdle();
 		active = true;
 		try {
@@ -420,16 +448,18 @@ export function initializeGpuDither(
 					try {
 						if (
 							gpuLimit <= 0 ||
-							(d.family === 3
-								? bindings.privateGpuYliluomaPlan(
-										width,
-										height,
-										Math.min(256, input.palette.length),
-										d.parameter
-									)
-								: d.family === 2 && options.diffusionBackend === 'gpu'
-									? bindings.privateGpuDiffusionPlan(width, height)
-									: bindings.privateGpuDitherPlan(width, height)) > gpuLimit
+							(rgba
+								? bindings.privateGpuPerturbPlan(width, height)
+								: d.family === 3
+									? bindings.privateGpuYliluomaPlan(
+											width,
+											height,
+											Math.min(256, input.palette.length),
+											d.parameter
+										)
+									: d.family === 2 && options.diffusionBackend === 'gpu'
+										? bindings.privateGpuDiffusionPlan(width, height)
+										: bindings.privateGpuDitherPlan(width, height)) > gpuLimit
 						)
 							reason = 'MemoryLimit';
 						if (!reason && process?.effects?.enabled) {
@@ -522,7 +552,7 @@ export function initializeGpuDither(
 			let prepared: Rgba8Image = request.source;
 			let effected: Rgba8Image | undefined;
 			let resized: Rgba8Image | undefined;
-			let value: IndexedImage | undefined;
+			let value: IndexedImage | Rgba8Image | undefined;
 			let coverage: Uint8Array | undefined;
 			let retained =
 				!preparing &&
@@ -547,6 +577,7 @@ export function initializeGpuDither(
 			let reported = 0,
 				lastReport = 0;
 			const total = width * height;
+			const stage = rgba ? 'perturb' : 'dither-and-quantize';
 			if (bindings) {
 				try {
 					if (!detected) {
@@ -636,14 +667,14 @@ export function initializeGpuDither(
 									: undefined;
 						}
 						const sink = {
-							value: undefined as IndexedImage | undefined,
+							value: undefined as IndexedImage | Rgba8Image | undefined,
 							coverage: undefined as Uint8Array | undefined,
 							check: (completed = 0) => {
 								if (signal?.aborted) return false;
 								if (completed > 0 && input.onProgress) {
 									const now = performance.now();
 									if (reported === 0 || completed === total || now - lastReport >= 50) {
-										report({ stage: 'dither-and-quantize', completed, total });
+										report({ stage, completed, total });
 										reported = completed;
 										lastReport = now;
 									}
@@ -670,6 +701,7 @@ export function initializeGpuDither(
 								d.radius,
 								d.threshold,
 								d.softness,
+								rgba,
 								options.diffusionBackend === 'gpu',
 								retained,
 								retain,
@@ -691,7 +723,7 @@ export function initializeGpuDither(
 				try {
 					if (reported !== total)
 						input.onProgress?.({
-							stage: 'dither-and-quantize',
+							stage,
 							completed: total,
 							total
 						});
@@ -735,14 +767,23 @@ export function initializeGpuDither(
 			});
 			cpuAvailableBytes = available;
 			signal?.throwIfAborted();
-			const result = processRequest ? cpu.process(processRequest) : cpu.ditherAndQuantize(request);
+			const result = processRequest
+				? cpu.process(processRequest)
+				: rgba && request.dither.family === 'separable'
+					? cpu.perturb({
+							version: 1,
+							source: request.source,
+							perturb: request.dither.perturb,
+							onProgress: input.onProgress
+						})
+					: cpu.ditherAndQuantize(request);
 			signal?.throwIfAborted();
 			execution = { backend: 'cpu', fallback: reason || 'Failed', ...(adapter ? { adapter } : {}) };
 			return result;
 		} finally {
 			active = false;
 		}
-	};
+	}
 	// Caller getters execute during validation. Hold the same guard there; the
 	// runner takes it over synchronously before the first asynchronous boundary.
 	const normalize = <T>(read: () => T): T => {
@@ -757,6 +798,29 @@ export function initializeGpuDither(
 	return {
 		get execution() {
 			return execution;
+		},
+		async perturb(request, signal) {
+			requireIdle();
+			const { data, onProgress, sourceWidth, sourceHeight, ...policy } = normalize(() =>
+				validatePerturb(request)
+			);
+			return run(
+				{
+					data,
+					onProgress,
+					sourceWidth,
+					sourceHeight,
+					palette: [0],
+					matching: 0,
+					alphaMode: 0,
+					threshold: 0,
+					matte: 0,
+					dither: { family: 1, ...policy }
+				},
+				undefined,
+				signal,
+				true
+			);
 		},
 		async resize(request, signal) {
 			requireIdle();

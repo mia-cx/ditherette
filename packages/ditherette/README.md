@@ -322,7 +322,10 @@ Outputs remain valid after subsequent calls and disposal. Empty/disabled chains 
 One facade accepts one active call; overlapping calls and active-call disposal reject with `reentrant-call`.
 Progress callback exceptions report `callback`, and `execution` updates only after a successful call.
 The host owns its source/slider generation guard and checks that guard before publishing an awaited image.
-This API applies effects only. Resize, dithering, palette indices, and indexed PNG export remain with the existing processor.
+`effectMask(request)` evaluates a following mask from the continuous effects carrier
+on GPU, returning grey RGBA8 with the original alpha. Its empty mask produces white,
+including with an empty effects prefix. It shares `applyEffects` ownership, memory
+admission, tiling and explicit fallback policy.
 
 ## Optional GPU processing
 
@@ -355,6 +358,29 @@ preserving global field phase and packed-word boundaries. Large whole-image call
 split only at the hardware dispatch limit. Diffusion rejects independent image row
 bands rather than restarting its continuous scan; choose automatic or disabled
 tiling for GPU diffusion. Hardware workgroups stay internal to each algorithm.
+
+`perturb(request, signal?)` applies independent fields directly to RGBA8 without
+palette matching. Every working space, field and supported Adaptive placement uses
+the same GPU field math as indexed processing. Original alpha and hidden RGB stay
+intact; row bands preserve global phase. It shares the facade's coverage cache,
+cancellation, memory admission and fallback policy.
+
+Both CPU and GPU implementations ship in the package. Backend, CPU threading and
+image tiling are independent choices:
+
+```ts
+const cpu = await createDitherette({ threads: 'disabled', tiling: 'disabled' });
+const gpu = await createGpuDither({
+	fallback: 'error',
+	diffusionBackend: 'gpu',
+	tiling: 'disabled'
+});
+const tiledGpu = await createGpuDither({ fallback: 'cpu', tiling: { height: 64 } });
+```
+
+Use `createGpuEffects` for GPU effects and mask previews. CPU recipe analysis and
+measurements remain available through `createDitherette`; GPU application accepts
+the resulting explicit recipes. No factory replaces or removes the CPU methods.
 
 `process(request, signal?)` composes resolved GPU effects, every resize filter and
 GPU indexed processing. It preserves the CPU's RGBA8 boundary after effects and

@@ -274,7 +274,8 @@ fn main(@builtin(global_invocation_id) id:vec3<u32>) {
     var step=code[1u];
     for(var i=0u;i<code[0u];i++) {
         let tag=code[step+1u]; let p=code[step+2u]; let m=strength(step,rgb); var out=rgb;
-        if m!=0.0 {
+        if tag==8u {out=vec3(m);}
+        else if m!=0.0 {
             switch tag {
                 case 0u: {
                     var t=vec3(levels_unit(rgb.r,p),levels_unit(rgb.g,p),levels_unit(rgb.b,p));

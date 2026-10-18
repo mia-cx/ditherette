@@ -132,6 +132,50 @@ async function expected(input) {
 	}
 }
 
+test('standalone RGBA operations preserve captured input through CPU fallback', async () => {
+	// Proves clients retain perturbation and mask previews without WebGPU, with
+	// the same ownership and validation as the synchronous package operations.
+	const cpu = await createDitherette({ wasm });
+	const gpu = await createGpuDither(options);
+	const effects = await createGpuEffects(options);
+	try {
+		const input = request();
+		const perturb = { version: 1, source: input.source, perturb: input.dither.perturb };
+		const expectedPixels = cpu.perturb(perturb);
+		const pending = gpu.perturb(perturb);
+		input.source.data.fill(0);
+		assert.deepEqual(await pending, expectedPixels);
+		assert.equal(gpu.execution.backend, 'cpu');
+		const mask = {
+			version: 1,
+			source: request().source,
+			effects: [{ effect: 'exposure', enabled: true, stops: 0.33 }],
+			mask: [
+				{
+					x: { model: 'srgb', channel: 'red' },
+					points: [
+						[0, 0],
+						[1, 1]
+					]
+				}
+			]
+		};
+		const expectedMask = cpu.effectMask(mask);
+		const pendingMask = effects.effectMask(mask);
+		mask.source.data.fill(0);
+		assert.deepEqual(await pendingMask, expectedMask);
+		assert.equal(effects.execution.backend, 'cpu');
+		await assert.rejects(
+			effects.effectMask({ ...mask, mask: [{ x: { model: 'srgb', channel: 'red' }, points: [] }] }),
+			(error) => error.code === 'invalid-settings'
+		);
+	} finally {
+		cpu.dispose();
+		gpu.dispose();
+		effects.dispose();
+	}
+});
+
 test('GPU-only calls reject absent hardware and unsupported hybrid work without CPU fallback', async () => {
 	// Proves a client can require GPU execution rather than silently receiving CPU work.
 	const gpu = await createGpuDither({ ...options, fallback: 'error' });

@@ -90,6 +90,8 @@ Keep that workflow clear and fast, including large images.
   package facade, preserving the CPU's byte boundary and source-only coverage reuse.
   GPU row bands also cover matching, independent fields and Yliluoma without changing
   global phase. Whole-image dispatch splitting now admits 4096×4096 quantisation.
+  Standalone RGBA perturbation and continuous-carrier mask previews now also have
+  GPU package methods, with the same CPU fallback and client tiling controls.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

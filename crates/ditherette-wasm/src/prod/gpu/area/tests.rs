@@ -25,6 +25,7 @@ fn adaptive_row_tile_admission_covers_all_live_dispatch_metadata() {
         parameters,
         super::super::GpuTiling::Rows(1),
         u32::MAX,
+        4,
     );
     let metadata = (job.dispatches.capacity() * std::mem::size_of::<Dispatch>()) as u64
         + 2 * 256 * job.dispatches.len() as u64;
@@ -34,6 +35,108 @@ fn adaptive_row_tile_admission_covers_all_live_dispatch_metadata() {
         admitted >= metadata + images,
         "plan={admitted}, metadata={metadata}, images={images}"
     );
+}
+
+impl crate::prod::pipeline::processor::Boundary for CpuInput<'_> {
+    type Output = Vec<u8>;
+    fn complete(
+        &mut self,
+        bytes: &[u8],
+        _: ImageDimensions,
+    ) -> Result<Self::Output, crate::prod::contract::failure::Failure> {
+        Ok(bytes.to_vec())
+    }
+}
+
+/// Proves palette-free GPU fields preserve hidden RGB, alpha and global phase,
+/// while matching the ordinary RGBA operation rather than indexed output.
+#[test]
+fn standalone_perturb_preserves_rgba_and_tile_phase() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    let data: Vec<_> = (0..37 * 19)
+        .flat_map(|i| {
+            [
+                (i * 71) as u8,
+                (i * 31) as u8,
+                (i * 23) as u8,
+                (i * 97) as u8,
+            ]
+        })
+        .collect();
+    let mut cpu = crate::prod::pipeline::processor::Processor::new(128 * 1024 * 1024, 0).unwrap();
+    let mut maximum = 0;
+    for space in [
+        WorkingSpace::Srgb,
+        WorkingSpace::LinearRgb,
+        WorkingSpace::Oklab,
+        WorkingSpace::Oklch,
+        WorkingSpace::Cielab,
+        WorkingSpace::Cielch,
+        WorkingSpace::Ycbcr,
+    ] {
+        for field in [
+            Field::Bayer {
+                size: BayerSize::Sixteen,
+            },
+            Field::BlueNoise {},
+        ] {
+            for placement in [
+                Placement::Everywhere {},
+                Placement::SmoothAreaV1 {
+                    sample_size: 20,
+                    contrast_threshold: 0.12,
+                },
+            ] {
+                let perturb = PerturbPolicy {
+                    field,
+                    space,
+                    strength: 0.3,
+                    placement,
+                };
+                let request = PerturbRequest {
+                    version: 1,
+                    source: Source {
+                        width: 37,
+                        height: 19,
+                        data: &data,
+                    },
+                    perturb,
+                };
+                let expected = cpu
+                    .perturb(
+                        crate::prod::pipeline::perturb::PerturbRequest {
+                            source_width: 37,
+                            source_height: 19,
+                            perturb,
+                        },
+                        &mut CpuInput(&data),
+                    )
+                    .unwrap();
+                let actual = block_on(backend.perturb_gpu(
+                    request,
+                    super::super::GpuTiling::Disabled,
+                    u64::MAX,
+                ))
+                .unwrap();
+                let tiled = block_on(backend.perturb_gpu(
+                    request,
+                    super::super::GpuTiling::Rows(3),
+                    u64::MAX,
+                ))
+                .unwrap();
+                assert_eq!(actual, tiled, "{space:?}, {placement:?}");
+                for (i, (&a, &b)) in actual.iter().zip(&expected).enumerate() {
+                    if i % 4 == 3 {
+                        assert_eq!(a, data[i]);
+                    }
+                    maximum = maximum.max(a.abs_diff(b));
+                }
+            }
+        }
+    }
+    assert!(maximum <= 1, "GPU RGBA difference: {maximum}");
 }
 
 /// Proves row bands preserve global field/mixture phase, odd packed words and

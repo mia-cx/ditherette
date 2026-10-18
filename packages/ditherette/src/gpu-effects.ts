@@ -6,6 +6,8 @@ import { spaces } from './validation-fields.js';
 import type {
 	ApplyEffectsRequest,
 	Effect,
+	EffectMaskRequest,
+	MaskCurve,
 	InitInput,
 	PaletteEntry,
 	Progress,
@@ -64,6 +66,8 @@ export interface GpuEffects {
 	 * Uploads only the request's captured packed RGBA8 bytes. Image decoding belongs to the host.
 	 */
 	applyEffects(request: ApplyEffectsRequest): Promise<Rgba8Image>;
+	/** Evaluate a following step's mask from the continuous effects carrier. */
+	effectMask(request: EffectMaskRequest): Promise<Rgba8Image>;
 	/** Release the device once. An active call rejects disposal and overlapping calls. */
 	dispose(): void;
 }
@@ -76,7 +80,8 @@ export interface GpuEffectsBindings {
 		width: number,
 		height: number,
 		space: number,
-		rows: number
+		rows: number,
+		mask?: string
 	): number;
 	privateGpuEffectsDetect(memoryLimit: number): Promise<string>;
 	privateGpuEffectsAdapter(): string;
@@ -88,7 +93,8 @@ export interface GpuEffectsBindings {
 		memoryLimit: number,
 		sink: { value?: Rgba8Image },
 		space: number,
-		rows: number
+		rows: number,
+		mask?: string
 	): Promise<string>;
 	privateGpuEffectsDispose(): void;
 }
@@ -191,169 +197,177 @@ export function initializeGpuEffects(
 			unavailable = reason;
 		}
 	};
+	const run = async (request: ApplyEffectsRequest | EffectMaskRequest, masked = false) => {
+		requireIdle();
+		active = true;
+		try {
+			const input = validateApplyEffects(request, masked);
+			const jsonBytes = input.effects.json.length + (masked ? input.mask.length : 0);
+			const report = (progress: Progress) => {
+				try {
+					input.onProgress?.(progress);
+				} catch {
+					throw new DitheretteError('callback', 'onProgress', 'Progress callback threw.');
+				}
+			};
+			if (!masked && !input.effects.enabled) {
+				report({ stage: 'prepare', completed: 0, total: 1 });
+				report({ stage: 'complete', completed: 1, total: 1 });
+				execution = { backend: 'cpu', fallback: 'NoEnabledEffects' };
+				return input.source;
+			}
+			const bytes = input.data.length;
+			if (bytes >= options.memoryLimitBytes)
+				throw new DitheretteError(
+					'memory-limit',
+					'memoryLimitBytes',
+					'Source snapshot exceeds the instance memory limit.'
+				);
+			// Both backends use the same decoder. Rejection must precede either
+			// string ABI, even without GPU assets or after artifact retirement.
+			if (gpuEffectsDecoderBytes(jsonBytes) + bytes > options.memoryLimitBytes) {
+				if (bindings) retire('MemoryLimit');
+				throw new DitheretteError(
+					'memory-limit',
+					'memoryLimitBytes',
+					'Effects decoder admission exceeds the instance memory limit.'
+				);
+			}
+			let reason = unavailable;
+			let adapter: string | undefined;
+			let output: Rgba8Image | undefined;
+			if (bindings) {
+				try {
+					// The ABI includes backend records alongside decoder capacity.
+					// Its inputs remain numeric until all planning capacity fits.
+					const planning = bindings.privateGpuEffectsPlanningBytes(jsonBytes);
+					reason = planning > options.memoryLimitBytes ? 'MemoryLimit' : '';
+					if (!reason) {
+						const required = bindings.privateGpuEffectsPlan(
+							input.effects.json,
+							input.sourceWidth,
+							input.sourceHeight,
+							input.space,
+							rows,
+							masked ? input.mask : undefined
+						);
+						reason =
+							required === 0
+								? 'UnsupportedChain'
+								: required > options.memoryLimitBytes
+									? 'MemoryLimit'
+									: '';
+					}
+				} catch {
+					reason = 'Failed';
+				}
+			}
+			// An unsupported or over-budget request must release the previous
+			// device before allocating even its CPU-bound source snapshot.
+			if (reason) retire(reason);
+			if (reason && options.fallback === 'error') throw gpuFallbackError(reason);
+			// Capture before the first await. Later source edits cannot change this call
+			// or its CPU fallback. Charge this package-owned buffer to either backend.
+			let snapshot: Uint8Array;
+			try {
+				snapshot = new Uint8Array(bytes);
+				Uint8Array.prototype.set.call(snapshot, input.data);
+			} catch {
+				throw new DitheretteError(
+					'wasm-memory-unavailable',
+					'source.data',
+					'Source snapshot could not be allocated or copied.'
+				);
+			}
+			const source = { width: input.sourceWidth, height: input.sourceHeight, data: snapshot };
+			if (bindings) {
+				try {
+					if (!reason && !detected) {
+						reason = await bindings.privateGpuEffectsDetect(options.memoryLimitBytes - bytes);
+						detected = !reason;
+					}
+					if (!reason) {
+						adapter = bindings.privateGpuEffectsAdapter();
+						const sink: { value?: Rgba8Image } = {};
+						reason = await bindings.privateGpuApplyEffects(
+							source.data,
+							source.width,
+							source.height,
+							input.effects.json,
+							options.memoryLimitBytes,
+							sink,
+							input.space,
+							rows,
+							masked ? input.mask : undefined
+						);
+						output = sink.value;
+					}
+				} catch {
+					reason = 'Failed';
+					// A Wasm trap may strand backend state. Retire this factory permanently.
+					try {
+						retire(reason);
+					} catch {
+						/* A trapped artifact is discarded below. */
+					}
+				}
+			}
+			if (!reason && output) {
+				const total = source.width * source.height;
+				report({ stage: 'prepare', completed: 0, total: 1 });
+				report({ stage: 'effects', completed: total, total });
+				report({ stage: 'complete', completed: 1, total: 1 });
+				execution = { backend: 'gpu', adapter };
+				return output;
+			}
+			// No library-owned GPU artifact may coexist with CPU fallback capacity.
+			retire(reason || 'Failed');
+			if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
+			const cpu = await createScalar({
+				wasm: options.wasm,
+				tiling: options.tiling,
+				memoryLimitBytes: options.memoryLimitBytes - bytes
+			});
+			try {
+				const palette = input.palette?.map(
+					(code): PaletteEntry =>
+						code === TRANSPARENT_CODE
+							? { kind: 'transparent' }
+							: { kind: 'color', rgb: [(code >>> 16) & 255, (code >>> 8) & 255, code & 255] }
+				);
+				const fallbackRequest = {
+					version: 1,
+					source,
+					effects: JSON.parse(input.effects.json) as Effect[],
+					context: {
+						palette,
+						// The existing validator supplies a checked working-space tag.
+						space: input.space < 0 ? undefined : (spaces[input.space] as WorkingSpace)
+					},
+					onProgress: input.onProgress
+				} as const;
+				const result = masked
+					? cpu.effectMask({ ...fallbackRequest, mask: JSON.parse(input.mask) as MaskCurve[] })
+					: cpu.applyEffects(fallbackRequest);
+				execution = {
+					backend: 'cpu',
+					...(adapter ? { adapter } : {}),
+					fallback: reason || 'Failed'
+				};
+				return result;
+			} finally {
+				cpu.dispose();
+			}
+		} finally {
+			active = false;
+		}
+	};
 	return {
 		get execution() {
 			return execution;
 		},
-		async applyEffects(request) {
-			requireIdle();
-			active = true;
-			try {
-				const input = validateApplyEffects(request);
-				const report = (progress: Progress) => {
-					try {
-						input.onProgress?.(progress);
-					} catch {
-						throw new DitheretteError('callback', 'onProgress', 'Progress callback threw.');
-					}
-				};
-				if (!input.effects.enabled) {
-					report({ stage: 'prepare', completed: 0, total: 1 });
-					report({ stage: 'complete', completed: 1, total: 1 });
-					execution = { backend: 'cpu', fallback: 'NoEnabledEffects' };
-					return input.source;
-				}
-				const bytes = input.data.length;
-				if (bytes >= options.memoryLimitBytes)
-					throw new DitheretteError(
-						'memory-limit',
-						'memoryLimitBytes',
-						'Source snapshot exceeds the instance memory limit.'
-					);
-				// Both backends use the same decoder. Rejection must precede either
-				// string ABI, even without GPU assets or after artifact retirement.
-				if (gpuEffectsDecoderBytes(input.effects.json.length) + bytes > options.memoryLimitBytes) {
-					if (bindings) retire('MemoryLimit');
-					throw new DitheretteError(
-						'memory-limit',
-						'memoryLimitBytes',
-						'Effects decoder admission exceeds the instance memory limit.'
-					);
-				}
-				let reason = unavailable;
-				let adapter: string | undefined;
-				let output: Rgba8Image | undefined;
-				if (bindings) {
-					try {
-						// The ABI includes backend records alongside decoder capacity.
-						// Its inputs remain numeric until all planning capacity fits.
-						const planning = bindings.privateGpuEffectsPlanningBytes(input.effects.json.length);
-						reason = planning > options.memoryLimitBytes ? 'MemoryLimit' : '';
-						if (!reason) {
-							const required = bindings.privateGpuEffectsPlan(
-								input.effects.json,
-								input.sourceWidth,
-								input.sourceHeight,
-								input.space,
-								rows
-							);
-							reason =
-								required === 0
-									? 'UnsupportedChain'
-									: required > options.memoryLimitBytes
-										? 'MemoryLimit'
-										: '';
-						}
-					} catch {
-						reason = 'Failed';
-					}
-				}
-				// An unsupported or over-budget request must release the previous
-				// device before allocating even its CPU-bound source snapshot.
-				if (reason) retire(reason);
-				if (reason && options.fallback === 'error') throw gpuFallbackError(reason);
-				// Capture before the first await. Later source edits cannot change this call
-				// or its CPU fallback. Charge this package-owned buffer to either backend.
-				let snapshot: Uint8Array;
-				try {
-					snapshot = new Uint8Array(bytes);
-					Uint8Array.prototype.set.call(snapshot, input.data);
-				} catch {
-					throw new DitheretteError(
-						'wasm-memory-unavailable',
-						'source.data',
-						'Source snapshot could not be allocated or copied.'
-					);
-				}
-				const source = { width: input.sourceWidth, height: input.sourceHeight, data: snapshot };
-				if (bindings) {
-					try {
-						if (!reason && !detected) {
-							reason = await bindings.privateGpuEffectsDetect(options.memoryLimitBytes - bytes);
-							detected = !reason;
-						}
-						if (!reason) {
-							adapter = bindings.privateGpuEffectsAdapter();
-							const sink: { value?: Rgba8Image } = {};
-							reason = await bindings.privateGpuApplyEffects(
-								source.data,
-								source.width,
-								source.height,
-								input.effects.json,
-								options.memoryLimitBytes,
-								sink,
-								input.space,
-								rows
-							);
-							output = sink.value;
-						}
-					} catch {
-						reason = 'Failed';
-						// A Wasm trap may strand backend state. Retire this factory permanently.
-						try {
-							retire(reason);
-						} catch {
-							/* A trapped artifact is discarded below. */
-						}
-					}
-				}
-				if (!reason && output) {
-					const total = source.width * source.height;
-					report({ stage: 'prepare', completed: 0, total: 1 });
-					report({ stage: 'effects', completed: total, total });
-					report({ stage: 'complete', completed: 1, total: 1 });
-					execution = { backend: 'gpu', adapter };
-					return output;
-				}
-				// No library-owned GPU artifact may coexist with CPU fallback capacity.
-				retire(reason || 'Failed');
-				if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
-				const cpu = await createScalar({
-					wasm: options.wasm,
-					tiling: options.tiling,
-					memoryLimitBytes: options.memoryLimitBytes - bytes
-				});
-				try {
-					const palette = input.palette?.map(
-						(code): PaletteEntry =>
-							code === TRANSPARENT_CODE
-								? { kind: 'transparent' }
-								: { kind: 'color', rgb: [(code >>> 16) & 255, (code >>> 8) & 255, code & 255] }
-					);
-					const result = cpu.applyEffects({
-						version: 1,
-						source,
-						effects: JSON.parse(input.effects.json) as Effect[],
-						context: {
-							palette,
-							// The existing validator supplies a checked working-space tag.
-							space: input.space < 0 ? undefined : (spaces[input.space] as WorkingSpace)
-						},
-						onProgress: input.onProgress
-					});
-					execution = {
-						backend: 'cpu',
-						...(adapter ? { adapter } : {}),
-						fallback: reason || 'Failed'
-					};
-					return result;
-				} finally {
-					cpu.dispose();
-				}
-			} finally {
-				active = false;
-			}
-		},
+		applyEffects: (request) => run(request),
+		effectMask: (request) => run(request, true),
 		dispose() {
 			if (disposed) return;
 			requireIdle();

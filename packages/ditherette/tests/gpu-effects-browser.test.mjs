@@ -75,7 +75,16 @@ async function startServer(t, missingGpu = false, isolated = false) {
 	return `http://127.0.0.1:${server.address().port}`;
 }
 
-for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion', 'process', 'gpu-tiling'])
+for (const mode of [
+	'gpu',
+	'disabled',
+	'missing',
+	'yliluoma',
+	'diffusion',
+	'process',
+	'gpu-tiling',
+	'pixels'
+])
 	test(
 		`real indexed dither worker through Chromium CDP (${mode})`,
 		{ timeout: 180_000 },
@@ -93,7 +102,15 @@ for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion', 'proc
 						};
 						worker.onerror = (event) => reject(Error(event.message));
 						worker.postMessage({
-							fallback: !['gpu', 'yliluoma', 'diffusion', 'process', 'gpu-tiling'].includes(mode),
+							fallback: ![
+								'gpu',
+								'yliluoma',
+								'diffusion',
+								'process',
+								'gpu-tiling',
+								'pixels'
+							].includes(mode),
+							pixels: mode === 'pixels',
 							yliluoma: mode === 'yliluoma',
 							gpuDiffusion: mode === 'diffusion',
 							process: mode === 'process',
@@ -106,7 +123,12 @@ for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion', 'proc
 			}, mode);
 			assert.equal(result.error, undefined, result.error);
 			assert.deepEqual(errors, []);
-			if (mode === 'gpu-tiling') {
+			if (mode === 'pixels') {
+				assert.equal(result.calls, 62);
+				assert.ok(result.maximum <= 1);
+				assert.equal(result.exactTiles, true);
+				assert.equal(result.alphaPreserved, true);
+			} else if (mode === 'gpu-tiling') {
 				assert.equal(result.calls, 50);
 				assert.equal(result.largeCorrect, true);
 				assert.equal(result.exact, true);

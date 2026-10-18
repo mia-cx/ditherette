@@ -39,7 +39,7 @@ pub fn private_gpu_effects_planning_bytes(effects_bytes: u32) -> f64 {
 #[wasm_bindgen(module = "/src/wasm/copy_helpers.js")]
 extern "C" {
     #[wasm_bindgen(catch, js_name = completeResult)]
-    fn complete_result(
+    pub(super) fn complete_result(
         source: &[u8],
         width: u32,
         height: u32,
@@ -52,6 +52,7 @@ enum EffectPlan {
     Pointwise(
         Vec<EffectStep>,
         Option<crate::prod::contract::request::WorkingSpace>,
+        Option<Vec<crate::prod::effects::mask::MaskCurve>>,
     ),
 }
 
@@ -61,6 +62,7 @@ fn plan(
     height: u32,
     space: f64,
     rows: u32,
+    mask: Option<&str>,
 ) -> Result<(Option<EffectPlan>, LookupMemory), JsError> {
     if rows != u32::MAX && rows > 32768 {
         return Err(JsError::new("invalid tile height"));
@@ -68,8 +70,20 @@ fn plan(
     let dimensions =
         ImageDimensions::new(width, height).map_err(|error| JsError::new(&error.to_string()))?;
     let steps = decode_effects(effects).map_err(|error| JsError::new(&error.to_string()))?;
-    let lookup =
-        ChannelLookup::from_effects(&steps).map_err(|error| JsError::new(&error.to_string()))?;
+    let json_bytes = effects.len() + mask.map_or(0, str::len);
+    let mask: Option<Vec<crate::prod::effects::mask::MaskCurve>> = mask
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(|error| JsError::new(&error.to_string()))?;
+    if let Some(mask) = &mask {
+        crate::prod::effects::mask::validate(mask, "")
+            .map_err(|error| JsError::new(&error.to_string()))?;
+    }
+    let lookup = if mask.is_some() {
+        None
+    } else {
+        ChannelLookup::from_effects(&steps).map_err(|error| JsError::new(&error.to_string()))?
+    };
     if lookup.is_none() && Pointwise::supported(&steps) {
         let space = super::fields::parse_space(space);
         validate_chain(
@@ -80,15 +94,15 @@ fn plan(
             },
         )
         .map_err(|error| JsError::new(&error.to_string()))?;
-        let mut memory = Pointwise::memory(dimensions, effects.len() as u64);
+        let mut memory = Pointwise::memory(dimensions, json_bytes as u64);
         memory.required_bytes +=
             LookupMemory::with_tiling(dimensions, super::gpu_resize::tiling(rows)).required_bytes
                 - LookupMemory::new(dimensions).required_bytes;
-        return Ok((Some(EffectPlan::Pointwise(steps, space)), memory));
+        return Ok((Some(EffectPlan::Pointwise(steps, space, mask)), memory));
     }
     let mut memory = LookupMemory::with_tiling(dimensions, super::gpu_resize::tiling(rows));
     // Reserve the Value tree, serde buffers and decoded curves, not just text.
-    memory.required_bytes += LookupMemory::DECODER_BYTES_PER_JSON_BYTE * effects.len() as u64;
+    memory.required_bytes += LookupMemory::DECODER_BYTES_PER_JSON_BYTE * json_bytes as u64;
     Ok((lookup.map(EffectPlan::Lookup), memory))
 }
 
@@ -101,8 +115,9 @@ pub fn private_gpu_effects_plan(
     height: u32,
     space: f64,
     rows: u32,
+    mask: Option<String>,
 ) -> Result<f64, JsError> {
-    let (stage, memory) = plan(effects, width, height, space, rows)?;
+    let (stage, memory) = plan(effects, width, height, space, rows, mask.as_deref())?;
     Ok(if stage.is_some() {
         memory.required_bytes as f64
     } else {
@@ -161,8 +176,9 @@ pub async fn private_gpu_apply_effects(
     sink: JsValue,
     space: f64,
     rows: u32,
+    mask: Option<String>,
 ) -> Result<String, JsError> {
-    let (stage, memory) = plan(&effects, width, height, space, rows)?;
+    let (stage, memory) = plan(&effects, width, height, space, rows, mask.as_deref())?;
     let Some(stage) = stage else {
         return Ok("UnsupportedChain".into());
     };
@@ -195,20 +211,25 @@ pub async fn private_gpu_apply_effects(
                                 )
                                 .await
                         }
-                        EffectPlan::Pointwise(steps, space) => match Pointwise::new(steps, space) {
-                            Ok(stage) => {
-                                backend
-                                    .pointwise_tiled(
-                                        &stage,
-                                        dimensions,
-                                        &rgba,
-                                        super::gpu_resize::tiling(rows),
-                                        memory_limit as u64,
-                                    )
-                                    .await
+                        EffectPlan::Pointwise(steps, space, mask) => {
+                            match Pointwise::new(steps, space).and_then(|stage| match mask {
+                                Some(mask) => stage.with_mask(mask),
+                                None => Ok(stage),
+                            }) {
+                                Ok(stage) => {
+                                    backend
+                                        .pointwise_tiled(
+                                            &stage,
+                                            dimensions,
+                                            &rgba,
+                                            super::gpu_resize::tiling(rows),
+                                            memory_limit as u64,
+                                        )
+                                        .await
+                                }
+                                Err(reason) => Err(reason),
                             }
-                            Err(reason) => Err(reason),
-                        },
+                        }
                     },
                     Err(_) => Err(Fallback::Failed("source copy failed".into())),
                 }

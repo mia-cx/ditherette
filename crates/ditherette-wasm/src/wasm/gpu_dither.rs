@@ -7,10 +7,13 @@ use super::{
     quantize::{parse_alpha, parse_matching, read_palette, PALETTE_SLOTS},
 };
 use crate::{
-    image::{contracts::PaletteEntry, ImageDimensions},
+    image::{
+        contracts::{IndexedImage, PaletteEntry},
+        ImageDimensions,
+    },
     prod::{
         contract::request::*,
-        gpu::{Backend, Fallback, IndexedMemory},
+        gpu::{Backend, Fallback, IndexedMemory, PerturbMemory},
         pipeline::quantize::{IndexedMetadataRef, QuantizeBoundary},
     },
 };
@@ -23,6 +26,19 @@ extern "C" {
     fn check_job(sink: &JsValue, completed: u32) -> Result<bool, JsValue>;
     #[wasm_bindgen(catch, js_name = completeCoverage)]
     fn complete_coverage(bytes: &[u8], sink: &JsValue) -> Result<(), JsValue>;
+}
+
+enum ImageOutput {
+    Indexed(IndexedImage),
+    Rgba(Vec<u8>),
+}
+
+/// RGBA fields retain a full packed output, in addition to optional coverage.
+#[wasm_bindgen(js_name=privateGpuPerturbPlan)]
+pub fn private_gpu_perturb_plan(width: u32, height: u32) -> Result<f64, JsError> {
+    let dimensions =
+        ImageDimensions::new(width, height).map_err(|e| JsError::new(&e.to_string()))?;
+    Ok(PerturbMemory::new(dimensions).required_bytes as f64)
 }
 
 /// Numeric-only image admission precedes the input snapshot and any device job.
@@ -172,6 +188,7 @@ pub async fn private_gpu_dither_and_quantize(
     radius: f64,
     threshold: f64,
     softness: f64,
+    rgba_output: bool,
     gpu_diffusion: bool,
     coverage: Option<Uint8Array>,
     retain: bool,
@@ -182,7 +199,11 @@ pub async fn private_gpu_dither_and_quantize(
     if rows != u32::MAX && rows > 32768 {
         return Err(JsError::new("invalid tile height"));
     }
-    let required = private_gpu_dither_plan(width, height)?;
+    let required = if rgba_output {
+        private_gpu_perturb_plan(width, height)?
+    } else {
+        private_gpu_dither_plan(width, height)?
+    };
     if required > memory_limit {
         return Ok("MemoryLimit".into());
     }
@@ -273,10 +294,30 @@ pub async fn private_gpu_dither_and_quantize(
                 },
                 dither,
             };
-            if gpu_diffusion && matches!(dither, DitherPolicy::Diffusion { .. }) {
+            if rgba_output {
+                match dither {
+                    DitherPolicy::Separable { perturb } => backend
+                        .perturb_checked(
+                            PerturbRequest {
+                                version: 1,
+                                source: request.quantize.source,
+                                perturb,
+                            },
+                            super::gpu_resize::tiling(rows),
+                            memory_limit as u64,
+                            coverage,
+                            retain,
+                            &mut check,
+                        )
+                        .await
+                        .map(|(bytes, coverage)| (ImageOutput::Rgba(bytes), coverage)),
+                    _ => Err(Fallback::UnsupportedStage),
+                }
+            } else if gpu_diffusion && matches!(dither, DitherPolicy::Diffusion { .. }) {
                 backend
                     .diffuse_gpu_checked(request, memory_limit as u64, coverage, retain, &mut check)
                     .await
+                    .map(|(image, coverage)| (ImageOutput::Indexed(image), coverage))
             } else {
                 backend
                     .dither_tiled_checked(
@@ -288,6 +329,7 @@ pub async fn private_gpu_dither_and_quantize(
                         &mut check,
                     )
                     .await
+                    .map(|(image, coverage)| (ImageOutput::Indexed(image), coverage))
             }
         }
         None => Err(Fallback::NoAdapter),
@@ -297,18 +339,24 @@ pub async fn private_gpu_dither_and_quantize(
         Ok((output, coverage)) => {
             crate::prod::gpu::JobControl::check(&mut check)
                 .map_err(|reason| JsError::new(&format!("{reason:?}")))?;
-            JsBoundary::new(&input, &sink)
-                .and_then(|mut boundary| {
-                    boundary.complete(
-                        output.indices.data(),
-                        output.indices.dimensions(),
-                        IndexedMetadataRef {
-                            palette: &output.palette,
-                            warnings: &output.warnings,
-                        },
-                    )
-                })
-                .map_err(|_| JsError::new("indexed result copy failed"))?;
+            match output {
+                ImageOutput::Indexed(output) => JsBoundary::new(&input, &sink)
+                    .and_then(|mut boundary| {
+                        boundary.complete(
+                            output.indices.data(),
+                            output.indices.dimensions(),
+                            IndexedMetadataRef {
+                                palette: &output.palette,
+                                warnings: &output.warnings,
+                            },
+                        )
+                    })
+                    .map_err(|_| JsError::new("indexed result copy failed"))?,
+                ImageOutput::Rgba(bytes) => {
+                    super::gpu_effects::complete_result(&bytes, width, height, &sink)
+                        .map_err(|_| JsError::new("RGBA result copy failed"))?
+                }
+            }
             if let Some(bits) = coverage {
                 complete_coverage(&bits, &sink)
                     .map_err(|_| JsError::new("coverage result copy failed"))?;
