@@ -113,8 +113,8 @@ for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma'])
 				assert.equal(result.analyses, 1);
 				assert.equal(result.reuses, 197);
 			} else if (mode === 'yliluoma') {
-				assert.equal(result.cases, 120);
-				assert.equal(result.backends.gpu, 120);
+				assert.equal(result.cases, 121);
+				assert.equal(result.backends.gpu, 121);
 				assert.equal(result.webgpu.isFallbackAdapter, false);
 			} else assert.equal(result.backends.cpu, 3);
 			t.diagnostic(JSON.stringify({ mode, ...result, system }));

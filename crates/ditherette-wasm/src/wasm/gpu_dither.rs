@@ -191,7 +191,10 @@ pub async fn private_gpu_dither_and_quantize(
             BayerSize::Eight => 8,
             BayerSize::Sixteen => 16,
         };
-        if private_gpu_yliluoma_plan(width, height, palette_len as u32, size)? > memory_limit {
+        // The optional tail marks truncation; it is not a retained mixture colour.
+        if private_gpu_yliluoma_plan(width, height, palette_len.min(256) as u32, size)?
+            > memory_limit
+        {
             return Ok("MemoryLimit".into());
         }
     }

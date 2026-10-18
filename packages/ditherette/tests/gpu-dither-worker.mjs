@@ -299,6 +299,16 @@ self.onmessage = async (event) => {
 				{ mode: 'matte', rgb: [7, 200, 90] }
 			][index % 3]
 		}));
+		if (event.data.yliluoma) {
+			// Proves the truncation warning marker is not admitted as colour 257.
+			requests.push({
+				...requests[0],
+				palette: Array.from({ length: 257 }, (_, i) => ({
+					kind: 'color',
+					rgb: [i % 2 ? 255 : 0, i % 2 ? 255 : 0, i % 2 ? 255 : 0]
+				}))
+			});
+		}
 		let cpu = await createDitherette();
 		const expected = requests.map((request) => cpu.ditherAndQuantize(request));
 		cpu.dispose();
