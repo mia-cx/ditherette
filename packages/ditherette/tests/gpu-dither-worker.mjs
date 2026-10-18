@@ -24,6 +24,110 @@ self.onmessage = async (event) => {
 			{ kind: 'color', rgb: [90, 120, 100] },
 			{ kind: 'transparent' }
 		];
+		if (event.data.gpuTiling) {
+			const whole = await createGpuDither({ fallback: 'error', tiling: 'disabled' });
+			const tiled = await createGpuDither({ fallback: 'error', tiling: { height: 3 } });
+			const base = {
+				version: 1,
+				source,
+				palette,
+				alpha: { mode: 'preserve', threshold: 127.9 },
+				matching: 'oklab-euclidean'
+			};
+			let calls = 0;
+			try {
+				for (const placement of [
+					{ mode: 'everywhere' },
+					{ mode: 'smooth-area-v1', sampleSize: 20, contrastThreshold: 0.12 }
+				]) {
+					for (const dither of [
+						{ family: 'none' },
+						{ family: 'yliluoma', size: '4', placement },
+						...[
+							{ algorithm: 'bayer', size: '16' },
+							{ algorithm: 'random', seed: 0xfffffff1 },
+							{ algorithm: 'blue-noise' },
+							{ algorithm: 'ordered', tile: '5x3' }
+						].map((field) => ({
+							family: 'separable',
+							perturb: { field, space: 'oklab', strength: 0.3, placement }
+						}))
+					]) {
+						const input = { ...base, dither };
+						const a = await whole.ditherAndQuantize(input),
+							b = await tiled.ditherAndQuantize(input);
+						if (whole.execution.backend !== 'gpu' || tiled.execution.backend !== 'gpu')
+							throw Error('Indexed row tiles left GPU');
+						if (a.indices.some((value, index) => value !== b.indices[index]))
+							throw Error('Indexed row tiles changed global phase');
+						const recipe = {
+							version: 2,
+							effects: [
+								{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: 0.2, lightness: 0 }
+							],
+							output: {
+								width: 29,
+								height: 23,
+								resize: { algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' }
+							},
+							alpha: base.alpha,
+							match: base.matching,
+							dither
+						};
+						const x = await whole.process({ source, palette, recipe }),
+							y = await tiled.process({ source, palette, recipe });
+						if (y.indices.some((value, index) => value !== x.indices[index]))
+							throw Error('Combined row tiles changed output');
+						if (tiled.execution.backend !== 'gpu') throw Error('Combined row tiles left GPU');
+						calls += 4;
+					}
+				}
+				let unsupported = false;
+				// 4096² crosses the old 65535-workgroup single-dispatch limit.
+				// Gray 127 is strictly closer to black under sRGB Euclidean matching.
+				const large = {
+					...base,
+					source: { width: 4096, height: 4096, data: new Uint8Array(4096 * 4096 * 4).fill(127) },
+					palette: [
+						{ kind: 'color', rgb: [0, 0, 0] },
+						{ kind: 'color', rgb: [255, 255, 255] }
+					],
+					matching: 'srgb-euclidean',
+					alpha: { mode: 'preserve', threshold: 0 }
+				};
+				for (const processor of [whole, tiled]) {
+					const image = await processor.quantize(large);
+					if (
+						processor.execution.backend !== 'gpu' ||
+						image.indices.length !== 4096 * 4096 ||
+						image.indices.some((index) => index !== 0)
+					)
+						throw Error('4k GPU quantization differs');
+					calls++;
+				}
+				try {
+					await tiled.ditherAndQuantize({
+						...base,
+						dither: {
+							family: 'diffusion',
+							kernel: 'sierra',
+							feedback: 'matching',
+							serpentine: true,
+							strength: 1,
+							placement: { mode: 'everywhere' }
+						}
+					});
+				} catch (error) {
+					unsupported = error.code === 'unsupported-operation';
+				}
+				if (!unsupported) throw Error('Independent row tiles cannot restart continuous diffusion');
+				self.postMessage({ calls, exact: true, largeCorrect: true, diffusionRejected: true });
+			} finally {
+				whole.dispose();
+				tiled.dispose();
+			}
+			return;
+		}
 		if (event.data.process) {
 			// Proves the public combined call composes the real GPU stages at the
 			// same RGBA8 boundary and recipe-v2 coverage semantics as CPU process.

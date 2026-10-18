@@ -88,6 +88,8 @@ Keep that workflow clear and fast, including large images.
   image tiling. Automatic recipe analysis stays on CPU. The combined GPU `process`
   now composes effects, recipe-v2 coverage resize and indexed stages through the same
   package facade, preserving the CPU's byte boundary and source-only coverage reuse.
+  GPU row bands also cover matching, independent fields and Yliluoma without changing
+  global phase. Whole-image dispatch splitting now admits 4096×4096 quantisation.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

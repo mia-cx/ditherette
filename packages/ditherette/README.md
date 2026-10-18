@@ -350,8 +350,11 @@ every anchor and fixed/scale-aware support. Set `tiling: 'auto'` (default),
 image tiles or whole-image resize. Tiled filters retain their source halos and
 global coordinates; trilinear retains its area mip reductions and per-level rounding.
 Standalone resize preserves hidden RGB; recipe-v2 coverage handling stays separate.
-Explicit row bands currently route indexed work to CPU, or reject with
-`fallback: 'error'`. Hardware workgroups are internal to each GPU algorithm.
+Explicit row bands also schedule independent matching, fields and Yliluoma on GPU,
+preserving global field phase and packed-word boundaries. Large whole-image calls
+split only at the hardware dispatch limit. Diffusion rejects independent image row
+bands rather than restarting its continuous scan; choose automatic or disabled
+tiling for GPU diffusion. Hardware workgroups stay internal to each algorithm.
 
 `process(request, signal?)` composes resolved GPU effects, every resize filter and
 GPU indexed processing. It preserves the CPU's RGBA8 boundary after effects and

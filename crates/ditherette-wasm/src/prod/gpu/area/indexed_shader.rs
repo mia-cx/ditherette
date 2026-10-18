@@ -230,7 +230,8 @@ fn palette_index(i: u32) -> u32 {
 pub(super) const INDEXED: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<u32>;
 @compute @workgroup_size(64)
 fn indexed(@builtin(global_invocation_id) id: vec3<u32>) {
-    let word=id.x;
+    if id.x >= p.minimum { return; }
+    let word=p.diagonal+id.x;
     if word >= (count()+3u)/4u { return; }
     var packed=0u;
     for (var byte=0u;byte<4u;byte++) {

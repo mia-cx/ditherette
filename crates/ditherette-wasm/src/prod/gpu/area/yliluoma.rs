@@ -1,9 +1,7 @@
 //! Palette-only CPU index preparation followed by parallel GPU mixture searches.
 //! No image matching or ordered selection runs on CPU.
 
-use super::{
-    indexed, AreaJob, AreaMemory, Dispatch, Fallback, IndexedMemory, JobControl, Parameters,
-};
+use super::{indexed, AreaJob, AreaMemory, Fallback, IndexedMemory, JobControl, Parameters};
 use crate::{
     image::{contracts::IndexedImage, ImageBuf, ImageDimensions},
     prod::{
@@ -54,6 +52,7 @@ impl super::super::Backend {
         memory_limit: u64,
         incoming: Option<Vec<u8>>,
         retain: bool,
+        tiling: super::super::GpuTiling,
         check: &mut dyn JobControl,
     ) -> Result<(IndexedImage, Option<Vec<u8>>), Fallback> {
         if let Self::Cpu(reason) = self {
@@ -135,18 +134,13 @@ impl super::super::Backend {
                     }
                     job.upload_mixtures(tree.as_ref(), check).await?;
                     let bytes = IndexedMemory::new(dimensions).index_bytes;
-                    let words = (bytes / 4) as u32;
-                    for first in (0..words).step_by(WORDS_PER_DISPATCH as usize) {
-                        let mut parameters = Parameters::new(dimensions, 4, 0.0);
-                        parameters.diagonal = first;
-                        parameters.minimum = (words - first).min(WORDS_PER_DISPATCH);
-                        job.dispatches.push(Dispatch {
-                            shader: shader::WGSL,
-                            entry: "yliluoma",
-                            parameters,
-                            groups: [parameters.minimum.div_ceil(64), 1],
-                        });
-                    }
+                    job.indexed_dispatches(
+                        shader::WGSL,
+                        "yliluoma",
+                        Parameters::new(dimensions, 4, 0.0),
+                        tiling,
+                        WORDS_PER_DISPATCH,
+                    );
                     let mut indices = job.execute_read_checked(&job.work, bytes, check).await?;
                     indices.truncate(dimensions.pixel_count().expect("validated dimensions"));
                     Ok(prepared.into_indexed(

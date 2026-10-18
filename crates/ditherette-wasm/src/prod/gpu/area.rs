@@ -216,6 +216,45 @@ impl Drop for AreaJob<'_> {
 }
 
 impl<'a> AreaJob<'a> {
+    /// Packed-word halos keep odd widths exact. Each word is written once, even
+    /// when a row-band boundary falls inside it; field coordinates stay global.
+    fn indexed_dispatches(
+        &mut self,
+        shader: &'static str,
+        entry: &'static str,
+        parameters: Parameters,
+        tiling: super::GpuTiling,
+        word_limit: u32,
+    ) {
+        let rows = match tiling {
+            super::GpuTiling::Auto => 256,
+            super::GpuTiling::Disabled => parameters.height,
+            super::GpuTiling::Rows(rows) => rows.max(1),
+        };
+        let capacity = word_limit.min(
+            self.gpu
+                .device
+                .limits()
+                .max_compute_workgroups_per_dimension
+                * 64,
+        );
+        let mut first = 0;
+        for y in (0..parameters.height).step_by(rows as usize) {
+            let end = (parameters.width * (y + rows).min(parameters.height)).div_ceil(4);
+            while first < end {
+                let mut p = parameters;
+                p.diagonal = first;
+                p.minimum = (end - first).min(capacity);
+                self.dispatches.push(Dispatch {
+                    shader,
+                    entry,
+                    parameters: p,
+                    groups: [p.minimum.div_ceil(64), 1],
+                });
+                first += p.minimum;
+            }
+        }
+    }
     fn analysis(&mut self, parameters: Parameters) {
         for entry in [
             "colors",
