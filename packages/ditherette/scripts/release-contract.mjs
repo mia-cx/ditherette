@@ -58,10 +58,12 @@ export function validateFiles(files) {
 		if (name.startsWith('dist/'))
 			assert.ok(
 				/^dist\/[^/]+\.(?:js|d\.ts)$/.test(name) ||
-					/^dist\/wasm\/(?:scalar|threads)\/(?:LICENSE|README\.md|package\.json|ditherette_wasm(?:\.factory)?\.(?:js|d\.ts)|ditherette_wasm_bg\.wasm(?:\.d\.ts)?)$/.test(
+					/^dist\/wasm\/(?:scalar|threads|gpu)\/(?:LICENSE|README\.md|package\.json|ditherette_wasm(?:\.factory)?\.(?:js|d\.ts)|ditherette_wasm_bg\.wasm(?:\.d\.ts)?)$/.test(
 						name
 					) ||
-					/^dist\/wasm\/(?:scalar|threads)\/snippets\/[^/]+\/src\/(?:wasm\/)?[^/]+\.js$/.test(name),
+					/^dist\/wasm\/(?:scalar|threads|gpu)\/snippets\/[^/]+\/src\/(?:wasm\/)?[^/]+\.js$/.test(
+						name
+					),
 				name
 			);
 	}
@@ -76,7 +78,7 @@ export function validateFiles(files) {
 		'dist/threads.js'
 	])
 		assert.ok(names.includes(name), name);
-	for (const variant of ['scalar', 'threads']) {
+	for (const variant of ['scalar', 'threads', 'gpu']) {
 		for (const name of [
 			'ditherette_wasm_bg.wasm',
 			'ditherette_wasm.factory.js',

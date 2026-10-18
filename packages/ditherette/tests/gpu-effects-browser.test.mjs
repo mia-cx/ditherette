@@ -5,11 +5,15 @@ import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { chromium } from 'playwright';
 
 const root = new URL('../../../', import.meta.url);
+const installed = process.env.DITHERETTE_TEST_GPU_PACKAGE
+	? pathToFileURL(`${process.env.DITHERETTE_TEST_GPU_PACKAGE}/`)
+	: undefined;
 const mime = {
 	'.js': 'text/javascript',
 	'.mjs': 'text/javascript',
@@ -18,8 +22,12 @@ const mime = {
 	'.jpg': 'image/jpeg'
 };
 
-async function startServer(t, missingGpu = false) {
+async function startServer(t, missingGpu = false, isolated = false) {
 	const server = createServer(async (request, response) => {
+		if (isolated) {
+			response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+			response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+		}
 		try {
 			const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
 			if (path === '/') return response.end('<title>GPU package effects test</title>');
@@ -39,8 +47,13 @@ async function startServer(t, missingGpu = false) {
 				response.writeHead(404).end();
 				return;
 			}
-			const url = new URL(`.${path}`, root);
-			if (!url.href.startsWith(root.href)) {
+			const packaged = installed && path.startsWith('/packages/ditherette/dist/');
+			const directory = packaged ? installed : root;
+			const url = new URL(
+				packaged ? path.slice('/packages/ditherette/'.length) : `.${path}`,
+				directory
+			);
+			if (!url.href.startsWith(directory.href)) {
 				response.writeHead(404).end();
 				return;
 			}
@@ -471,6 +484,93 @@ test(
 		assert.deepEqual(result.actual, result.wanted);
 		assert.equal(result.execution.backend, 'cpu');
 		assert.equal(result.execution.fallback, result.capable ? 'Initialization' : 'NoAdapter');
+	}
+);
+
+test(
+	'all GPU resize filters preserve tiled output through the public browser worker',
+	{ timeout: 60000 },
+	async (t) => {
+		const origin = await startServer(t);
+		const { tab, errors } = await browser(t, origin, false);
+		const reports = await tab.evaluate(async () => {
+			const reports = [];
+			for (const photo of [
+				undefined,
+				'Celeste_Insta_selfie.png',
+				'Picking_at_thread.jpg',
+				'The_Quilt_banner.png'
+			]) {
+				let source;
+				if (photo) {
+					const bitmap = await createImageBitmap(
+						await (await fetch(`/benchmark-fixtures/${photo}`)).blob(),
+						{ premultiplyAlpha: 'none', colorSpaceConversion: 'none' }
+					);
+					const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+					const context = canvas.getContext('2d');
+					context.drawImage(bitmap, 0, 0);
+					source = {
+						width: bitmap.width,
+						height: bitmap.height,
+						data: new Uint8Array(context.getImageData(0, 0, bitmap.width, bitmap.height).data)
+					};
+					bitmap.close();
+				}
+				const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+					type: 'module'
+				});
+				try {
+					const result = await new Promise((resolve, reject) => {
+						worker.onmessage = (event) => {
+							if (event.currentTarget === worker) resolve(event.data);
+						};
+						worker.onerror = (event) => reject(Error(event.message));
+						worker.postMessage({ resize: true, source }, source ? [source.data.buffer] : []);
+					});
+					reports.push({ photo: photo ?? 'RGBA fixture', ...result });
+				} finally {
+					worker.terminate();
+				}
+			}
+			return reports;
+		});
+		assert.deepEqual(errors, []);
+		for (const result of reports) {
+			assert.equal(result.error, undefined, `${result.photo}: ${result.error}`);
+			assert.equal(result.calls, 60);
+			assert.ok(result.maximumByteDifference <= 2);
+			assert.equal(result.callbackRecovered, true);
+		}
+		t.diagnostic(JSON.stringify(reports));
+	}
+);
+
+test(
+	'explicit CPU tiling works in real scalar and threaded browser workers',
+	{ timeout: 60000 },
+	async (t) => {
+		const origin = await startServer(t, false, true);
+		const { tab, errors } = await browser(t, origin, false);
+		const result = await tab.evaluate(async () => {
+			const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+				type: 'module'
+			});
+			try {
+				return await new Promise((resolve, reject) => {
+					worker.onmessage = (event) => {
+						if (event.currentTarget === worker) resolve(event.data);
+					};
+					worker.onerror = (event) => reject(Error(event.message));
+					worker.postMessage({ tiling: true });
+				});
+			} finally {
+				worker.terminate();
+			}
+		});
+		assert.deepEqual(errors, []);
+		assert.equal(result.error, undefined, result.error);
+		assert.equal(result.calls, 18);
 	}
 );
 

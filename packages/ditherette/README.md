@@ -233,16 +233,14 @@ The package leaves display to you: upload `indices` and `results` as textures to
 It uses the production CPU's exact `ChannelTables` bytes and preserves every alpha byte.
 `createDitherette` and its synchronous operations keep their CPU behavior.
 
-Build and stage the optional artifact explicitly, after the ordinary package build:
+The ordinary package build includes scalar, threaded and GPU artifacts:
 
 ```sh
 pnpm package:build
-pnpm --filter ditherette-wasm exec node scripts/build.mjs gpu
-node packages/ditherette/scripts/stage-wasm.mjs gpu
 ```
 
-Ordinary staging removes previous GPU assets. This optional artifact has separate release qualification;
-these commands do not publish the package or clear its release gates.
+GPU execution remains opt-in at the factory. Including its assets does not clear
+the package's size review or release-qualification gates.
 Serve `dist/wasm/gpu/` alongside the package modules, including generated snippets and Wasm.
 The optional module loads by URL relative to `gpu-effects.js`, so bundling hosts must preserve that asset location.
 
@@ -256,6 +254,10 @@ effectsProcessor.dispose();
 ```
 
 `wasm` supplies an alternate scalar artifact; `gpuWasm` supplies an alternate GPU artifact.
+Set `fallback: 'error'` on either GPU facade to require GPU execution. Unavailable
+hardware, missing assets, unsupported stages and memory rejection then throw a
+structured error rather than allocating a CPU processor. GPU-only dithering also
+rejects the current hybrid CPU diffusion path. The default remains `fallback: 'cpu'`.
 Neither setting changes the other artifact. Missing WebGPU, optional assets, failed startup verification,
 unsupported/masked/mixed chains, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
 The facade reuses one verified device for repeated eligible calls. Any CPU fallback releases the device
@@ -309,7 +311,7 @@ Progress callback exceptions report `callback`, and `execution` updates only aft
 The host owns its source/slider generation guard and checks that guard before publishing an awaited image.
 This API applies effects only. Resize, dithering, palette indices, and indexed PNG export remain with the existing processor.
 
-## Optional GPU dithering
+## Optional GPU processing
 
 `createGpuDither(options)` uses the same optional artifact and scalar fallback inputs as
 `createGpuEffects`. Its asynchronous `ditherAndQuantize(request, signal?)` accepts the
@@ -317,6 +319,16 @@ ordinary request and returns owned indices with the exact supplied palette. All 
 metrics, Bayer/rectangular/blue-noise/random fields, and complete `smooth-area-v1` analysis
 run on GPU. Error diffusion uses GPU coverage with the unchanged CPU feedback and scan.
 GPU arithmetic may select a different palette entry at numerical boundaries.
+
+`quantize(request, signal?)` exposes GPU matching directly. `resize(request, signal?)`
+supports nearest, area, bilinear, trilinear, bicubic, Lanczos2 and Lanczos3, with
+every anchor and fixed/scale-aware support. Set `tiling: 'auto'` (default),
+`'disabled'`, or `{ height }` when constructing the facade to select bounded
+image tiles or whole-image resize. Tiled filters retain their source halos and
+global coordinates; trilinear retains its area mip reductions and per-level rounding.
+Standalone resize preserves hidden RGB; recipe-v2 coverage handling stays separate.
+Explicit row bands currently route indexed work to CPU, or reject with
+`fallback: 'error'`. Hardware workgroups are internal to each GPU algorithm.
 
 `process(request, signal?)` uses GPU dithering for prepared 1:1 images. Effects and resized
 outputs currently use scalar fallback. A CPU fallback retires GPU ownership for that facade;
@@ -490,7 +502,7 @@ When `resize()` receives unchanged width and height, it validates the request an
 No pixels are copied and no resize kernel runs. The returned bytes alias the caller's input.
 Other resize calls return independent images. Identity calls still enforce disposal, reentrancy and callback errors.
 
-`createDitherette({ memoryLimitBytes, threads, wasm })` accepts optional initialization settings.
+`createDitherette({ memoryLimitBytes, threads, tiling, wasm })` accepts optional initialization settings.
 
 - `memoryLimitBytes` defaults to 1.5 GiB and accepts integers from 1 byte through 2 GiB. Insufficient capacity fails with `memory-limit`.
 - `threads` defaults to `disabled`, which loads only scalar assets. `preferred` tries threads when capable and falls back after failed initialization cleanup.
@@ -498,6 +510,11 @@ Other resize calls return independent images. Identity calls still enforce dispo
 - `wasm` accepts bytes, an offset byte view, a URL/string, a Request, a Response, or a compiled `WebAssembly.Module`.
   Caller Response/Request bodies are cloned before initialization. Default assets resolve relative to the package.
   Custom inputs must match the selected variant. Preferred fallback retries the supplied input with scalar bindings; incompatible bytes remain an initialization error.
+- `tiling` independently selects `'auto'` (default), `'disabled'` for whole-image
+  execution, or `{ height, workers? }` for explicit row bands in resize, indexed
+  matching/fields and Yliluoma. Heights are 1–32768 rows; workers are 1–8 and
+  clamp to the initialized pool. Scalar instances execute bands sequentially.
+  All choices retain global coordinates and the continuous diffusion scan.
 
 Threads require cross-origin isolation, shared Wasm memory, module workers, and a caller context that permits blocking waits.
 Synchronous threaded methods run in a processing worker. Browser main JS supports scalar execution;
@@ -533,7 +550,7 @@ The `0.x` public target is browser ESM and browser bundlers. Node-based tests ar
 
 ## Workspace builds
 
-Run `pnpm package:build` at the repository root to compile both Wasm variants and the wrapper. Generated artifacts stay under this package's ignored `dist/` directory. The crate owns compilation; this package stages the scalar, threaded, and worker files for distribution.
+Run `pnpm package:build` at the repository root to compile all three Wasm variants and the wrapper. Generated artifacts stay under this package's ignored `dist/` directory. The crate owns compilation; this package stages scalar, threaded, GPU and worker files for distribution. CPU-only imports load no GPU artifact.
 
 After building, `pnpm --filter ditherette test:interface` checks the public types and boundary behavior.
 `pnpm --filter ditherette test:browser` packs and installs a temporary tarball, then tests Chromium, Firefox, and WebKit.

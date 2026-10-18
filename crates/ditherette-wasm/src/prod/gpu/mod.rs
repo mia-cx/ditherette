@@ -20,6 +20,7 @@ mod device;
 mod lookup;
 mod memory;
 mod parity;
+mod resize;
 mod stage;
 #[cfg(test)]
 mod tests;
@@ -29,6 +30,7 @@ pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
 pub use memory::LookupMemory;
 pub use parity::Parity;
+pub use resize::{GpuTiling, ResizeMemory};
 pub use stage::Stage;
 
 /// Cancellation is checked between GPU batches and ordinary CPU diffusion rows.

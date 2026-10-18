@@ -17,6 +17,7 @@ pub(super) const WGSL: &str = r#"struct Parameters {
 @group(0) @binding(0) var<storage, read> source: array<u32>;
 @group(0) @binding(1) var<storage, read_write> cells: array<f32>;
 @group(0) @binding(3) var<uniform> p: Parameters;
+@group(0) @binding(6) var<storage, read_write> lab_values: array<f32>;
 
 fn count() -> u32 { return p.width * p.height; }
 fn inside(xy: vec2<i32>) -> bool {
@@ -39,7 +40,9 @@ fn oklab_rgb(encoded: vec3<f32>) -> vec3<f32> {
                 1.9779985*l - 2.4285922*m + 0.4505937*s,
                 0.025904037*l + 0.78277177*m - 0.80867577*s);
 }
-fn oklab(i: u32) -> vec3<f32> { return oklab_rgb(rgb(i)); }
+fn oklab(i: u32) -> vec3<f32> {
+    return vec3(lab_values[3u*i], lab_values[3u*i+1u], lab_values[3u*i+2u]);
+}
 fn jump(a: u32, b: u32) -> f32 {
     let delta = oklab(a) - oklab(b);
     return min(sqrt(dot(delta, delta)), 1.0);

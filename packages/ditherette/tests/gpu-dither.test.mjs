@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { createDitherette, createGpuDither, DitheretteError } from '../dist/index.js';
+import {
+	createDitherette,
+	createGpuDither,
+	createGpuEffects,
+	DitheretteError
+} from '../dist/index.js';
 import { initializeGpuDither } from '../dist/gpu-dither.js';
 
 const wasm = await WebAssembly.compile(
@@ -41,6 +46,56 @@ async function expected(input) {
 	}
 }
 
+test('GPU-only calls reject absent hardware and unsupported hybrid work without CPU fallback', async () => {
+	// Proves a client can require GPU execution rather than silently receiving CPU work.
+	const gpu = await createGpuDither({ ...options, fallback: 'error' });
+	try {
+		await assert.rejects(gpu.ditherAndQuantize(request()), (error) => error.code === 'capability');
+		assert.equal(gpu.execution, undefined);
+	} finally {
+		gpu.dispose();
+	}
+	const effects = await createGpuEffects({ ...options, fallback: 'error' });
+	try {
+		await assert.rejects(
+			effects.applyEffects({
+				version: 1,
+				source: request().source,
+				effects: [{ effect: 'exposure', enabled: true, stops: 1 }]
+			}),
+			(error) => error.code === 'capability'
+		);
+	} finally {
+		effects.dispose();
+	}
+	const unsupported = initializeGpuDither(
+		{ privateGpuEffectsDispose() {} },
+		{ ...options, fallback: 'error' }
+	);
+	try {
+		const input = request();
+		input.dither = {
+			family: 'diffusion',
+			kernel: 'sierra',
+			feedback: 'matching',
+			serpentine: true,
+			strength: 1,
+			placement: { mode: 'everywhere' }
+		};
+		await assert.rejects(
+			unsupported.ditherAndQuantize(input),
+			(error) => error.code === 'unsupported-operation'
+		);
+		assert.equal(unsupported.execution, undefined);
+	} finally {
+		unsupported.dispose();
+	}
+	await assert.rejects(
+		createGpuDither({ ...options, fallback: false }),
+		(error) => error.code === 'invalid-settings' && error.path === 'fallback'
+	);
+});
+
 test('async indexed fallback preserves ordinary output, process recipes and owned storage', async () => {
 	const processor = await createGpuDither(options);
 	const input = request();
@@ -71,6 +126,41 @@ test('async indexed fallback preserves ordinary output, process recipes and owne
 		processor.ditherAndQuantize(input),
 		(error) => error instanceof DitheretteError && error.code === 'disposed'
 	);
+});
+
+test('async resize captures input before fallback and preserves identity and durable output', async () => {
+	// Proves the async boundary preserves the existing resize ownership contract.
+	const input = {
+		version: 1,
+		source: request().source,
+		output: { width: 13, height: 11, resize: { algorithm: 'trilinear', anchor: 'bottom-right' } }
+	};
+	const cpu = await createDitherette({ wasm });
+	const gpu = await createGpuDither({ ...options, tiling: { height: 3 } });
+	try {
+		const expected = cpu.resize(input);
+		const pending = gpu.resize(input);
+		input.source.data.fill(0);
+		const actual = await pending;
+		assert.deepEqual(actual, expected);
+		assert.equal(gpu.execution.backend, 'cpu');
+		const identity = {
+			...input,
+			output: { ...input.output, width: input.source.width, height: input.source.height }
+		};
+		assert.equal(await gpu.resize(identity), identity.source);
+		gpu.dispose();
+		assert.deepEqual(actual, expected);
+	} finally {
+		cpu.dispose();
+		gpu.dispose();
+	}
+	const required = await createGpuDither({ ...options, fallback: 'error' });
+	try {
+		await assert.rejects(required.resize(input), (error) => error.code === 'capability');
+	} finally {
+		required.dispose();
+	}
 });
 
 test('failed GPU initialization retires bindings before scalar allocation and preserves captured settings', async () => {

@@ -20,7 +20,7 @@ use sweeps::WGSL as SWEEPS;
 mod indexed;
 pub use indexed::IndexedMemory;
 
-/// Source snapshots/wire copies, GPU source, two packed triplet work planes,
+/// Source snapshots/wire copies, GPU source, three packed triplet work planes,
 /// packed coverage staging and independently owned host results. Compiler and
 /// driver internals are outside this requested-capacity accounting.
 #[derive(Debug, Clone, Copy)]
@@ -44,7 +44,7 @@ impl AreaMemory {
         let fixed =
             Self::FIXED_BYTES + dispatches * (512 + 2 * std::mem::size_of::<Dispatch>() as u64);
         Self {
-            required_bytes: fixed + pixels * 40 + coverage_bytes * 4,
+            required_bytes: fixed + pixels * 52 + coverage_bytes * 4,
             coverage_bytes,
         }
     }
@@ -190,6 +190,7 @@ struct AreaJob<'a> {
     #[cfg(test)]
     dimensions: ImageDimensions,
     source: wgpu::Buffer,
+    lab: wgpu::Buffer,
     cells: wgpu::Buffer,
     work: wgpu::Buffer,
     dispatches: Vec<Dispatch>,
@@ -200,6 +201,7 @@ struct AreaJob<'a> {
 impl Drop for AreaJob<'_> {
     fn drop(&mut self) {
         self.source.destroy();
+        self.lab.destroy();
         self.cells.destroy();
         self.work.destroy();
     }
@@ -279,6 +281,10 @@ impl<'a> AreaJob<'a> {
             #[cfg(test)]
             dimensions,
             source: source_buffer,
+            // Reconstruction revisits neighbours in four directions. Keep the
+            // unchanged source coordinates for this job instead of converting
+            // RGB again at every visit. Admission includes this temporary plane.
+            lab: gpu.buffer(if analysis { pixels * 12 } else { 4 }, storage),
             cells: gpu.buffer(
                 if analysis { pixels * 12 } else { 4 },
                 storage | wgpu::BufferUsages::COPY_SRC,
@@ -381,6 +387,7 @@ impl<'a> AreaJob<'a> {
             (3, false, true),
             (4, true, false),
             (5, true, false),
+            (6, false, false),
         ]
         .map(|(binding, read_only, uniform)| wgpu::BindGroupLayoutEntry {
             binding,
@@ -436,6 +443,10 @@ impl<'a> AreaJob<'a> {
                 wgpu::BindGroupEntry {
                     binding: 5,
                     resource: coverage.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: self.lab.as_entire_binding(),
                 },
             ],
         });

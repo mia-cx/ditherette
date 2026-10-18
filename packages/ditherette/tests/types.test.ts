@@ -24,6 +24,7 @@ const request: ResizeRequest = {
 };
 const processor: Promise<Ditherette> = createDitherette({
 	threads: 'disabled',
+	tiling: { height: 32, workers: 2 },
 	memoryLimitBytes: 1024
 });
 processor.then((instance) => {

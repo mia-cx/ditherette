@@ -69,6 +69,7 @@ export type {
 	Ditherette,
 	InitInput,
 	InitOptions,
+	TilingPolicy,
 	Progress,
 	ResizeAnchor,
 	ResizeRequest,

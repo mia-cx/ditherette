@@ -31,10 +31,10 @@ test('each role rebuilds only the crate release Wasm outputs before package comp
 	);
 	const calls = [];
 	const run = (program, args, cwd) => calls.push({ program, args, cwd });
-	const expected = ['scalar', 'threads'].map((variant, index) => ({
+	const expected = ['scalar', 'threads', 'gpu'].map((variant, index) => ({
 		program: 'cargo',
 		args: [
-			index === 0 ? '+1.97.0' : '+nightly-2024-08-02',
+			index === 1 ? '+nightly-2024-08-02' : '+1.97.0',
 			'clean',
 			'--package',
 			'ditherette-wasm',
@@ -54,9 +54,9 @@ test('each role rebuilds only the crate release Wasm outputs before package comp
 	await buildFreshPackage(directory, run, true);
 	const packageDirectory = path.join(directory, 'packages/ditherette');
 	assert.deepEqual(calls, [
-		...expected.slice(0, 2),
+		...expected.slice(0, 3),
 		{ program: 'pnpm', args: ['check:version'], cwd: packageDirectory },
-		...['scalar', 'threads'].map((variant) => ({
+		...['scalar', 'threads', 'gpu'].map((variant) => ({
 			program: 'pnpm',
 			args: ['--filter', 'ditherette-wasm', `build:${variant}`, '--bench-subjects'],
 			cwd: directory
@@ -65,7 +65,7 @@ test('each role rebuilds only the crate release Wasm outputs before package comp
 		{ program: 'pnpm', args: ['exec', 'tsc'], cwd: packageDirectory }
 	]);
 
-	for (const failingVariant of ['scalar', 'threads']) {
+	for (const failingVariant of ['scalar', 'threads', 'gpu']) {
 		const attempted = [];
 		await assert.rejects(
 			buildFreshPackage(directory, (program, args) => {
@@ -80,7 +80,7 @@ test('each role rebuilds only the crate release Wasm outputs before package comp
 });
 
 test('developer builds only add the explicit benchmark feature to normal compiler commands', async () => {
-	for (const variant of ['scalar', 'threads']) {
+	for (const variant of ['scalar', 'threads', 'gpu']) {
 		const normal = await buildConfiguration(variant);
 		const developer = await buildConfiguration(variant, true);
 		assert.deepEqual(developer, {
@@ -95,7 +95,7 @@ test('developer builds only add the explicit benchmark feature to normal compile
 	await assert.rejects(buildConfiguration('unknown'), /Expected scalar or threads/);
 });
 
-test('both artifact variants require matching developer markers and raw Wasm exports', async (t) => {
+test('all artifact variants require matching developer markers and raw Wasm exports', async (t) => {
 	const directory = await mkdtemp(path.join(tmpdir(), 'ditherette-build-mode-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	const header = [0, 97, 115, 109, 1, 0, 0, 0];
@@ -126,19 +126,19 @@ test('both artifact variants require matching developer markers and raw Wasm exp
 		0,
 		11 // An empty function body.
 	]);
-	for (const variant of ['scalar', 'threads']) {
+	for (const variant of ['scalar', 'threads', 'gpu']) {
 		const output = path.join(directory, 'dist/wasm', variant);
 		await mkdir(output, { recursive: true });
 		await writeFile(path.join(output, 'ditherette_wasm_bg.wasm'), Buffer.from(header));
 	}
 	await verifyPackageBuildMode(directory, false);
 	await assert.rejects(verifyPackageBuildMode(directory, true), /build mode/);
-	for (const variant of ['scalar', 'threads']) {
+	for (const variant of ['scalar', 'threads', 'gpu']) {
 		const output = path.join(directory, 'dist/wasm', variant);
 		await writeFile(path.join(output, 'ditherette_wasm_bg.wasm'), developer);
 	}
 	await assert.rejects(verifyPackageBuildMode(directory, true), /benchmark build marker/);
-	for (const variant of ['scalar', 'threads']) {
+	for (const variant of ['scalar', 'threads', 'gpu']) {
 		const output = path.join(directory, 'dist/wasm', variant);
 		await writeBenchmarkMarker(pathToFileURL(`${output}/`), variant);
 		assert.deepEqual(JSON.parse(await readFile(path.join(output, 'build-mode.json'))), {

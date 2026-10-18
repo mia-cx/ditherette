@@ -21,6 +21,77 @@ const request = (data = new Uint8Array([17, 31, 47, 127])) => ({
 const diagnostic = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
+test('explicit row bands and whole-image processing preserve resize and indexed output', async () => {
+	// Proves clients can select either schedule without changing image semantics.
+	const source = {
+		width: 37,
+		height: 19,
+		data: Uint8Array.from({ length: 37 * 19 * 4 }, (_, i) => (i * 41 + (i >> 2)) & 255)
+	};
+	const cpu = await createDitherette({ wasm: module, tiling: 'disabled' });
+	try {
+		const resized = {
+			version: 1,
+			source,
+			output: {
+				width: 23,
+				height: 11,
+				resize: { algorithm: 'lanczos3', anchor: 'bottom-right', support: 'scale-aware' }
+			},
+			onProgress() {}
+		};
+		const indexed = {
+			version: 1,
+			source,
+			palette: [
+				{ kind: 'color', rgb: [0, 0, 0] },
+				{ kind: 'color', rgb: [255, 255, 255] },
+				{ kind: 'transparent' }
+			],
+			alpha: { mode: 'preserve', threshold: 128 },
+			matching: 'oklab-euclidean',
+			dither: {
+				family: 'separable',
+				perturb: {
+					field: { algorithm: 'bayer', size: '16' },
+					space: 'oklab',
+					strength: 0.3,
+					placement: { mode: 'everywhere' }
+				}
+			},
+			onProgress() {}
+		};
+		for (const tiling of ['auto', { height: 1, workers: 1 }, { height: 7, workers: 8 }]) {
+			const tiled = await createDitherette({ wasm: module, tiling });
+			try {
+				assert.deepEqual(tiled.resize(resized), cpu.resize(resized));
+				assert.deepEqual(tiled.ditherAndQuantize(indexed), cpu.ditherAndQuantize(indexed));
+				const mixing = {
+					...indexed,
+					dither: { family: 'yliluoma', size: '4', placement: { mode: 'everywhere' } }
+				};
+				assert.deepEqual(tiled.ditherAndQuantize(mixing), cpu.ditherAndQuantize(mixing));
+			} finally {
+				tiled.dispose();
+			}
+		}
+	} finally {
+		cpu.dispose();
+	}
+	for (const tiling of [
+		null,
+		false,
+		{ height: 0 },
+		{ height: 32769 },
+		{ height: 4, workers: 9 },
+		{ height: 4, workers: null }
+	])
+		await assert.rejects(
+			createDitherette({ wasm: module, tiling }),
+			(error) => error.code === 'invalid-settings' && error.path.startsWith('tiling')
+		);
+});
+
 // A 1x1 -> 2x1 nearest resize owns its preparation record, 12 pixel bytes and 12 map bytes.
 // Identity has no preparation now. Probe a real resize; other filter formulas stay independent.
 const resizeOverhead = await (async () => {
