@@ -226,6 +226,17 @@ fn curves(p:u32,source:vec3<f32>,s:f32)->vec3<f32> {
 fn blend(input:vec3<f32>,output:vec3<f32>,s:f32)->vec3<f32> {
     if s==1.0 {return output;} if s==0.0 {return input;} return input+s*(output-input);
 }
+fn levels_unit(value:f32,p:u32)->f32 {
+    let bits=bitcast<u32>(value);
+    if (bits&0x80000000u)!=0u || bits<=code[p] {return 0.0;}
+    if bits>=code[p+1u] {return 1.0;}
+    var v=value;
+    if f(p+8u)>1.0 {
+        if (bits>>23u)==0u {v=f32(bits&0x7fffffu)*0.00000011920928955078125;}
+        else {v*=f(p+8u);}
+    }
+    return clamp((v-f(p+6u))/(f(p+7u)-f(p+6u)),0.0,1.0);
+}
 fn recolour(p:u32,rgb:vec3<f32>,s:f32)->vec3<f32> {
     let model=code[p+7u]; var c:vec3<f32>;
     switch model {
@@ -266,7 +277,7 @@ fn main(@builtin(global_invocation_id) id:vec3<u32>) {
         if m!=0.0 {
             switch tag {
                 case 0u: {
-                    var t=clamp((rgb-f(p))/(f(p+1u)-f(p)),vec3(0.0),vec3(1.0));
+                    var t=vec3(levels_unit(rgb.r,p),levels_unit(rgb.g,p),levels_unit(rgb.b,p));
                     if f(p+2u)!=1.0 {t=pow(t,vec3(1.0/f(p+2u)));}
                     let mapped=f(p+3u)+(f(p+4u)-f(p+3u))*t;
                     for(var k=0u;k<3u;k++) {if (code[p+5u]&(1u<<k))!=0u {out[k]=mapped[k];}}

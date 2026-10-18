@@ -416,13 +416,30 @@ impl Code {
                     Channel::Blue => 4,
                 };
                 let ptr = self.floats([
-                    c.input.black,
+                    if c.input.black == 0.0 {
+                        0.0
+                    } else {
+                        c.input.black
+                    },
                     c.input.white,
                     c.gamma,
                     c.output.black,
                     c.output.white,
                 ]);
                 self.0.push(channels);
+                // Normalize subnormal-width intervals before shader subtraction.
+                // Endpoint bits stay separate so denormal flushing cannot turn
+                // black into white or make an out-of-range quotient overflow.
+                let scale = if c.input.white - c.input.black < f32::MIN_POSITIVE {
+                    f32::from_bits(0x7e800000) // 2^126
+                } else {
+                    1.0
+                };
+                self.floats([
+                    (f64::from(c.input.black) * f64::from(scale)) as f32,
+                    (f64::from(c.input.white) * f64::from(scale)) as f32,
+                    scale,
+                ]);
                 (0, ptr)
             }
             BuiltinEffect::BrightnessContrast(c) => {
@@ -595,6 +612,31 @@ mod tests {
             maximum = maximum.max(parity.max_byte_difference);
         }
         eprintln!("pointwise differing pixels {differences}, max byte {maximum}");
+    }
+
+    /// Proves valid narrow Levels ranges saturate endpoints without overflow,
+    /// including subnormal widths after an unrounded mixed-effect carrier.
+    #[test]
+    fn mixed_levels_preserve_narrow_and_subnormal_endpoints() {
+        let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+            return;
+        };
+        let dimensions = ImageDimensions::new(3, 1).unwrap();
+        let rgba = [0, 0, 0, 0, 1, 2, 3, 127, 255, 255, 255, 255];
+        for (black, white) in [(0.0, 1e-37), (0.0, 1e-44), (1e-37, 1.000001e-37)] {
+            let mut steps = vec![json!({"effect":"exposure","enabled":true,"stops":4}); 3];
+            steps.push(json!({"effect":"hue-saturation","enabled":true,"hue":0,"saturation":0,"lightness":0}));
+            steps.push(json!({"effect":"levels","enabled":true,"channel":"rgb",
+                "input":{"black":black,"white":white},"gamma":1,"output":{"black":0,"white":1}}));
+            let stage =
+                Pointwise::new(serde_json::from_value(Value::Array(steps)).unwrap(), None).unwrap();
+            let mut expected = rgba.to_vec();
+            stage.cpu(&mut expected);
+            let actual = block_on(backend.pointwise(&stage, dimensions, &rgba, u64::MAX)).unwrap();
+            assert_eq!(actual, expected, "{black}..{white}");
+            assert_eq!(&actual[0..3], &[0; 3]);
+            assert_eq!(&actual[4..7], &[255; 3]);
+        }
     }
 
     /// Proves an over-budget control upload is rejected before GPU execution,
