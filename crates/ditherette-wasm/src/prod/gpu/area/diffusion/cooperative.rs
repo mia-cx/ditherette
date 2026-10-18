@@ -111,6 +111,9 @@ fn cooperative(@builtin(local_invocation_index) lane:u32) {
                 cells[at]=updated;
             }
         }
+        // Cross-lane storage writes feed the next pixel's recurrence. The
+        // shared matching/error records additionally need workgroup ordering.
+        storageBarrier();
         workgroupBarrier();
         if lane==0u {
             if atomicLoad(&scatter_invalid)!=0u {failed=1u;work[(count()+3u)/4u]=1u;}
