@@ -50,7 +50,7 @@ export type Bindings = Pick<
 	| 'privateMeasurePaletteFit'
 	| 'privateEffectMask'
 > &
-	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse' | 'privateExecutionPolicy'>>;
+	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse' | 'privateConfigureTiling'>>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
 
@@ -203,10 +203,10 @@ export function initializeProcessor(
 	if (status !== 0) throw failure(bindings, status);
 	if (tiling !== 'auto') {
 		try {
-			if (!bindings.privateExecutionPolicy)
+			if (!bindings.privateConfigureTiling)
 				throw new DitheretteError('capability', 'tiling', 'This artifact has no tiling controls.');
 			for (let stage = 0; stage < 3; stage++) {
-				const status = bindings.privateExecutionPolicy(
+				const status = bindings.privateConfigureTiling(
 					stage,
 					tiling === 'disabled' ? 0 : tiling.height,
 					tiling === 'disabled' ? 1 : (tiling.workers ?? 8),
