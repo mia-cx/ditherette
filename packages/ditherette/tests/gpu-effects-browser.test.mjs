@@ -83,7 +83,8 @@ for (const mode of [
 	'diffusion',
 	'process',
 	'gpu-tiling',
-	'pixels'
+	'pixels',
+	'unified'
 ])
 	test(
 		`real indexed dither worker through Chromium CDP (${mode})`,
@@ -102,6 +103,7 @@ for (const mode of [
 						};
 						worker.onerror = (event) => reject(Error(event.message));
 						worker.postMessage({
+							unified: mode === 'unified',
 							fallback: ![
 								'gpu',
 								'yliluoma',
@@ -123,7 +125,11 @@ for (const mode of [
 			}, mode);
 			assert.equal(result.error, undefined, result.error);
 			assert.deepEqual(errors, []);
-			if (mode === 'pixels') {
+			if (mode === 'unified') {
+				assert.equal(result.calls, 22);
+				assert.equal(result.deviceRequests, 2);
+				assert.equal(result.retired, true);
+			} else if (mode === 'pixels') {
 				assert.equal(result.calls, 62);
 				assert.ok(result.maximum <= 1);
 				assert.equal(result.exactTiles, true);

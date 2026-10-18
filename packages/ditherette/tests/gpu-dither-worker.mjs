@@ -24,6 +24,121 @@ self.onmessage = async (event) => {
 			{ kind: 'color', rgb: [90, 120, 100] },
 			{ kind: 'transparent' }
 		];
+		if (event.data.unified) {
+			// Proves callers can mix operations through one factory/device and that
+			// CPU-only analysis retires that same owner for all subsequent methods.
+			let deviceRequests = 0;
+			const requestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
+			navigator.gpu.requestAdapter = async (...args) => {
+				const adapter = await requestAdapter(...args);
+				if (adapter) {
+					const requestDevice = adapter.requestDevice.bind(adapter);
+					adapter.requestDevice = (...args) => {
+						deviceRequests++;
+						return requestDevice(...args);
+					};
+				}
+				return adapter;
+			};
+			let calls = 0;
+			for (const tiling of [true, false]) {
+				const cpu = await createDitherette({ engine: 'cpu', tiling });
+				const gpu = await createDitherette({ engine: 'gpu', tiling });
+				const base = {
+					version: 1,
+					source,
+					palette,
+					alpha: { mode: 'preserve', threshold: 127.9 },
+					matching: 'srgb-euclidean'
+				};
+				const effects = {
+					version: 1,
+					source,
+					effects: [{ effect: 'exposure', enabled: true, stops: 0.33 }]
+				};
+				const perturb = {
+					space: 'srgb',
+					strength: 0.3,
+					field: { algorithm: 'bayer', size: '16' },
+					placement: { mode: 'smooth-area-v1', sampleSize: 20, contrastThreshold: 0.12 }
+				};
+				const dither = { family: 'separable', perturb };
+				const output = {
+					width: 29,
+					height: 23,
+					resize: { algorithm: 'nearest', anchor: 'center' }
+				};
+				const analysis = { ...effects, context: { palette, space: 'oklab' } };
+				const fit = { ...analysis, look: 'natural', space: 'oklab' };
+				try {
+					for (const [method, input, backend] of [
+						['applyEffects', effects, 'gpu'],
+						['quantize', base, 'gpu'],
+						['effectMask', { ...effects, mask: [] }, 'gpu'],
+						['resize', { version: 1, source, output }, 'gpu'],
+						['perturb', { version: 1, source, perturb }, 'gpu'],
+						['ditherAndQuantize', { ...base, dither }, 'gpu'],
+						[
+							'ditherAndQuantize',
+							{
+								...base,
+								dither: {
+									family: 'diffusion',
+									kernel: 'sierra',
+									strength: 1,
+									serpentine: true,
+									feedback: 'matching',
+									placement: { mode: 'everywhere' }
+								}
+							},
+							'gpu'
+						],
+						[
+							'process',
+							{
+								source,
+								palette,
+								recipe: {
+									version: 2,
+									effects: effects.effects,
+									output,
+									alpha: base.alpha,
+									match: base.matching,
+									dither
+								}
+							},
+							'gpu'
+						],
+						['analyzePaletteFit', fit, 'cpu'],
+						['applyEffects', effects, 'cpu'],
+						['quantize', base, 'cpu']
+					]) {
+						const wanted = await cpu[method](input),
+							actual = await gpu[method](input);
+						if (gpu.execution.backend !== backend)
+							throw Error(`${method} expected ${backend}: ${JSON.stringify(gpu.execution)}`);
+						if (actual.indices) {
+							if (actual.indices.some((value, i) => value !== wanted.indices[i]))
+								throw Error(`${method} indices differ`);
+						} else if (actual.data) {
+							if (
+								actual.data.some(
+									(value, i) => Math.abs(value - wanted.data[i]) > (i % 4 === 3 ? 0 : 1)
+								)
+							)
+								throw Error(`${method} RGBA differs`);
+						} else if (JSON.stringify(actual) !== JSON.stringify(wanted))
+							throw Error(`${method} analysis differs`);
+						calls++;
+					}
+				} finally {
+					gpu.dispose();
+					cpu.dispose();
+				}
+			}
+			self.postMessage({ calls, deviceRequests, retired: true });
+			return;
+		}
 		if (event.data.pixels) {
 			// Proves standalone RGBA calls use GPU execution, preserve alpha/hidden
 			// colours and retain their ordinary result across row-band policies.

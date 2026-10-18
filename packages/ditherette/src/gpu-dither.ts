@@ -1,5 +1,11 @@
 import { DitheretteError } from './errors.js';
-import { createScalar, normalizeWasmInput } from './scalar.js';
+import { normalizeWasmInput } from './scalar.js';
+import { createCpu } from './cpu.js';
+import {
+	validateApplyEffects,
+	validateAnalyzeRecolour,
+	validateAnalyzePaletteFit
+} from './validation-effects.js';
 import {
 	anchors,
 	field,
@@ -22,11 +28,20 @@ import {
 	fallbackPolicy,
 	gpuFallbackError,
 	gpuEffectsDecoderBytes,
+	initializeGpuEffects,
+	capturedEffects,
 	type GpuEffectsBindings,
 	type GpuEffectsOptions
 } from './gpu-effects.js';
 import type {
 	DitherAndQuantizeRequest,
+	ApplyEffectsRequest,
+	EffectMaskRequest,
+	CpuInitOptions,
+	AnalyzeRecolourRequest,
+	AnalyzePaletteFitRequest,
+	FitLook,
+	PaletteFitSpace,
 	Ditherette,
 	DiffusionKernel,
 	Effect,
@@ -64,9 +79,29 @@ export interface DitherExecution {
 	readonly analysisReused?: boolean;
 }
 
-/** Serial asynchronous image/indexed processing. A GPU failure retires this facade's artifact. */
-export interface GpuDither {
+/** Keep the CPU operation surface available on the asynchronous engine. */
+type AsyncProcessing = {
+	[K in Exclude<keyof Ditherette, 'dispose'>]: (
+		...args: Parameters<Ditherette[K]>
+	) => Promise<ReturnType<Ditherette[K]>>;
+};
+/** Serial asynchronous processing. A GPU failure retires this facade's artifact. */
+export interface GpuDither extends AsyncProcessing {
 	readonly execution: DitherExecution | undefined;
+	/** Effects share this processor's single device and retirement lifetime. */
+	applyEffects(request: ApplyEffectsRequest): Promise<Rgba8Image>;
+	/** Read a mask from the continuous effects carrier on the same device. */
+	effectMask(request: EffectMaskRequest): Promise<Rgba8Image>;
+	/** Recipe analysis uses CPU fallback; strict GPU policy rejects these calls. */
+	analyzeRecolour(
+		request: AnalyzeRecolourRequest
+	): Promise<ReturnType<Ditherette['analyzeRecolour']>>;
+	analyzePaletteFit(
+		request: AnalyzePaletteFitRequest
+	): Promise<ReturnType<Ditherette['analyzePaletteFit']>>;
+	measurePaletteFit(
+		request: AnalyzePaletteFitRequest
+	): Promise<ReturnType<Ditherette['measurePaletteFit']>>;
 	/** All resize filters, with global anchors, bounded halo tiles and independent output. */
 	resize(request: ResizeRequest, signal?: AbortSignal): Promise<Rgba8Image>;
 	/** Match directly on GPU without a dither field. */
@@ -284,15 +319,16 @@ function output(
 	return { width: input.outputWidth, height: input.outputHeight, resize };
 }
 
-/** Load the opt-in artifact without affecting synchronous createDitherette or inert imports. */
+/** Compatibility factory with CPU diffusion by default; prefer createDitherette({ engine: 'gpu' }). */
 export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDither> {
 	const input = object(
 		options === undefined ? {} : options,
-		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling', 'diffusionBackend'],
+		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling', 'diffusionBackend', 'threads'],
 		'invalid-settings',
 		''
 	);
 	const normalized = validateOptions({
+		threads: field(input, 'threads'),
 		memoryLimitBytes: field(input, 'memoryLimitBytes'),
 		wasm: field(input, 'wasm'),
 		tiling: field(input, 'tiling')
@@ -330,6 +366,7 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 export function initializeGpuDither(
 	bindings: GpuDitherBindings | undefined,
 	options: {
+		threads?: CpuInitOptions['threads'];
 		wasm?: InitInput;
 		memoryLimitBytes: number;
 		fallback?: 'cpu' | 'error';
@@ -760,7 +797,8 @@ export function initializeGpuDither(
 			prepared = request.source;
 			effected = undefined;
 			resized = undefined;
-			cpu ??= await createScalar({
+			cpu ??= await createCpu({
+				threads: options.threads,
 				wasm: options.wasm,
 				memoryLimitBytes: available,
 				tiling: options.tiling
@@ -795,10 +833,140 @@ export function initializeGpuDither(
 			active = false;
 		}
 	};
+	// Borrow the existing artifact for effects. The forwarding closures never
+	// retain a Wasm instance after retirement, and closing the borrowed facade
+	// leaves a healthy owner/device available for the next indexed operation.
+	const runEffects = async (request: ApplyEffectsRequest | EffectMaskRequest, mask = false) => {
+		requireIdle();
+		active = true;
+		analysis = undefined;
+		cpu?.dispose();
+		cpu = undefined;
+		let closing = false;
+		const current = () => {
+			if (!bindings) throw gpuFallbackError(unavailable);
+			return bindings;
+		};
+		const bridge: GpuEffectsBindings | undefined = bindings
+			? {
+					privateGpuEffectsPlanningBytes: (...args) =>
+						current().privateGpuEffectsPlanningBytes(...args),
+					privateGpuEffectsPlan: (...args) => current().privateGpuEffectsPlan(...args),
+					privateGpuApplyEffects: (...args) => current().privateGpuApplyEffects(...args),
+					privateGpuEffectsAdapter: () => current().privateGpuEffectsAdapter(),
+					privateGpuEffectsDetect: async (limit) => {
+						if (detected) return '';
+						const reason = await current().privateGpuDitherDetect(limit);
+						detected = !reason;
+						return reason;
+					},
+					privateGpuEffectsDispose: () => {
+						if (!closing) retire('Failed');
+					}
+				}
+			: undefined;
+		const effects = initializeGpuEffects(bridge, options, unavailable);
+		try {
+			const result = mask ? await effects.effectMask(request) : await effects.applyEffects(request);
+			execution = effects.execution;
+			if (!bindings && execution?.fallback) unavailable = execution.fallback;
+			return result;
+		} finally {
+			closing = true;
+			effects.dispose();
+			active = false;
+		}
+	};
+	const cpuAnalysis = async <T>(
+		prepare: () => {
+			input: ReturnType<typeof validateApplyEffects>;
+			invoke: (processor: Ditherette, request: ReturnType<typeof capturedEffects>) => T;
+		}
+	) => {
+		requireIdle();
+		active = true;
+		try {
+			const { input, invoke } = prepare();
+			if (options.fallback === 'error') throw gpuFallbackError('UnsupportedStage');
+			const bytes = input.data.byteLength;
+			if (bytes + gpuEffectsDecoderBytes(input.effects.json.length) >= options.memoryLimitBytes)
+				throw gpuFallbackError('MemoryLimit');
+			retire('UnsupportedStage');
+			let data: Uint8Array;
+			try {
+				data = new Uint8Array(bytes);
+				Uint8Array.prototype.set.call(data, input.data);
+			} catch {
+				throw new DitheretteError(
+					'wasm-memory-unavailable',
+					'source.data',
+					'Source snapshot could not be allocated or copied.'
+				);
+			}
+			const captured = capturedEffects(input, {
+				width: input.sourceWidth,
+				height: input.sourceHeight,
+				data
+			});
+			const available = options.memoryLimitBytes - bytes;
+			if (cpu && cpuAvailableBytes !== available) {
+				cpu.dispose();
+				cpu = undefined;
+			}
+			cpu ??= await createCpu({
+				wasm: options.wasm,
+				memoryLimitBytes: available,
+				threads: options.threads,
+				tiling: options.tiling
+			});
+			cpuAvailableBytes = available;
+			const result = invoke(cpu, captured);
+			execution = { backend: 'cpu', fallback: 'UnsupportedStage' };
+			return result;
+		} finally {
+			active = false;
+		}
+	};
+	const paletteAnalysis = <T>(
+		request: AnalyzePaletteFitRequest,
+		invoke: (processor: Ditherette, request: AnalyzePaletteFitRequest) => T
+	) =>
+		cpuAnalysis(() => {
+			const input = validateAnalyzePaletteFit(request);
+			return {
+				input: { ...input, space: input.contextSpace },
+				invoke: (processor: Ditherette, captured: ReturnType<typeof capturedEffects>) => {
+					const analysis = {
+						...captured,
+						look: ['fitted', 'natural', 'vivid'][input.look] as FitLook,
+						space: spaces[input.space] as PaletteFitSpace
+					};
+					return invoke(processor, analysis);
+				}
+			};
+		});
 	return {
 		get execution() {
 			return execution;
 		},
+		applyEffects: (request) => runEffects(request),
+		effectMask: (request) => runEffects(request, true),
+		analyzeRecolour: (request) =>
+			cpuAnalysis(() => {
+				const input = validateAnalyzeRecolour(request);
+				return {
+					input,
+					invoke: (processor, captured) =>
+						processor.analyzeRecolour({
+							...captured,
+							context: { ...captured.context, space: spaces[input.space] as WorkingSpace }
+						})
+				};
+			}),
+		analyzePaletteFit: (request) =>
+			paletteAnalysis(request, (processor, input) => processor.analyzePaletteFit(input)),
+		measurePaletteFit: (request) =>
+			paletteAnalysis(request, (processor, input) => processor.measurePaletteFit(input)),
 		async perturb(request, signal) {
 			requireIdle();
 			const { data, onProgress, sourceWidth, sourceHeight, ...policy } = normalize(() =>
@@ -949,7 +1117,8 @@ export function initializeGpuDither(
 				}
 				retire(reason || 'Failed');
 				if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
-				cpu ??= await createScalar({
+				cpu ??= await createCpu({
+					threads: options.threads,
 					wasm: options.wasm,
 					memoryLimitBytes: available,
 					tiling: options.tiling

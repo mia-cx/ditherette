@@ -178,6 +178,10 @@ observations remain diagnostic; no speedup claim comes from profiling samples al
 The remaining ports cover all resize filters, Yliluoma, every continuous diffusion
 kernel and enabled effect chains. Keep CPU implementations available in the package.
 The synchronous CPU interface remains compatible; its GPU counterpart is asynchronous.
+Select either through `createDitherette({ engine: 'cpu' | 'gpu', tiling: true | false })`.
+The GPU engine shares one artifact/device across the common operation surface and
+defaults to GPU diffusion. CPU-only analysis follows the selected fallback policy;
+the legacy GPU factories retain their earlier defaults.
 Backend, fallback and execution tiling are independent client choices. A GPU-only
 request must reject an unavailable stage, including a CPU-only hybrid, instead of
 silently returning CPU output. The website consumes these package choices.

@@ -128,9 +128,12 @@ export function dimensions(
 }
 
 /** Validate raw options before loading artifacts or allocating Wasm memory. */
-export function validateOptions(
-	value: unknown
-): Required<Pick<InitOptions, 'threads' | 'memoryLimitBytes' | 'tiling'>> & { wasm?: InitInput } {
+export function validateOptions(value: unknown): Required<
+	Pick<InitOptions, 'threads' | 'memoryLimitBytes'>
+> & {
+	wasm?: InitInput;
+	tiling: Exclude<TilingPolicy, boolean>;
+} {
 	try {
 		const options = object(
 			value === undefined ? {} : value,
@@ -144,8 +147,13 @@ export function validateOptions(
 			throw new DitheretteError('invalid-settings', 'threads', 'Unknown thread policy.');
 		}
 		const optionTiling = field(options, 'tiling');
-		const rawTiling = optionTiling === undefined ? 'auto' : optionTiling;
-		let tiling: TilingPolicy;
+		const rawTiling =
+			optionTiling === undefined || optionTiling === true
+				? 'auto'
+				: optionTiling === false
+					? 'disabled'
+					: optionTiling;
+		let tiling: Exclude<TilingPolicy, boolean>;
 		if (rawTiling === 'auto' || rawTiling === 'disabled') tiling = rawTiling;
 		else {
 			const bands = object(rawTiling, ['height', 'workers'], 'invalid-settings', 'tiling');

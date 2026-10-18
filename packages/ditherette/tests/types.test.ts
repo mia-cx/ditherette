@@ -10,6 +10,14 @@ import type {
 	ProcessRequest
 } from '../src/index.js';
 
+async function configurable(options?: import('../src/index.js').InitOptions) {
+	const instance = await createDitherette(options);
+	const result: Rgba8Image = await instance.resize(request);
+	instance.dispose();
+	return result;
+}
+void configurable;
+
 const progress: NonNullable<ProcessRequest['onProgress']> = (event) => {
 	const stage: import('../src/index.js').Progress['stage'] = event.stage;
 	const completed: number | undefined = event.completed;
@@ -27,6 +35,21 @@ const processor: Promise<Ditherette> = createDitherette({
 	tiling: { height: 32, workers: 2 },
 	memoryLimitBytes: 1024
 });
+const explicitCpu: Promise<Ditherette> = createDitherette({ engine: 'cpu', tiling: false });
+const explicitGpu = createDitherette({ engine: 'gpu', tiling: true });
+explicitGpu.then((instance) => {
+	const rgba: Promise<Rgba8Image> = instance.resize(request);
+	const applied: Promise<Rgba8Image> = instance.applyEffects({
+		version: 1,
+		source: request.source,
+		effects: []
+	});
+	void [rgba, applied];
+	instance.dispose();
+});
+void explicitCpu;
+// @ts-expect-error Engine selection is explicit, not a thread or capability policy.
+createDitherette({ engine: 'automatic' });
 processor.then((instance) => {
 	const image: Rgba8Image = instance.resize(request);
 	instance.resize({ ...request, onProgress: progress });

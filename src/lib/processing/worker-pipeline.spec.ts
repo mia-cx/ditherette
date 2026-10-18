@@ -137,6 +137,11 @@ describe('ProcessorWorkerPipeline', () => {
 			resize: unexpectedGpuStage,
 			quantize: unexpectedGpuStage,
 			perturb: unexpectedGpuStage,
+			applyEffects: unexpectedGpuStage,
+			effectMask: unexpectedGpuStage,
+			analyzeRecolour: unexpectedGpuStage,
+			analyzePaletteFit: unexpectedGpuStage,
+			measurePaletteFit: unexpectedGpuStage,
 			process: async (_request, signal) =>
 				new Promise((_resolve, reject) => {
 					if (!signal) throw new Error('Worker must provide cancellation');
@@ -167,6 +172,11 @@ describe('ProcessorWorkerPipeline', () => {
 				resize: unexpectedGpuStage,
 				quantize: unexpectedGpuStage,
 				perturb: unexpectedGpuStage,
+				applyEffects: unexpectedGpuStage,
+				effectMask: unexpectedGpuStage,
+				analyzeRecolour: unexpectedGpuStage,
+				analyzePaletteFit: unexpectedGpuStage,
+				measurePaletteFit: unexpectedGpuStage,
 				process: async () => {
 					throw error;
 				},
@@ -180,6 +190,11 @@ describe('ProcessorWorkerPipeline', () => {
 				resize: unexpectedGpuStage,
 				quantize: unexpectedGpuStage,
 				perturb: unexpectedGpuStage,
+				applyEffects: unexpectedGpuStage,
+				effectMask: unexpectedGpuStage,
+				analyzeRecolour: unexpectedGpuStage,
+				analyzePaletteFit: unexpectedGpuStage,
+				measurePaletteFit: unexpectedGpuStage,
 				process: async (request) => processorMock().process(request),
 				ditherAndQuantize: async () => {
 					throw new Error('Expected complete processing');
@@ -351,7 +366,7 @@ describe('ProcessorWorkerPipeline', () => {
 				request.onProgress?.({ stage: 'complete' });
 				return processor.process(request);
 			}
-		});
+		} satisfies Ditherette);
 		const progress = vi.fn();
 		await loadedPipeline().handleAsync(processRequest(), progress);
 		expect(progress.mock.calls).toContainEqual(['quantize', 0.5, { completed: 1, total: 2 }]);

@@ -3,19 +3,32 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 /** Independent row bands retain global coordinates. Diffusion keeps its continuous scan. */
 export type TilingPolicy =
+	| boolean
 	| 'auto'
 	| 'disabled'
 	| { readonly height: number; readonly workers?: number };
 
 /** Scalar is the default. Preferred threads fall back after failed capability checks or pool initialization. */
-export interface InitOptions {
+export interface CpuInitOptions {
+	readonly engine?: 'cpu';
 	/** Threaded synchronous calls require a worker context permitting blocking waits. */
 	readonly threads?: 'disabled' | 'preferred' | 'required';
-	/** Automatic measured policy, whole-image execution, or explicit row bands (1–32768 rows, 1–8 workers). */
+	/** True (default) selects automatic tiling; false selects whole-image execution. Objects set explicit row bands. */
 	readonly tiling?: TilingPolicy;
 	readonly memoryLimitBytes?: number;
 	readonly wasm?: InitInput;
 }
+
+/** GPU calls are asynchronous; CPU fallback and image tiling remain independent. */
+export interface GpuInitOptions extends Omit<CpuInitOptions, 'engine'> {
+	readonly engine: 'gpu';
+	readonly gpuWasm?: InitInput;
+	readonly fallback?: 'cpu' | 'error';
+	/** GPU by default; cpu retains the CPU recurrence with GPU preparation. */
+	readonly diffusionBackend?: 'cpu' | 'gpu';
+}
+
+export type InitOptions = CpuInitOptions | GpuInitOptions;
 
 /** Already-cropped, packed RGBA8. Processing never changes or retains the caller's bytes. */
 export interface Rgba8Image {
