@@ -756,7 +756,7 @@ export function initializeGpuDither(
 		},
 		async quantize(request, signal) {
 			requireIdle();
-			const input = validateQuantize(request);
+			const input = normalize(() => validateQuantize(request));
 			return run(
 				{
 					...input,

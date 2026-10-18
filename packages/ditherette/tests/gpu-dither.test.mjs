@@ -18,7 +18,7 @@ test('request getters cannot dispose an entered GPU call and validation failures
 	// Proves normalisation holds the public active-call guard.
 	const gpu = await createGpuDither(options);
 	try {
-		for (const method of ['ditherAndQuantize', 'process']) {
+		for (const method of ['ditherAndQuantize', 'process', 'quantize']) {
 			const dither = request();
 			const input =
 				method === 'process'
@@ -39,6 +39,7 @@ test('request getters cannot dispose an entered GPU call and validation failures
 						}
 					: dither;
 			const source = input.source;
+			if (method === 'quantize') delete input.dither;
 			Object.defineProperty(input, 'source', {
 				get() {
 					assert.throws(

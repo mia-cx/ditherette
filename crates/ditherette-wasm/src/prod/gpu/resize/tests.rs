@@ -12,6 +12,31 @@ use crate::{
 use pollster::block_on;
 
 struct InputBytes<'a>(&'a [u8]);
+
+/// A whole-image trilinear reduction first owns a 2048x2048 float mip and
+/// a 2048x4096 float horizontal intermediate beside three 64 MiB source copies.
+#[test]
+fn deep_trilinear_admission_covers_intermediate_mip_construction() {
+    let source = ImageDimensions::new(4096, 4096).unwrap();
+    let output = ImageDimensions::new(1, 1).unwrap();
+    let policy = ResizePolicy::Trilinear {
+        anchor: Anchor::Center,
+    };
+    let whole = ResizeMemory::new(source, output, policy, GpuTiling::Disabled).required_bytes;
+    assert!(
+        whole >= 384 * 1024 * 1024,
+        "known live ownership is 384 MiB, plan={whole}"
+    );
+    assert!(
+        whole > 360 * 1024 * 1024,
+        "a 360 MiB request must reject before allocation"
+    );
+    let tiled = ResizeMemory::new(source, output, policy, GpuTiling::Auto).required_bytes;
+    assert!(
+        tiled < whole,
+        "bounded mip tiles should retain their memory advantage"
+    );
+}
 impl InputBoundary for InputBytes<'_> {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.0.len())

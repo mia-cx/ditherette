@@ -47,18 +47,21 @@ impl ResizeMemory {
         policy: ResizePolicy,
         tiling: GpuTiling,
     ) -> Self {
-        let (width, height) = tiling.tile(output);
-        let scale = (f64::from(source.height()) / f64::from(output.height())).max(2.);
-        let rows = u64::from(source.height())
-            .min((f64::from(height) * scale + 6. * scale + 4.).ceil() as u64);
-        let filter = Filter::new(policy);
-        let plans = Axis::required(source.width(), output.width(), filter)
-            + Axis::required(source.height(), output.height(), filter);
+        let mut workspace = resize_workspace(source, output, Filter::new(policy), tiling);
         let mips = if matches!(policy, ResizePolicy::Trilinear { .. }) {
             let (_, upper, _) = levels(source, output);
             (0..upper)
                 .scan(source, |current, _| {
-                    *current = half(*current);
+                    let next = half(*current);
+                    // Mip construction uses its own output tiles and Area plans,
+                    // which may dwarf the final 1x1 filtering workspace.
+                    workspace = workspace.max(resize_workspace(
+                        *current,
+                        next,
+                        Filter::new(ResizePolicy::Area {}),
+                        tiling,
+                    ));
+                    *current = next;
                     Some(
                         (u64::from(current.width()) * 16).div_ceil(256)
                             * 256
@@ -72,19 +75,34 @@ impl ResizeMemory {
         let source_padding =
             (u64::from(source.width()) * 4).div_ceil(256) * 256 * u64::from(source.height())
                 - 4 * pixels(source);
-        let float_padding = (u64::from(width) * 16).div_ceil(256) * 256 - u64::from(width) * 16;
         Self {
             required_bytes: 4 * 1024 * 1024
                 + 16 * pixels(source)
                 + 8 * pixels(output)
-                + 32 * u64::from(width) * rows
-                + 64 * u64::from(width) * u64::from(height)
-                + 10 * plans
+                + workspace
                 + mips
-                + 2 * source_padding
-                + 4 * float_padding * rows.max(u64::from(height)),
+                + 2 * source_padding,
         }
     }
+}
+
+fn resize_workspace(
+    source: ImageDimensions,
+    output: ImageDimensions,
+    filter: Filter,
+    tiling: GpuTiling,
+) -> u64 {
+    let (width, height) = tiling.tile(output);
+    let scale = (f64::from(source.height()) / f64::from(output.height())).max(2.);
+    let rows =
+        u64::from(source.height()).min((f64::from(height) * scale + 6. * scale + 4.).ceil() as u64);
+    let plans = Axis::required(source.width(), output.width(), filter)
+        + Axis::required(source.height(), output.height(), filter);
+    let padding = (u64::from(width) * 16).div_ceil(256) * 256 - u64::from(width) * 16;
+    32 * u64::from(width) * rows
+        + 64 * u64::from(width) * u64::from(height)
+        + 10 * plans
+        + 4 * padding * rows.max(u64::from(height))
 }
 
 struct Texture(wgpu::Texture);
