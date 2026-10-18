@@ -223,7 +223,7 @@ pub(super) fn execute_bands(
     } else {
         None
     };
-    crate::prod::dither::perturb::perturb_by_field_bands_into(
+    crate::prod::dither::perturb::perturb_by_field_bands_with_coverage(
         source,
         output,
         policy.space,

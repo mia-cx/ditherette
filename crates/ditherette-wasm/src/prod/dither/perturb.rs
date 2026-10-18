@@ -121,7 +121,23 @@ pub fn try_band_buffers_with_rows(
 
 /// Executes preflighted disjoint bands while preserving the full immutable source.
 /// Field evaluation stays on workers; completed-row callbacks run only after joining.
-pub(crate) fn perturb_by_field_bands_into(
+pub fn perturb_by_field_bands_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut [u8],
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    work: &mut RowBandBuffers<[f32; 3]>,
+    field: impl Fn(u32, u32, u64) -> f32 + Sync,
+    progress: &mut impl FnMut(u64) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    perturb_by_field_bands_with_coverage(
+        source, output, space, strength, placement, work, None, field, progress,
+    )
+}
+
+/// Shares preflighted full-image coverage across disjoint field workers.
+pub(crate) fn perturb_by_field_bands_with_coverage(
     source: ImageView<'_, Rgba8>,
     output: &mut [u8],
     space: WorkingSpace,
