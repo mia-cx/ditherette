@@ -7,6 +7,35 @@ use crate::{image::ImageView, prod::dither::smooth_area_v1};
 
 struct CpuInput<'a>(&'a [u8]);
 
+/// Proves admission covers simultaneous analysis and one-row field metadata,
+/// including moving Vec capacity and both 256-byte-aligned uniform copies.
+#[test]
+fn adaptive_row_tile_admission_covers_all_live_dispatch_metadata() {
+    let Some((_serial, super::super::Backend::Gpu(gpu))) = super::super::tests::any_gpu() else {
+        return;
+    };
+    let dimensions = ImageDimensions::new(4, 32768).unwrap();
+    let source = vec![0; 4 * 32768 * 4];
+    let mut job = AreaJob::new(&gpu, dimensions, &source).unwrap();
+    let parameters = Parameters::new(dimensions, 4, 0.12);
+    job.analysis(parameters);
+    job.indexed_dispatches(
+        super::indexed_shader::INDEXED,
+        "indexed",
+        parameters,
+        super::super::GpuTiling::Rows(1),
+        u32::MAX,
+    );
+    let metadata = (job.dispatches.capacity() * std::mem::size_of::<Dispatch>()) as u64
+        + 2 * 256 * job.dispatches.len() as u64;
+    let images = 52 * 4 * 32768;
+    let admitted = IndexedMemory::new(dimensions).required_bytes;
+    assert!(
+        admitted >= metadata + images,
+        "plan={admitted}, metadata={metadata}, images={images}"
+    );
+}
+
 /// Proves row bands preserve global field/mixture phase, odd packed words and
 /// Adaptive coverage. The thin long image also forces cancellation checkpoints
 /// between real tiled submissions rather than accepting an ignored policy.

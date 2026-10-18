@@ -39,11 +39,16 @@ impl AreaMemory {
     pub fn new(dimensions: ImageDimensions) -> Self {
         let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
         let coverage_bytes = pixels.div_ceil(32) * 4;
-        let dispatches = ((dimensions.width() + dimensions.height() - 1).div_ceil(16)
+        let analysis_dispatches = ((dimensions.width() + dimensions.height() - 1).div_ceil(16)
             + dimensions.height().div_ceil(16)
             - 1) as u64
             * 8
             + 16;
+        // Without retained coverage, analysis and indexed dispatches coexist.
+        // Rows(1) needs at most two Yliluoma batches per row at MAX_OUTPUT_SIDE;
+        // fields and RGBA outputs need no more. Include both Vec capacity and
+        // uniform copies before allocating any job metadata.
+        let dispatches = analysis_dispatches + 2 * u64::from(dimensions.height());
         // Two immutable uniform copies plus bounded Vec dispatch metadata.
         let fixed =
             Self::FIXED_BYTES + dispatches * (512 + 2 * std::mem::size_of::<Dispatch>() as u64);
