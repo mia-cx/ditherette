@@ -10,6 +10,7 @@ import type {
 	PaletteEntry,
 	Progress,
 	Rgba8Image,
+	TilingPolicy,
 	WorkingSpace
 } from './types.js';
 
@@ -20,6 +21,8 @@ export interface GpuEffectsOptions {
 	readonly gpuWasm?: InitInput;
 	/** Reject unavailable GPU work instead of instantiating the CPU fallback. */
 	readonly fallback?: 'cpu' | 'error';
+	/** Image tiles or whole-image execution; workers applies to CPU fallback. */
+	readonly tiling?: TilingPolicy;
 }
 
 /** One fallback contract for the effects and indexed GPU facades. */
@@ -57,7 +60,7 @@ export interface EffectsExecution {
 export interface GpuEffects {
 	readonly execution: EffectsExecution | undefined;
 	/**
-	 * Applies real effects with exact channel tables, preserving alpha and independent output ownership.
+	 * Applies channel tables or continuous pointwise effects on GPU, preserving alpha and output ownership.
 	 * Uploads only the request's captured packed RGBA8 bytes. Image decoding belongs to the host.
 	 */
 	applyEffects(request: ApplyEffectsRequest): Promise<Rgba8Image>;
@@ -68,7 +71,13 @@ export interface GpuEffects {
 /** Private ABI of the optional artifact. It is absent from ordinary scalar/threaded builds. */
 export interface GpuEffectsBindings {
 	privateGpuEffectsPlanningBytes(effectsBytes: number): number;
-	privateGpuEffectsPlan(effects: string, width: number, height: number): number;
+	privateGpuEffectsPlan(
+		effects: string,
+		width: number,
+		height: number,
+		space: number,
+		rows: number
+	): number;
 	privateGpuEffectsDetect(memoryLimit: number): Promise<string>;
 	privateGpuEffectsAdapter(): string;
 	privateGpuApplyEffects(
@@ -77,7 +86,9 @@ export interface GpuEffectsBindings {
 		height: number,
 		effects: string,
 		memoryLimit: number,
-		sink: { value?: Rgba8Image }
+		sink: { value?: Rgba8Image },
+		space: number,
+		rows: number
 	): Promise<string>;
 	privateGpuEffectsDispose(): void;
 }
@@ -102,13 +113,14 @@ export function gpuEffectsDecoderBytes(effectsBytes: number): number {
 export async function createGpuEffects(options?: GpuEffectsOptions): Promise<GpuEffects> {
 	const input = object(
 		options === undefined ? {} : options,
-		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback'],
+		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling'],
 		'invalid-settings',
 		''
 	);
 	const normalized = validateOptions({
 		memoryLimitBytes: field(input, 'memoryLimitBytes'),
-		wasm: field(input, 'wasm')
+		wasm: field(input, 'wasm'),
+		tiling: field(input, 'tiling')
 	});
 	const gpuWasm = field(input, 'gpuWasm');
 	const normalizedGpu = validateOptions({ wasm: gpuWasm });
@@ -139,7 +151,12 @@ export async function createGpuEffects(options?: GpuEffectsOptions): Promise<Gpu
 /** Share the public boundary with focused failure-path tests, without a second CPU implementation. */
 export function initializeGpuEffects(
 	bindings: GpuEffectsBindings | undefined,
-	options: { wasm?: InitInput; memoryLimitBytes: number; fallback?: 'cpu' | 'error' },
+	options: {
+		wasm?: InitInput;
+		memoryLimitBytes: number;
+		fallback?: 'cpu' | 'error';
+		tiling?: TilingPolicy;
+	},
 	initialFallback = 'NoAdapter'
 ): GpuEffects {
 	let active = false;
@@ -147,6 +164,12 @@ export function initializeGpuEffects(
 	let detected = false;
 	let execution: EffectsExecution | undefined;
 	let unavailable = initialFallback;
+	const rows =
+		typeof options.tiling === 'object'
+			? options.tiling.height
+			: options.tiling === 'disabled'
+				? 0xffffffff
+				: 0;
 	const requireIdle = () => {
 		if (disposed) throw new DitheretteError('disposed', 'instance', 'Processor is disposed.');
 		if (active)
@@ -220,7 +243,9 @@ export function initializeGpuEffects(
 							const required = bindings.privateGpuEffectsPlan(
 								input.effects.json,
 								input.sourceWidth,
-								input.sourceHeight
+								input.sourceHeight,
+								input.space,
+								rows
 							);
 							reason =
 								required === 0
@@ -266,7 +291,9 @@ export function initializeGpuEffects(
 								source.height,
 								input.effects.json,
 								options.memoryLimitBytes,
-								sink
+								sink,
+								input.space,
+								rows
 							);
 							output = sink.value;
 						}
@@ -293,6 +320,7 @@ export function initializeGpuEffects(
 				if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
 				const cpu = await createScalar({
 					wasm: options.wasm,
+					tiling: options.tiling,
 					memoryLimitBytes: options.memoryLimitBytes - bytes
 				});
 				try {

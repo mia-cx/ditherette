@@ -221,7 +221,7 @@ for (const noGpu of [false, true])
 			const origin = await startServer(t);
 			const { tab, errors, system } = await browser(t, origin, noGpu);
 			const result = await tab.evaluate(
-				async ({ noGpu }) => {
+				async ({ noGpu, full }) => {
 					const { createDitherette, createGpuEffects } =
 						await import('/packages/ditherette/dist/index.js');
 					let deviceRequests = 0;
@@ -290,8 +290,8 @@ for (const noGpu of [false, true])
 					const gpu = await createGpuEffects();
 					const reports = [];
 					let retained;
-					const run = async (source, effects, label) => {
-						const request = { version: 1, source, effects };
+					const run = async (source, effects, label, context, tolerance = 0) => {
+						const request = { version: 1, source, effects, context };
 						const wanted = cpu.applyEffects(request);
 						const actual = await gpu.applyEffects(request);
 						let maxByteDifference = 0;
@@ -308,7 +308,8 @@ for (const noGpu of [false, true])
 							pixels: source.width * source.height,
 							...gpu.execution,
 							maxByteDifference,
-							alphaDifferences
+							alphaDifferences,
+							tolerance
 						});
 						retained ??= { output: actual.data, copy: actual.data.slice() };
 					};
@@ -355,13 +356,38 @@ for (const noGpu of [false, true])
 							}
 						}
 						const eligibleDeviceRequests = deviceRequests;
+						if (full && !noGpu) {
+							const data = new Uint8Array(
+								await (await fetch('/__private_gpu_fixture.rgba')).arrayBuffer()
+							);
+							if (data.length !== 2600 * 4168 * 4)
+								throw Error('private fixture must remain full resolution');
+							await run(
+								{ width: 2600, height: 4168, data },
+								[
+									...chains[1],
+									{
+										effect: 'hue-saturation',
+										enabled: true,
+										hue: 37,
+										saturation: 0.17,
+										lightness: -0.12
+									}
+								],
+								'full 1x continuous effects',
+								undefined,
+								1
+							);
+						}
 						await run(
 							source,
 							[
 								...chains[1],
 								{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: 0.2, lightness: 0 }
 							],
-							'mixed CPU fallback'
+							'mixed continuous GPU effects',
+							undefined,
+							1
 						);
 						await run(
 							source,
@@ -379,7 +405,108 @@ for (const noGpu of [false, true])
 									]
 								}
 							],
-							'masked CPU fallback'
+							'masked continuous GPU effects',
+							undefined,
+							1
+						);
+						for (const [model, channel] of [
+							['srgb', 'red'],
+							['linear-rgb', 'green'],
+							['hsl', 'saturation'],
+							['hsv', 'value'],
+							['oklab', 'a'],
+							['oklch', 'chroma'],
+							['cielab', 'lightness'],
+							['cielch', 'hue'],
+							['ycbcr', 'cb']
+						]) {
+							await run(
+								source,
+								[
+									{
+										effect: 'palette-fit',
+										enabled: true,
+										look: 'vivid',
+										space: 'oklab',
+										strength: 1.5,
+										curves: [
+											{
+												kind: 'adjust',
+												x: { model: 'hsl', channel: 'hue' },
+												x2: { model: 'srgb', channel: 'green' },
+												y: { model, channel },
+												grid: {
+													columns: [0.1, 0.4, 0.8],
+													rows: [0, 0.3, 1],
+													values: [
+														[0.2, 0.4, 0.6],
+														[0.7, 0.4, 0.2],
+														[0.6, 0.6, 0.8]
+													]
+												}
+											}
+										],
+										mask: [
+											{
+												x: { model: 'srgb', channel: 'blue' },
+												points: [
+													[0, 0.1],
+													[1, 1]
+												]
+											}
+										]
+									}
+								],
+								`explicit palette curves ${model}`,
+								undefined,
+								1
+							);
+						}
+						await run(
+							source,
+							[
+								{
+									effect: 'recolour',
+									enabled: true,
+									strength: 0.7,
+									recipe: {
+										space: 'oklab',
+										tone: [
+											[0, 0],
+											[0.4, 0.45],
+											[1, 0.95]
+										],
+										chroma: 0.85,
+										shift: [0.01, -0.02],
+										groups: [{ hue: 90, width: 80, turn: 23, chroma: 1.1 }]
+									}
+								}
+							],
+							'explicit recolour recipe',
+							{ space: 'oklab' },
+							1
+						);
+						const eligibleReports = reports.length;
+						const context = {
+							palette: [
+								{ kind: 'color', rgb: [0, 0, 0] },
+								{ kind: 'color', rgb: [255, 255, 255] }
+							]
+						};
+						await run(
+							source,
+							[
+								{
+									effect: 'palette-fit',
+									enabled: true,
+									space: 'oklab',
+									look: 'natural',
+									strength: 1,
+									curves: null
+								}
+							],
+							'automatic analysis CPU fallback',
+							context
 						);
 						for (let i = 0; i < 16; i++)
 							await run(
@@ -419,6 +546,7 @@ for (const noGpu of [false, true])
 							noOpIdentity,
 							disabledIdentity,
 							eligibleDeviceRequests,
+							eligibleReports,
 							retiredDeviceRequests,
 							deviceRequests,
 							recovery,
@@ -434,7 +562,7 @@ for (const noGpu of [false, true])
 						cpu.dispose();
 					}
 				},
-				{ noGpu }
+				{ noGpu, full: Boolean(process.env.DITHERETTE_GPU_RGBA) }
 			);
 			assert.deepEqual(errors, []);
 			assert.ok(result.retained);
@@ -443,14 +571,18 @@ for (const noGpu of [false, true])
 			assert.ok(result.recovery.exact);
 			assert.equal(result.retiredDeviceRequests, result.eligibleDeviceRequests);
 			for (const report of result.reports) {
-				assert.equal(report.maxByteDifference, 0, JSON.stringify(report));
+				assert.ok(report.maxByteDifference <= report.tolerance, JSON.stringify(report));
 				assert.equal(report.alphaDifferences, 0, JSON.stringify(report));
 				if (noGpu) assert.equal(report.backend, 'cpu');
 			}
 			assert.equal(result.reports.at(-1).backend, 'cpu');
 			assert.equal(result.reports.at(-2).backend, 'cpu');
 			if (result.reports[0].backend === 'gpu') {
-				assert.ok(result.reports.slice(0, 10).every((report) => report.backend === 'gpu'));
+				assert.ok(
+					result.reports
+						.slice(0, result.eligibleReports)
+						.every((report) => report.backend === 'gpu')
+				);
 				assert.equal(result.eligibleDeviceRequests, 1);
 				assert.equal(result.deviceRequests, 2);
 				assert.equal(result.recovery.backend, 'gpu');

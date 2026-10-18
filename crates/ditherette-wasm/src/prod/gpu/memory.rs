@@ -8,7 +8,7 @@ use std::{
 
 use crate::{image::ImageDimensions, prod::effects::operation::BOOKKEEPING_BYTES};
 
-use super::{Backend, ChannelLookup, Fallback};
+use super::{Backend, ChannelLookup, Fallback, GpuTiling};
 
 // Admission metadata in the package pins this locked Wasm representation.
 #[cfg(target_arch = "wasm32")]
@@ -26,6 +26,16 @@ pub struct LookupMemory {
 }
 
 impl LookupMemory {
+    /// Conservative whole-image admission also charges the independently owned
+    /// assembled result and transport tile when the client enables image tiling.
+    pub fn with_tiling(dimensions: ImageDimensions, tiling: GpuTiling) -> Self {
+        let mut memory = Self::new(dimensions);
+        let (width, height) = tiling.tile(dimensions);
+        if width != dimensions.width() || height != dimensions.height() {
+            memory.required_bytes += 2 * memory.rgba_bytes;
+        }
+        memory
+    }
     /// Retained bridge slot and wasm-bindgen's first 128 four-byte handle slots.
     /// Retiring the artifact releases ownership of these records before CPU fallback.
     pub const BRIDGE_BYTES: u64 =

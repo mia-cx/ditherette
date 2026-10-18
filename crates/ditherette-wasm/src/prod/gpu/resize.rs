@@ -25,7 +25,7 @@ pub enum GpuTiling {
     Rows(u32),
 }
 impl GpuTiling {
-    fn tile(self, output: ImageDimensions) -> (u32, u32) {
+    pub(super) fn tile(self, output: ImageDimensions) -> (u32, u32) {
         match self {
             Self::Disabled => (output.width(), output.height()),
             Self::Auto => (output.width().min(2048), output.height().min(256)),

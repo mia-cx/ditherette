@@ -229,8 +229,12 @@ The package leaves display to you: upload `indices` and `results` as textures to
 
 ### Optional async GPU effects
 
-`createGpuEffects` runs whole enabled per-channel chains on the validated wgpu lookup backend.
-It uses the production CPU's exact `ChannelTables` bytes and preserves every alpha byte.
+`createGpuEffects` runs resolved pointwise chains on GPU, including masks, all curve
+models and grids, hue/saturation, explicit recolour and palette-fit recipes.
+Whole unmasked per-channel chains retain the production CPU's exact `ChannelTables` bytes.
+Mixed chains keep continuous float colour between effects and preserve every alpha byte.
+GPU transcendental rounding can differ from CPU; the current native/browser fixtures
+observe at most one RGB byte of difference. CPU remains available through `createDitherette`.
 `createDitherette` and its synchronous operations keep their CPU behavior.
 
 The ordinary package build includes scalar, threaded and GPU artifacts:
@@ -247,7 +251,11 @@ The optional module loads by URL relative to `gpu-effects.js`, so bundling hosts
 ```ts
 import { createGpuEffects } from 'ditherette';
 
-const effectsProcessor = await createGpuEffects({ memoryLimitBytes: 512 * 1024 ** 2 });
+const effectsProcessor = await createGpuEffects({
+	memoryLimitBytes: 512 * 1024 ** 2,
+	tiling: { height: 128 }, // 'auto' (default), 'disabled', or explicit rows
+	fallback: 'error'
+});
 const image = await effectsProcessor.applyEffects({ version: 1, source, effects });
 console.log(effectsProcessor.execution); // Last successful call's backend, adapter and fallback reason.
 effectsProcessor.dispose();
@@ -259,7 +267,12 @@ hardware, missing assets, unsupported stages and memory rejection then throw a
 structured error rather than allocating a CPU processor. GPU-only dithering also
 rejects the current hybrid CPU diffusion path. The default remains `fallback: 'cpu'`.
 Neither setting changes the other artifact. Missing WebGPU, optional assets, failed startup verification,
-unsupported/masked/mixed chains, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
+automatic recipe analysis, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
+For GPU application, derive recipes with the CPU analysis methods and pass the explicit
+recipe/curve list. Analysis is separate from per-pixel application. A single retained
+shader interprets bounded control data, so editing a curve does not recompile a pipeline.
+Image tiles bound GPU transport and preserve complete chains; disabling tiling uses
+one full-image dispatch. Admission conservatively includes full-image owned capacity.
 The facade reuses one verified device for repeated eligible calls. Any CPU fallback releases the device
 and drops the entire library-owned GPU artifact before allocating scalar resources.
 The locked WebGPU backend forgets its error callbacks; retaining the artifact for re-detection would accumulate them.

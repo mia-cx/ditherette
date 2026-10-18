@@ -100,10 +100,7 @@ test('the common reserve rejects one byte below admission, including 600-byte sc
 			assert.equal((await accepted.applyEffects(input)).data[3], 29);
 			assert.equal(entries.gpu - before.gpu, capabilityPresent ? 1 : 0);
 			assert.equal(entries.cpu - before.cpu, 1);
-			assert.equal(
-				accepted.execution.fallback,
-				capabilityPresent ? 'UnsupportedChain' : 'NoAdapter'
-			);
+			assert.equal(accepted.execution.fallback, capabilityPresent ? 'MemoryLimit' : 'NoAdapter');
 			accepted.dispose();
 			console.log(
 				JSON.stringify({
@@ -145,20 +142,30 @@ test('large valid curves and masks reject before both real string ABIs on every 
 		else {
 			capability();
 			processor = await (route === 'missing-assets' ? missing.createGpuEffects : createGpuEffects)(
-				options
+				route === 'retired' ? { ...options, memoryLimitBytes: 8 * 1024 ** 2 } : options
 			);
 		}
 		if (route === 'retired') {
-			const input = request('masks', 1);
-			input.effects[0].mask = [
-				{
-					x,
-					points: [
-						[0, 0],
-						[1, 1]
+			const input = {
+				version: 1,
+				source,
+				context: {
+					palette: [
+						{ kind: 'color', rgb: [0, 0, 0] },
+						{ kind: 'color', rgb: [255, 255, 255] }
 					]
-				}
-			];
+				},
+				effects: [
+					{
+						effect: 'palette-fit',
+						enabled: true,
+						look: 'natural',
+						space: 'oklab',
+						strength: 0,
+						curves: null
+					}
+				]
+			};
 			await processor.applyEffects(input);
 			assert.equal(processor.execution.fallback, 'UnsupportedChain');
 		}
@@ -182,7 +189,7 @@ test('large valid curves and masks reject before both real string ABIs on every 
 	}
 });
 
-test('in-budget real unsupported decoding succeeds, then later admission and fresh-facade recovery stay bounded', async () => {
+test('in-budget decoding rejects additional GPU control capacity, then CPU admission and recovery stay bounded', async () => {
 	capability();
 	for (const kind of ['curves', 'masks']) {
 		const input = request(kind, 8);
@@ -196,14 +203,14 @@ test('in-budget real unsupported decoding succeeds, then later admission and fre
 		assert.deepEqual(await processor.applyEffects(input), cpu.applyEffects(input));
 		assert.equal(entries.gpu - before.gpu, 1);
 		assert.equal(entries.cpu - before.cpu, 2);
-		assert.equal(processor.execution.fallback, 'UnsupportedChain');
+		assert.equal(processor.execution.fallback, 'MemoryLimit');
 		const retired = { ...entries };
 		assert.deepEqual(await processor.applyEffects(input), cpu.applyEffects(input));
 		assert.equal(entries.gpu - retired.gpu, 0);
 		assert.equal(entries.cpu - retired.cpu, 2);
 		await rejectedWithoutEntry(processor, request(kind, 64));
 		assert.deepEqual(await processor.applyEffects(control), cpu.applyEffects(control));
-		assert.equal(processor.execution.fallback, 'UnsupportedChain');
+		assert.equal(processor.execution.fallback, 'MemoryLimit');
 		processor.dispose();
 		cpu.dispose();
 		const fresh = await createGpuEffects({ ...options, memoryLimitBytes: limit });

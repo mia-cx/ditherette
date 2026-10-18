@@ -21,6 +21,7 @@ mod device;
 mod lookup;
 mod memory;
 mod parity;
+mod pointwise;
 mod resize;
 mod stage;
 #[cfg(test)]
@@ -31,6 +32,7 @@ pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
 pub use memory::LookupMemory;
 pub use parity::Parity;
+pub use pointwise::Pointwise;
 pub use resize::{GpuTiling, ResizeMemory};
 pub use stage::Stage;
 
@@ -92,10 +94,23 @@ impl Backend {
         rgba: &[u8],
         memory_limit: u64,
     ) -> Result<Vec<u8>, Fallback> {
-        LookupMemory::new(dimensions).check(memory_limit)?;
+        self.lookup_tiled(stage, dimensions, rgba, GpuTiling::Disabled, memory_limit)
+            .await
+    }
+
+    /// Image tiling is a caller policy; it never changes pointwise effect math.
+    pub async fn lookup_tiled(
+        &mut self,
+        stage: &ChannelLookup,
+        dimensions: ImageDimensions,
+        rgba: &[u8],
+        tiling: GpuTiling,
+        memory_limit: u64,
+    ) -> Result<Vec<u8>, Fallback> {
+        LookupMemory::with_tiling(dimensions, tiling).check(memory_limit)?;
         let result = match self {
             Self::Cpu(reason) => Err(reason.clone()),
-            Self::Gpu(gpu) => gpu.process(stage, dimensions, rgba).await,
+            Self::Gpu(gpu) => gpu.process_tiled(stage, dimensions, rgba, tiling).await,
         };
         self.retire_failure(&result);
         result

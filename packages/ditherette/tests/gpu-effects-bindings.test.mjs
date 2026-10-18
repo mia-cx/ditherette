@@ -20,7 +20,7 @@ const source = {
 	height: 19,
 	data: Uint8Array.from({ length: 37 * 19 * 4 }, (_, i) => i & 255)
 };
-test('ordinary Wasm has no GPU exports; the opt-in ABI plans exact enabled-chain eligibility', () => {
+test('ordinary Wasm has no GPU exports; the optional planner admits mixed and masked pixel chains', () => {
 	assert.ok(!WebAssembly.Module.exports(scalar).some(({ name }) => name.startsWith('privateGpu')));
 	assert.ok(WebAssembly.Module.exports(gpu).some(({ name }) => name === 'privateGpuApplyEffects'));
 	for (const bytes of [0, 1, 3137, 2_978_689])
@@ -29,9 +29,9 @@ test('ordinary Wasm has no GPU exports; the opt-in ABI plans exact enabled-chain
 		bindings.privateGpuEffectsPlan(JSON.stringify(steps), source.width, source.height);
 	assert.ok(plan(effects) > source.data.length * 7);
 	const mixed = { effect: 'hue-saturation', enabled: true, hue: 30, saturation: 0.2, lightness: 0 };
-	assert.equal(plan([...effects, mixed]), 0);
+	assert.ok(plan([...effects, mixed]) > 0);
 	assert.ok(plan([...effects, { ...mixed, enabled: false }]) > 0);
-	assert.equal(
+	assert.ok(
 		plan([
 			{
 				...effects[0],
@@ -45,8 +45,7 @@ test('ordinary Wasm has no GPU exports; the opt-in ABI plans exact enabled-chain
 					}
 				]
 			}
-		]),
-		0
+		]) > 0
 	);
 });
 
