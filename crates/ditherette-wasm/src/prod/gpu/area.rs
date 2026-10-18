@@ -17,8 +17,10 @@ use common::WGSL as COMMON;
 use components::WGSL as COMPONENTS;
 use pack::WGSL as PACK;
 use sweeps::WGSL as SWEEPS;
+mod diffusion;
 mod indexed;
 mod yliluoma;
+pub use diffusion::DiffusionMemory;
 pub use indexed::IndexedMemory;
 pub use yliluoma::MixMemory;
 
@@ -271,7 +273,6 @@ impl<'a> AreaJob<'a> {
             || dimensions.width().div_ceil(8) > limits.max_compute_workgroups_per_dimension
             || dimensions.height().div_ceil(8) > limits.max_compute_workgroups_per_dimension
             || limits.min_uniform_buffer_offset_alignment > 256
-            || pixels.div_ceil(256) > u64::from(limits.max_compute_workgroups_per_dimension)
         {
             return Err(Fallback::TooLarge);
         }
@@ -361,6 +362,14 @@ impl<'a> AreaJob<'a> {
         check: &mut dyn JobControl,
     ) -> Result<Vec<u8>, Fallback> {
         let device = &self.gpu.device;
+        let limit = device.limits().max_compute_workgroups_per_dimension;
+        if self
+            .dispatches
+            .iter()
+            .any(|dispatch| dispatch.groups.iter().any(|&groups| groups > limit))
+        {
+            return Err(Fallback::TooLarge);
+        }
         let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let alignment = u64::from(device.limits().min_uniform_buffer_offset_alignment);
@@ -490,16 +499,36 @@ impl<'a> AreaJob<'a> {
                     label: Some(dispatch.entry),
                     source: wgpu::ShaderSource::Wgsl(
                         format!(
-                            "{COMMON}\n{}\n{}\n{}",
+                            "{COMMON}\n{}\n{}\n{}\n{}",
                             dispatch.shader,
-                            if dispatch.entry == "yliluoma" {
+                            if [
+                                "indexed",
+                                "yliluoma",
+                                "prepare_row",
+                                "diffuse",
+                                "wavefront",
+                                "cooperative"
+                            ]
+                            .contains(&dispatch.entry)
+                            {
                                 indexed_shader::WGSL
+                            } else {
+                                ""
+                            },
+                            if ["prepare_row", "diffuse", "wavefront", "cooperative"]
+                                .contains(&dispatch.entry)
+                            {
+                                diffusion::shader::COMMON
                             } else {
                                 ""
                             },
                             if dispatch.shader == PACK
                                 || dispatch.entry == "indexed"
                                 || dispatch.entry == "yliluoma"
+                                || dispatch.entry == "prepare_row"
+                                || dispatch.entry == "diffuse"
+                                || dispatch.entry == "wavefront"
+                                || dispatch.entry == "cooperative"
                             {
                                 noise_table()
                             } else {

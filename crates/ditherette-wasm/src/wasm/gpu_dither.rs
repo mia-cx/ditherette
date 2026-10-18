@@ -49,6 +49,14 @@ pub fn private_gpu_yliluoma_plan(
     Ok(crate::prod::gpu::MixMemory::new(dimensions, entries, size).required_bytes as f64)
 }
 
+/// Continuous ring and immutable row-dispatch admission precede source capture.
+#[wasm_bindgen(js_name = privateGpuDiffusionPlan)]
+pub fn private_gpu_diffusion_plan(width: u32, height: u32) -> Result<f64, JsError> {
+    let dimensions =
+        ImageDimensions::new(width, height).map_err(|error| JsError::new(&error.to_string()))?;
+    Ok(crate::prod::gpu::DiffusionMemory::new(dimensions).required_bytes as f64)
+}
+
 /// Verifies indexed readback and complete coverage before accepting image jobs.
 #[wasm_bindgen(js_name = privateGpuDitherDetect)]
 pub async fn private_gpu_dither_detect(memory_limit: f64) -> String {
@@ -164,6 +172,7 @@ pub async fn private_gpu_dither_and_quantize(
     radius: f64,
     threshold: f64,
     softness: f64,
+    gpu_diffusion: bool,
     coverage: Option<Uint8Array>,
     retain: bool,
     memory_limit: f64,
@@ -171,6 +180,9 @@ pub async fn private_gpu_dither_and_quantize(
 ) -> Result<String, JsError> {
     let required = private_gpu_dither_plan(width, height)?;
     if required > memory_limit {
+        return Ok("MemoryLimit".into());
+    }
+    if gpu_diffusion && family == 2.0 && private_gpu_diffusion_plan(width, height)? > memory_limit {
         return Ok("MemoryLimit".into());
     }
     let dither = parse_dither(
@@ -243,28 +255,35 @@ pub async fn private_gpu_dither_and_quantize(
     let mut check = Control { sink: &sink, width };
     let result = match backend.as_mut() {
         Some(backend) => {
-            backend
-                .dither_prepared_checked(
-                    DitherQuantizeRequest {
-                        quantize: QuantizeRequest {
-                            version: 1,
-                            source: Source {
-                                width,
-                                height,
-                                data: &rgba,
-                            },
-                            palette: &entries[..palette_len],
-                            alpha,
-                            matching,
-                        },
-                        dither,
+            let request = DitherQuantizeRequest {
+                quantize: QuantizeRequest {
+                    version: 1,
+                    source: Source {
+                        width,
+                        height,
+                        data: &rgba,
                     },
-                    memory_limit as u64,
-                    coverage,
-                    retain,
-                    &mut check,
-                )
-                .await
+                    palette: &entries[..palette_len],
+                    alpha,
+                    matching,
+                },
+                dither,
+            };
+            if gpu_diffusion && matches!(dither, DitherPolicy::Diffusion { .. }) {
+                backend
+                    .diffuse_gpu_checked(request, memory_limit as u64, coverage, retain, &mut check)
+                    .await
+            } else {
+                backend
+                    .dither_prepared_checked(
+                        request,
+                        memory_limit as u64,
+                        coverage,
+                        retain,
+                        &mut check,
+                    )
+                    .await
+            }
         }
         None => Err(Fallback::NoAdapter),
     };

@@ -42,6 +42,8 @@ import type {
 export interface GpuDitherOptions extends GpuEffectsOptions {
 	/** Image tiling for resize; workers applies to scalar fallback. Hardware workgroups stay internal. */
 	readonly tiling?: TilingPolicy;
+	/** Keep CPU recurrence (default), or execute continuous diffusion on the GPU. */
+	readonly diffusionBackend?: 'cpu' | 'gpu';
 }
 
 /** Hybrid means GPU Adaptive analysis with the unchanged CPU diffusion recurrence. */
@@ -94,6 +96,7 @@ export interface GpuDitherBindings {
 	): Promise<string>;
 	privateGpuDitherPlan(width: number, height: number): number;
 	privateGpuYliluomaPlan(width: number, height: number, entries: number, size: number): number;
+	privateGpuDiffusionPlan(width: number, height: number): number;
 	privateGpuDitherDetect(memoryLimit: number): Promise<string>;
 	privateGpuEffectsAdapter(): string;
 	privateGpuEffectsDispose(): void;
@@ -115,6 +118,7 @@ export interface GpuDitherBindings {
 		radius: number,
 		threshold: number,
 		softness: number,
+		gpuDiffusion: boolean,
 		coverage: Uint8Array | undefined,
 		retain: boolean,
 		memoryLimit: number,
@@ -266,7 +270,7 @@ function output(
 export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDither> {
 	const input = object(
 		options === undefined ? {} : options,
-		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling'],
+		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling', 'diffusionBackend'],
 		'invalid-settings',
 		''
 	);
@@ -277,6 +281,9 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 	});
 	const gpu = validateOptions({ wasm: field(input, 'gpuWasm') });
 	const fallbackMode = fallbackPolicy(field(input, 'fallback'));
+	const diffusionBackend = field(input, 'diffusionBackend') ?? 'cpu';
+	if (diffusionBackend !== 'cpu' && diffusionBackend !== 'gpu')
+		throw new DitheretteError('invalid-settings', 'diffusionBackend', 'Expected cpu or gpu.');
 	let bindings: GpuDitherBindings | undefined;
 	let fallback = 'NoAdapter';
 	if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
@@ -294,7 +301,11 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 			fallback = 'Initialization';
 		}
 	}
-	return initializeGpuDither(bindings, { ...normalized, fallback: fallbackMode }, fallback);
+	return initializeGpuDither(
+		bindings,
+		{ ...normalized, fallback: fallbackMode, diffusionBackend },
+		fallback
+	);
 }
 
 /** Owns one GPU attempt and a persistent scalar fallback; source capture precedes every await. */
@@ -305,6 +316,7 @@ export function initializeGpuDither(
 		memoryLimitBytes: number;
 		fallback?: 'cpu' | 'error';
 		tiling?: TilingPolicy;
+		diffusionBackend?: 'cpu' | 'gpu';
 	},
 	initialFallback = 'NoAdapter'
 ): GpuDither {
@@ -359,7 +371,7 @@ export function initializeGpuDither(
 			const d = input.dither;
 			const unsupported =
 				typeof options.tiling === 'object' ||
-				(d.family === 2 && options.fallback === 'error') ||
+				(d.family === 2 && options.diffusionBackend !== 'gpu' && options.fallback === 'error') ||
 				d.placement === 1 ||
 				(d.placement === 2 && d.radius > 100) ||
 				(d.family === 1 && d.strength > 4) ||
@@ -379,7 +391,9 @@ export function initializeGpuDither(
 										Math.min(256, input.palette.length),
 										d.parameter
 									)
-								: bindings.privateGpuDitherPlan(input.sourceWidth, input.sourceHeight)) >
+								: d.family === 2 && options.diffusionBackend === 'gpu'
+									? bindings.privateGpuDiffusionPlan(input.sourceWidth, input.sourceHeight)
+									: bindings.privateGpuDitherPlan(input.sourceWidth, input.sourceHeight)) >
 							options.memoryLimitBytes
 						)
 							reason = 'MemoryLimit';
@@ -524,6 +538,7 @@ export function initializeGpuDither(
 							d.radius,
 							d.threshold,
 							d.softness,
+							options.diffusionBackend === 'gpu',
 							retained,
 							retain,
 							options.memoryLimitBytes,
@@ -553,7 +568,12 @@ export function initializeGpuDither(
 				}
 				signal?.throwIfAborted();
 				execution = {
-					backend: d.family === 2 ? (d.placement === 2 ? 'hybrid' : 'cpu') : 'gpu',
+					backend:
+						d.family === 2 && options.diffusionBackend !== 'gpu'
+							? d.placement === 2
+								? 'hybrid'
+								: 'cpu'
+							: 'gpu',
 					adapter,
 					...(d.placement === 2 ? { analysisReused: Boolean(retained) } : {})
 				};

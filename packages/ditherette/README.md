@@ -318,7 +318,13 @@ This API applies effects only. Resize, dithering, palette indices, and indexed P
 ordinary request and returns owned indices with the exact supplied palette. All 15 matching
 metrics, Bayer/rectangular/blue-noise/random fields, Yliluoma at every matrix size,
 and complete `smooth-area-v1` analysis
-run on GPU. Error diffusion uses GPU coverage with the unchanged CPU feedback and scan.
+run on GPU. Error diffusion defaults to GPU coverage with the unchanged CPU feedback and scan.
+Set `diffusionBackend: 'gpu'` to execute every diffusion kernel and both feedback
+modes on GPU. Non-serpentine scans use dependency-ordered wavefronts; serpentine
+uses a continuous three-row ring with cooperative matching. Neither restarts at
+dispatch boundaries. Faithful serpentine is substantially slower on the tested
+GPU, so CPU diffusion remains the default. `fallback: 'error'` also requires the
+GPU diffusion choice when a request uses diffusion.
 GPU arithmetic may select a different palette entry at numerical boundaries.
 Yliluoma prepares its palette-only mixture tree on CPU, then searches image pixels
 and selects global Bayer indices on GPU. The transient tree, texture atlas and

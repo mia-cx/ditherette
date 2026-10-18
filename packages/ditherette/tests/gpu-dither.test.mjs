@@ -180,6 +180,10 @@ test('GPU-only calls reject absent hardware and unsupported hybrid work without 
 		createGpuDither({ ...options, fallback: false }),
 		(error) => error.code === 'invalid-settings' && error.path === 'fallback'
 	);
+	await assert.rejects(
+		createGpuDither({ ...options, diffusionBackend: 'automatic' }),
+		(error) => error.code === 'invalid-settings' && error.path === 'diffusionBackend'
+	);
 });
 
 test('async indexed fallback preserves ordinary output, process recipes and owned storage', async () => {

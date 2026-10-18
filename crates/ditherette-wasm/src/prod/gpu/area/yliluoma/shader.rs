@@ -1,6 +1,7 @@
 //! Iterative traversal of the CPU-prepared balanced tree. Enumeration order,
 //! rather than traversal order, resolves score ties.
 pub(super) const WGSL: &str = r#"
+@group(0) @binding(2) var<storage, read_write> work: array<u32>;
 @group(0) @binding(7) var mixtures: texture_2d<u32>;
 fn node_part(n: u32, part: u32) -> vec4<u32> {
     let texel=4u*n+part;

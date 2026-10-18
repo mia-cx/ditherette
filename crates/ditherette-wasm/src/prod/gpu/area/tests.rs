@@ -443,6 +443,241 @@ fn gpu_masks_preserve_every_diffusion_kernel_and_scan_order() {
 }
 
 #[test]
+fn continuous_gpu_diffusion_preserves_kernels_feedback_and_serpentine() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    // Proves GPU recurrence carries through scan turns, transparent targets and
+    // output-only masks, using every matching policy and authoritative CPU taps.
+    let source: Vec<_> = (0..17 * 13u32)
+        .flat_map(|i| {
+            let x = i % 17;
+            let y = i / 17;
+            let c = if x == 9 {
+                5
+            } else {
+                (64 + x * 5 + y / 3) as u8
+            };
+            [
+                c,
+                c.saturating_add(25),
+                110,
+                [0, 127, 128, 255][i as usize % 4],
+            ]
+        })
+        .collect();
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+        PaletteEntry::Color {
+            rgb: [160, 90, 120],
+        },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+    ];
+    let kernels = [
+        Diffusion::FloydSteinberg,
+        Diffusion::Sierra,
+        Diffusion::SierraLite,
+        Diffusion::Atkinson,
+        Diffusion::JarvisJudiceNinke,
+        Diffusion::Stucki,
+        Diffusion::Burkes,
+        Diffusion::TwoRowSierra,
+        Diffusion::Fan,
+        Diffusion::ShiauFan,
+        Diffusion::ShiauFan2,
+        Diffusion::Simple2d,
+    ];
+    let policies = [
+        MatchPolicy::SrgbEuclidean,
+        MatchPolicy::SrgbCompuphase,
+        MatchPolicy::SrgbRec601,
+        MatchPolicy::SrgbRec709,
+        MatchPolicy::LinearRgbEuclidean,
+        MatchPolicy::OklabEuclidean,
+        MatchPolicy::OklchEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::OklchHueArc,
+        MatchPolicy::CielabEuclidean,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchEuclidean,
+        MatchPolicy::CielchCircularHue,
+        MatchPolicy::CielchHueArc,
+        MatchPolicy::YcbcrEuclidean,
+    ];
+    let mut comparisons = 0;
+    let mut differences = 0;
+    for matching in policies {
+        for kernel in kernels {
+            if !matches!(
+                matching,
+                MatchPolicy::SrgbEuclidean | MatchPolicy::OklabEuclidean
+            ) && kernel != Diffusion::Sierra
+            {
+                continue;
+            }
+            for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+                for serpentine in [false, true] {
+                    for placement in [
+                        Placement::Everywhere {},
+                        Placement::SmoothAreaV1 {
+                            sample_size: 4,
+                            contrast_threshold: 0.12,
+                        },
+                    ] {
+                        let request = DitherQuantizeRequest {
+                            quantize: QuantizeRequest {
+                                version: 1,
+                                source: Source {
+                                    width: 17,
+                                    height: 13,
+                                    data: &source,
+                                },
+                                palette: &palette,
+                                alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+                                matching,
+                            },
+                            dither: DitherPolicy::Diffusion {
+                                kernel,
+                                feedback,
+                                serpentine,
+                                strength: 1.0,
+                                placement,
+                            },
+                        };
+                        let expected = cpu(request);
+                        let actual =
+                            block_on(backend.diffuse_gpu(request, 128 * 1024 * 1024)).unwrap();
+                        assert_eq!(actual.palette, expected.palette);
+                        assert_eq!(actual.warnings, expected.warnings);
+                        let changed = actual
+                            .indices
+                            .data()
+                            .iter()
+                            .zip(expected.indices.data())
+                            .filter(|(a, b)| a != b)
+                            .count();
+                        assert!(changed<=22,"{matching:?}/{kernel:?}/{feedback:?}/{serpentine}/{placement:?}: {changed}/221");
+                        assert!(actual
+                            .indices
+                            .data()
+                            .iter()
+                            .all(|&i| i != 5 && (i as usize) < palette.len()));
+                        comparisons += 1;
+                        differences += changed;
+                    }
+                }
+            }
+        }
+    }
+    eprintln!(
+        "GPU diffusion: {differences} differing indices / {} pixels across {comparisons} cases",
+        comparisons * 221
+    );
+}
+
+#[test]
+fn gpu_diffusion_wavefront_crosses_tile_edges_in_raster_order() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+        PaletteEntry::Color {
+            rgb: [160, 90, 120],
+        },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+    ];
+    let kernels = [
+        Diffusion::FloydSteinberg,
+        Diffusion::Sierra,
+        Diffusion::SierraLite,
+        Diffusion::Atkinson,
+        Diffusion::JarvisJudiceNinke,
+        Diffusion::Stucki,
+        Diffusion::Burkes,
+        Diffusion::TwoRowSierra,
+        Diffusion::Fan,
+        Diffusion::ShiauFan,
+        Diffusion::ShiauFan2,
+        Diffusion::Simple2d,
+    ];
+    for (width, height) in [(79, 67), (1, 129), (129, 1), (2051, 5)] {
+        let source: Vec<_> = (0..width * height)
+            .flat_map(|i| {
+                let shade = 90 + ((i % width) * 37 / width) as u8;
+                [shade, shade, shade, 255]
+            })
+            .collect();
+        for kernel in kernels {
+            for serpentine in [false, true] {
+                let request = DitherQuantizeRequest {
+                    quantize: QuantizeRequest {
+                        version: 1,
+                        source: Source {
+                            width,
+                            height,
+                            data: &source,
+                        },
+                        palette: &palette,
+                        alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+                        matching: MatchPolicy::SrgbEuclidean,
+                    },
+                    dither: DitherPolicy::Diffusion {
+                        kernel,
+                        feedback: DiffusionFeedback::SrgbBytes,
+                        serpentine,
+                        strength: 1.0,
+                        placement: Placement::Everywhere {},
+                    },
+                };
+                let expected = block_on(backend.diffuse_gpu_scheduled(
+                    request,
+                    128 * 1024 * 1024,
+                    None,
+                    false,
+                    &mut || Ok(()),
+                    true,
+                ))
+                .unwrap()
+                .0;
+                let actual = block_on(backend.diffuse_gpu(request, 128 * 1024 * 1024)).unwrap();
+                let changed = actual
+                    .indices
+                    .data()
+                    .iter()
+                    .zip(expected.indices.data())
+                    .filter(|(a, b)| a != b)
+                    .count();
+                assert!(
+                    changed == 0,
+                    "{width}x{height}/{kernel:?}/{serpentine}: {changed}; first={:?}",
+                    actual
+                        .indices
+                        .data()
+                        .iter()
+                        .zip(expected.indices.data())
+                        .position(|(a, b)| a != b)
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn yliluoma_matches_literal_search_across_metrics_alpha_and_placement() {
     let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
         return;
@@ -617,6 +852,114 @@ fn yliluoma_matches_literal_search_across_metrics_alpha_and_placement() {
         block_on(backend.dither_and_quantize(request, required)).unwrap(),
         cpu(request)
     );
+}
+
+#[test]
+fn gpu_diffusion_masks_only_output_and_recovers_after_control_failures() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    // Proves coverage cannot change the continuous recurrence, including across
+    // wavefront tiles and serial chunk boundaries; admission/callback failures
+    // publish no partial image and leave the next device job usable.
+    let (width, height) = (2051, 5);
+    let dimensions = ImageDimensions::new(width, height).unwrap();
+    let source: Vec<_> = (0..width * height)
+        .flat_map(|i| [(i * 17) as u8, (i * 73) as u8, (i * 29 + 40) as u8, 255])
+        .collect();
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+        PaletteEntry::Color {
+            rgb: [160, 90, 120],
+        },
+    ];
+    let base = QuantizeRequest {
+        version: 1,
+        source: Source {
+            width,
+            height,
+            data: &source,
+        },
+        palette: &palette,
+        alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+        matching: MatchPolicy::OklabEuclidean,
+    };
+    let plain = block_on(backend.dither_and_quantize(
+        DitherQuantizeRequest {
+            quantize: base,
+            dither: DitherPolicy::None {},
+        },
+        128 * 1024 * 1024,
+    ))
+    .unwrap();
+    let bits: Vec<_> = (0..AreaMemory::new(dimensions).coverage_bytes / 4)
+        .flat_map(|_| 0x96cf_30a5u32.to_le_bytes())
+        .collect();
+    for serpentine in [false, true] {
+        let request = DitherQuantizeRequest {
+            quantize: base,
+            dither: DitherPolicy::Diffusion {
+                kernel: Diffusion::Sierra,
+                feedback: DiffusionFeedback::Matching,
+                serpentine,
+                strength: 1.0,
+                placement: Placement::Everywhere {},
+            },
+        };
+        let required = DiffusionMemory::new(dimensions).required_bytes;
+        assert_eq!(
+            block_on(backend.diffuse_gpu(request, required - 1)),
+            Err(Fallback::MemoryLimit)
+        );
+        let mut checks = 0;
+        let failed =
+            block_on(
+                backend.diffuse_gpu_checked(request, required, None, false, &mut || {
+                    checks += 1;
+                    if checks == 3 {
+                        Err(Fallback::Callback)
+                    } else {
+                        Ok(())
+                    }
+                }),
+            );
+        assert_eq!(failed, Err(Fallback::Callback));
+        let ordinary = block_on(backend.diffuse_gpu(request, required)).unwrap();
+        let masked = DitherQuantizeRequest {
+            dither: DitherPolicy::Diffusion {
+                kernel: Diffusion::Sierra,
+                feedback: DiffusionFeedback::Matching,
+                serpentine,
+                strength: 1.0,
+                placement: Placement::SmoothAreaV1 {
+                    sample_size: 64,
+                    contrast_threshold: 0.12,
+                },
+            },
+            ..request
+        };
+        let (actual, pending) = block_on(backend.diffuse_gpu_checked(
+            masked,
+            required,
+            Some(bits.clone()),
+            true,
+            &mut || Ok(()),
+        ))
+        .unwrap();
+        assert!(pending.is_none());
+        for (i, &actual) in actual.indices.data().iter().enumerate() {
+            let expected = if bits[i / 8] & (1 << (i % 8)) != 0 {
+                ordinary.indices.data()[i]
+            } else {
+                plain.indices.data()[i]
+            };
+            assert_eq!(actual, expected, "serpentine={serpentine},pixel={i}");
+        }
+    }
 }
 
 #[test]
