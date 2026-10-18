@@ -223,8 +223,16 @@ self.onmessage = async (event) => {
 			return;
 		}
 		if (event.data.gpuTiling) {
-			const whole = await createGpuDither({ fallback: 'error', tiling: 'disabled' });
-			const tiled = await createGpuDither({ fallback: 'error', tiling: { height: 3 } });
+			const whole = await createGpuDither({
+				fallback: 'error',
+				diffusionBackend: 'gpu',
+				tiling: 'disabled'
+			});
+			const tiled = await createGpuDither({
+				fallback: 'error',
+				diffusionBackend: 'gpu',
+				tiling: { height: 3 }
+			});
 			const base = {
 				version: 1,
 				source,
@@ -280,7 +288,6 @@ self.onmessage = async (event) => {
 						calls += 4;
 					}
 				}
-				let unsupported = false;
 				// 4096² crosses the old 65535-workgroup single-dispatch limit.
 				// Gray 127 is strictly closer to black under sRGB Euclidean matching.
 				const large = {
@@ -303,23 +310,28 @@ self.onmessage = async (event) => {
 						throw Error('4k GPU quantization differs');
 					calls++;
 				}
-				try {
-					await tiled.ditherAndQuantize({
+				for (const serpentine of [false, true]) {
+					const input = {
 						...base,
 						dither: {
 							family: 'diffusion',
 							kernel: 'sierra',
 							feedback: 'matching',
-							serpentine: true,
+							serpentine,
 							strength: 1,
 							placement: { mode: 'everywhere' }
 						}
-					});
-				} catch (error) {
-					unsupported = error.code === 'unsupported-operation';
+					};
+					const a = await whole.ditherAndQuantize(input),
+						b = await tiled.ditherAndQuantize(input);
+					if (
+						a.indices.some((value, i) => value !== b.indices[i]) ||
+						tiled.execution.backend !== 'gpu'
+					)
+						throw Error('Dependent diffusion tiles changed the continuous recurrence');
+					calls += 2;
 				}
-				if (!unsupported) throw Error('Independent row tiles cannot restart continuous diffusion');
-				self.postMessage({ calls, exact: true, largeCorrect: true, diffusionRejected: true });
+				self.postMessage({ calls, exact: true, largeCorrect: true, continuousDiffusion: true });
 			} finally {
 				whole.dispose();
 				tiled.dispose();

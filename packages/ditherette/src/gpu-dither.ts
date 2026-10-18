@@ -474,7 +474,6 @@ export function initializeGpuDither(
 				: 0;
 			const gpuLimit = options.memoryLimitBytes - preparationBytes;
 			const unsupported =
-				(typeof options.tiling === 'object' && d.family === 2) ||
 				(d.family === 2 && options.diffusionBackend !== 'gpu' && options.fallback === 'error') ||
 				d.placement === 1 ||
 				(d.placement === 2 && d.radius > 100) ||

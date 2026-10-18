@@ -51,6 +51,18 @@ impl super::super::Backend {
             .map(|(image, _)| image)
     }
 
+    /// Select dependent submission batches without resetting the diffusion ring.
+    pub async fn diffuse_gpu_tiled(
+        &mut self,
+        request: DitherQuantizeRequest<'_>,
+        memory_limit: u64,
+        tiling: super::super::GpuTiling,
+    ) -> Result<IndexedImage, Fallback> {
+        self.diffuse_gpu_tiled_checked(request, memory_limit, None, false, tiling, &mut || Ok(()))
+            .await
+            .map(|(image, _)| image)
+    }
+
     pub(crate) async fn diffuse_gpu_checked(
         &mut self,
         request: DitherQuantizeRequest<'_>,
@@ -71,6 +83,50 @@ impl super::super::Backend {
         retain: bool,
         check: &mut dyn JobControl,
         force_serial: bool,
+    ) -> Result<(IndexedImage, Option<Vec<u8>>), Fallback> {
+        self.diffuse_gpu_batched(
+            request,
+            memory_limit,
+            incoming,
+            retain,
+            check,
+            force_serial,
+            super::MAX_DISPATCHES_PER_BATCH,
+        )
+        .await
+    }
+
+    /// Dependent tiles share the complete error state. Explicit rows cap queued
+    /// dependency frontiers rather than starting independent diffusion images.
+    pub(crate) async fn diffuse_gpu_tiled_checked(
+        &mut self,
+        request: DitherQuantizeRequest<'_>,
+        memory_limit: u64,
+        incoming: Option<Vec<u8>>,
+        retain: bool,
+        tiling: super::super::GpuTiling,
+        check: &mut dyn JobControl,
+    ) -> Result<(IndexedImage, Option<Vec<u8>>), Fallback> {
+        let batch = match tiling {
+            super::super::GpuTiling::Rows(0 | 32769..) => return Err(Fallback::UnsupportedStage),
+            super::super::GpuTiling::Rows(rows) => {
+                (rows as usize).min(super::MAX_DISPATCHES_PER_BATCH)
+            }
+            _ => super::MAX_DISPATCHES_PER_BATCH,
+        };
+        self.diffuse_gpu_batched(request, memory_limit, incoming, retain, check, false, batch)
+            .await
+    }
+
+    async fn diffuse_gpu_batched(
+        &mut self,
+        request: DitherQuantizeRequest<'_>,
+        memory_limit: u64,
+        incoming: Option<Vec<u8>>,
+        retain: bool,
+        check: &mut dyn JobControl,
+        force_serial: bool,
+        batch_size: usize,
     ) -> Result<(IndexedImage, Option<Vec<u8>>), Fallback> {
         check.check()?;
         let layout = Request::DitherAndQuantize(request)
@@ -238,7 +294,12 @@ impl super::super::Backend {
                         }
                     }
                     let mut bytes = job
-                        .execute_read_checked(&job.work, output_bytes + 4, check)
+                        .execute_read_batched_checked(
+                            &job.work,
+                            output_bytes + 4,
+                            check,
+                            batch_size,
+                        )
                         .await?;
                     if bytes[output_bytes as usize..].iter().any(|&byte| byte != 0) {
                         return Err(Fallback::Failed("non-finite diffusion arithmetic".into()));

@@ -315,7 +315,14 @@ pub async fn private_gpu_dither_and_quantize(
                 }
             } else if gpu_diffusion && matches!(dither, DitherPolicy::Diffusion { .. }) {
                 backend
-                    .diffuse_gpu_checked(request, memory_limit as u64, coverage, retain, &mut check)
+                    .diffuse_gpu_tiled_checked(
+                        request,
+                        memory_limit as u64,
+                        coverage,
+                        retain,
+                        super::gpu_resize::tiling(rows),
+                        &mut check,
+                    )
                     .await
                     .map(|(image, coverage)| (ImageOutput::Indexed(image), coverage))
             } else {

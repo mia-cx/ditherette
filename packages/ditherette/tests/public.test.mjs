@@ -21,6 +21,95 @@ const request = (data = new Uint8Array([17, 31, 47, 127])) => ({
 const diagnostic = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
+test('Adaptive row workers share full-image coverage across RGBA, indexed and mixing calls', async () => {
+	// Proves changing the row schedule preserves cold and reused Adaptive results.
+	const source = {
+		width: 79,
+		height: 59,
+		data: Uint8Array.from({ length: 79 * 59 * 4 }, (_, i) =>
+			i % 4 === 3 ? [0, 127, 255][(i >>> 2) % 3] : 40 + Math.floor(((i >>> 2) % 79) * 1.5)
+		)
+	};
+	const palette = [
+		{ kind: 'color', rgb: [0, 0, 0] },
+		{ kind: 'color', rgb: [255, 255, 255] },
+		{ kind: 'transparent' }
+	];
+	const placement = { mode: 'smooth-area-v1', sampleSize: 20, contrastThreshold: 0.12 };
+	for (const tiling of [
+		{ height: 1, workers: 1 },
+		{ height: 7, workers: 4 }
+	]) {
+		const whole = await createDitherette({ wasm: module, tiling: false });
+		const tiled = await createDitherette({ wasm: module, tiling });
+		try {
+			for (const strength of [0.3, 0.7]) {
+				const perturb = {
+					field: { algorithm: 'bayer', size: '16' },
+					space: 'oklab',
+					strength,
+					placement
+				};
+				const base = {
+					version: 1,
+					source,
+					palette,
+					alpha: { mode: 'preserve', threshold: 128 },
+					matching: 'oklab-euclidean'
+				};
+				assert.deepEqual(
+					tiled.perturb({ version: 1, source, perturb }),
+					whole.perturb({ version: 1, source, perturb })
+				);
+				for (const dither of [
+					{ family: 'separable', perturb },
+					{ family: 'yliluoma', size: '4', placement }
+				]) {
+					assert.deepEqual(
+						tiled.ditherAndQuantize({ ...base, dither }),
+						whole.ditherAndQuantize({ ...base, dither })
+					);
+					const input = {
+						source,
+						palette,
+						recipe: {
+							version: 1,
+							output: {
+								width: 67,
+								height: 53,
+								resize: { algorithm: 'bilinear', anchor: 'center' }
+							},
+							alpha: base.alpha,
+							match: base.matching,
+							dither
+						}
+					};
+					assert.deepEqual(tiled.process(input), whole.process(input));
+				}
+			}
+			// Mixtures also need a cold proof: the earlier RGBA call must not
+			// be necessary to seed their source-only coverage.
+			const cold = await createDitherette({ wasm: module, tiling });
+			try {
+				const input = {
+					version: 1,
+					source,
+					palette,
+					alpha: { mode: 'preserve', threshold: 128 },
+					matching: 'oklab-euclidean',
+					dither: { family: 'yliluoma', size: '4', placement }
+				};
+				assert.deepEqual(cold.ditherAndQuantize(input), whole.ditherAndQuantize(input));
+			} finally {
+				cold.dispose();
+			}
+		} finally {
+			tiled.dispose();
+			whole.dispose();
+		}
+	}
+});
+
 test('explicit row bands and whole-image processing preserve resize and indexed output', async () => {
 	// Proves clients can select either schedule without changing image semantics.
 	const source = {

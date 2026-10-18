@@ -364,9 +364,11 @@ global coordinates; trilinear retains its area mip reductions and per-level roun
 Standalone resize preserves hidden RGB; recipe-v2 coverage handling stays separate.
 Explicit row bands also schedule independent matching, fields and Yliluoma on GPU,
 preserving global field phase and packed-word boundaries. Large whole-image calls
-split only at the hardware dispatch limit. Diffusion rejects independent image row
-bands rather than restarting its continuous scan; choose automatic or disabled
-tiling for GPU diffusion. Hardware workgroups stay internal to each algorithm.
+split only at the hardware dispatch limit. Diffusion preserves its complete error
+state across dependent batches. For that kernel, explicit `height` caps queued
+dependency frontiers at `min(height, 64)` per submission; it does not create
+independent image bands or reduce the full error-state admission. Hardware
+workgroups stay internal to each algorithm.
 
 `perturb(request, signal?)` applies independent fields directly to RGBA8 without
 palette matching. Every working space, field and supported Adaptive placement uses
@@ -588,6 +590,13 @@ Other resize calls return independent images. Identity calls still enforce dispo
   clamp to the initialized pool. Scalar instances execute bands sequentially.
   All choices retain global coordinates and the continuous diffusion scan.
   The older `'auto'` and `'disabled'` spellings remain accepted.
+
+Explicit CPU bands cover resize, matching, fields, Yliluoma, effects application
+and mask previews. Adaptive fields and mixtures share one full-image coverage
+analysis across workers. Recipe analysis/reductions remain global; CPU diffusion
+keeps its continuous recurrence. `threads: 'required'` enables actual CPU workers;
+scalar artifacts execute the same bands sequentially. Automatic policy keeps
+its existing measured classes until the next tuning sweep is approved and run.
 
 Threads require cross-origin isolation, shared Wasm memory, module workers, and a caller context that permits blocking waits.
 Synchronous threaded methods run in a processing worker. Browser main JS supports scalar execution;
