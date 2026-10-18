@@ -6,7 +6,9 @@ import {
 	matchingModes,
 	object,
 	TRANSPARENT_CODE,
-	validateOptions
+	validateOptions,
+	validateQuantize,
+	validateResize
 } from './validation.js';
 import { kernels, spaces, tiles, validateDitherAndQuantize } from './validation-fields.js';
 import { validateProcess } from './validation-process.js';
@@ -28,13 +30,19 @@ import type {
 	PaletteEntry,
 	Placement,
 	ProcessRequest,
+	QuantizeRequest,
 	ResizeAnchor,
 	ResizeRequest,
+	Rgba8Image,
+	TilingPolicy,
 	WorkingSpace
 } from './types.js';
 
 /** Optional GPU artifact and ordinary scalar fallback, with one combined memory limit. */
-export type GpuDitherOptions = GpuEffectsOptions;
+export interface GpuDitherOptions extends GpuEffectsOptions {
+	/** Image tiling for resize; workers applies to scalar fallback. Hardware workgroups stay internal. */
+	readonly tiling?: TilingPolicy;
+}
 
 /** Hybrid means GPU Adaptive analysis with the unchanged CPU diffusion recurrence. */
 export interface DitherExecution {
@@ -45,9 +53,13 @@ export interface DitherExecution {
 	readonly analysisReused?: boolean;
 }
 
-/** Serial asynchronous indexed processing. A GPU failure retires that artifact for this facade. */
+/** Serial asynchronous image/indexed processing. A GPU failure retires this facade's artifact. */
 export interface GpuDither {
 	readonly execution: DitherExecution | undefined;
+	/** All resize filters, with global anchors, bounded halo tiles and independent output. */
+	resize(request: ResizeRequest, signal?: AbortSignal): Promise<Rgba8Image>;
+	/** Match directly on GPU without a dither field. */
+	quantize(request: QuantizeRequest, signal?: AbortSignal): Promise<IndexedImage>;
 	ditherAndQuantize(request: DitherAndQuantizeRequest, signal?: AbortSignal): Promise<IndexedImage>;
 	/** Effects and resizing currently use scalar fallback; prepared 1:1 images use GPU dithering. */
 	process(request: ProcessRequest, signal?: AbortSignal): Promise<IndexedImage>;
@@ -56,6 +68,30 @@ export interface GpuDither {
 
 /** Numeric-only bridge, shared with failure-path tests. */
 export interface GpuDitherBindings {
+	privateGpuResizePlan(
+		width: number,
+		height: number,
+		outputWidth: number,
+		outputHeight: number,
+		algorithm: number,
+		anchor: number,
+		support: number,
+		rows: number
+	): number;
+	privateGpuResize(
+		input: Uint8Array,
+		width: number,
+		height: number,
+		outputWidth: number,
+		outputHeight: number,
+		algorithm: number,
+		anchor: number,
+		support: number,
+		rows: number,
+		coverage: boolean,
+		memoryLimit: number,
+		sink: { value?: Rgba8Image; check(completed?: number): boolean }
+	): Promise<string>;
 	privateGpuDitherPlan(width: number, height: number): number;
 	privateGpuDitherDetect(memoryLimit: number): Promise<string>;
 	privateGpuEffectsAdapter(): string;
@@ -183,7 +219,9 @@ function captured(input: Normalized, data: Uint8Array): DitherAndQuantizeRequest
 	};
 }
 
-function output(input: ProcessInput): ResizeRequest['output'] {
+function output(
+	input: Pick<ProcessInput, 'anchor' | 'algorithm' | 'support' | 'outputWidth' | 'outputHeight'>
+): ResizeRequest['output'] {
 	const anchor = anchors[input.anchor] as ResizeAnchor;
 	let resize: ResizeRequest['output']['resize'];
 	switch (input.algorithm) {
@@ -227,13 +265,14 @@ function output(input: ProcessInput): ResizeRequest['output'] {
 export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDither> {
 	const input = object(
 		options === undefined ? {} : options,
-		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback'],
+		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling'],
 		'invalid-settings',
 		''
 	);
 	const normalized = validateOptions({
 		memoryLimitBytes: field(input, 'memoryLimitBytes'),
-		wasm: field(input, 'wasm')
+		wasm: field(input, 'wasm'),
+		tiling: field(input, 'tiling')
 	});
 	const gpu = validateOptions({ wasm: field(input, 'gpuWasm') });
 	const fallbackMode = fallbackPolicy(field(input, 'fallback'));
@@ -260,7 +299,12 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 /** Owns one GPU attempt and a persistent scalar fallback; source capture precedes every await. */
 export function initializeGpuDither(
 	bindings: GpuDitherBindings | undefined,
-	options: { wasm?: InitInput; memoryLimitBytes: number; fallback?: 'cpu' | 'error' },
+	options: {
+		wasm?: InitInput;
+		memoryLimitBytes: number;
+		fallback?: 'cpu' | 'error';
+		tiling?: TilingPolicy;
+	},
 	initialFallback = 'NoAdapter'
 ): GpuDither {
 	let active = false;
@@ -313,6 +357,7 @@ export function initializeGpuDither(
 			let reason = unavailable;
 			const d = input.dither;
 			const unsupported =
+				typeof options.tiling === 'object' ||
 				d.family === 3 ||
 				(d.family === 2 && options.fallback === 'error') ||
 				d.placement === 1 ||
@@ -521,7 +566,8 @@ export function initializeGpuDither(
 			coverage = undefined;
 			cpu ??= await createScalar({
 				wasm: options.wasm,
-				memoryLimitBytes: available
+				memoryLimitBytes: available,
+				tiling: options.tiling
 			});
 			cpuAvailableBytes = available;
 			signal?.throwIfAborted();
@@ -537,9 +583,182 @@ export function initializeGpuDither(
 		get execution() {
 			return execution;
 		},
+		async resize(request, signal) {
+			requireIdle();
+			active = true;
+			try {
+				const input = validateResize(request);
+				signal?.throwIfAborted();
+				let callbackFailed = false;
+				let reported = 0,
+					last = 0;
+				const total = input.outputWidth * input.outputHeight;
+				const report = (
+					stage: 'prepare' | 'resize' | 'complete',
+					completed: number,
+					count: number
+				) => {
+					try {
+						input.onProgress?.({ stage, completed, total: count });
+					} catch {
+						callbackFailed = true;
+						throw new DitheretteError('callback', 'onProgress', 'Progress callback threw.');
+					}
+				};
+				if (input.sourceWidth === input.outputWidth && input.sourceHeight === input.outputHeight) {
+					report('prepare', 0, 1);
+					report('complete', 1, 1);
+					execution = { backend: 'cpu', fallback: 'Identity' };
+					return input.source;
+				}
+				const rows =
+					typeof options.tiling === 'object'
+						? options.tiling.height
+						: options.tiling === 'disabled'
+							? 0xffffffff
+							: 0;
+				const args = [
+					input.sourceWidth,
+					input.sourceHeight,
+					input.outputWidth,
+					input.outputHeight,
+					input.algorithm,
+					input.anchor,
+					input.support,
+					rows
+				] as const;
+				let reason = unavailable;
+				let value: Rgba8Image | undefined;
+				let adapter: string | undefined;
+				if (bindings) {
+					try {
+						reason =
+							bindings.privateGpuResizePlan(...args) > options.memoryLimitBytes
+								? 'MemoryLimit'
+								: '';
+					} catch {
+						reason = 'Failed';
+					}
+					if (reason) retire(reason);
+				}
+				if (reason && options.fallback === 'error') throw gpuFallbackError(reason);
+				analysis = undefined;
+				const bytes = input.data.byteLength;
+				if (bytes >= options.memoryLimitBytes) throw gpuFallbackError('MemoryLimit');
+				const available = options.memoryLimitBytes - bytes;
+				if (cpu && cpuAvailableBytes !== available) {
+					cpu.dispose();
+					cpu = undefined;
+				}
+				let snapshot: Uint8Array;
+				try {
+					snapshot = new Uint8Array(bytes);
+					Uint8Array.prototype.set.call(snapshot, input.data);
+				} catch {
+					throw new DitheretteError(
+						'wasm-memory-unavailable',
+						'source.data',
+						'Source snapshot could not be copied.'
+					);
+				}
+				if (bindings) {
+					try {
+						if (!detected) {
+							reason = await bindings.privateGpuDitherDetect(options.memoryLimitBytes);
+							detected = !reason;
+						}
+						signal?.throwIfAborted();
+						if (!reason) {
+							adapter = bindings.privateGpuEffectsAdapter();
+							report('prepare', 0, 1);
+							const sink = {
+								value: undefined as Rgba8Image | undefined,
+								check(completed = 0) {
+									if (signal?.aborted) return false;
+									if (completed && input.onProgress) {
+										const now = performance.now();
+										if (!reported || completed === total || now - last >= 50) {
+											report('resize', completed, total);
+											reported = completed;
+											last = now;
+										}
+									}
+									return true;
+								}
+							};
+							reason = await bindings.privateGpuResize(
+								snapshot,
+								...args,
+								false,
+								options.memoryLimitBytes,
+								sink
+							);
+							value = sink.value;
+						}
+					} catch {
+						reason = 'Failed';
+					}
+				}
+				signal?.throwIfAborted();
+				if (callbackFailed || reason === 'Callback')
+					throw new DitheretteError('callback', 'onProgress', 'Progress callback threw.');
+				if (!reason && value) {
+					if (reported !== total) report('resize', total, total);
+					report('complete', 1, 1);
+					execution = { backend: 'gpu', adapter };
+					return value;
+				}
+				retire(reason || 'Failed');
+				if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
+				cpu ??= await createScalar({
+					wasm: options.wasm,
+					memoryLimitBytes: available,
+					tiling: options.tiling
+				});
+				cpuAvailableBytes = available;
+				signal?.throwIfAborted();
+				const result = cpu.resize({
+					version: 1,
+					source: { width: input.sourceWidth, height: input.sourceHeight, data: snapshot },
+					output: output(input),
+					onProgress: input.onProgress
+				});
+				signal?.throwIfAborted();
+				execution = {
+					backend: 'cpu',
+					fallback: reason || 'Failed',
+					...(adapter ? { adapter } : {})
+				};
+				return result;
+			} finally {
+				active = false;
+			}
+		},
 		async ditherAndQuantize(request, signal) {
 			requireIdle();
 			return run(validateDitherAndQuantize(request), undefined, signal);
+		},
+		async quantize(request, signal) {
+			requireIdle();
+			const input = validateQuantize(request);
+			return run(
+				{
+					...input,
+					dither: {
+						family: 0,
+						field: 0,
+						parameter: 0,
+						space: 0,
+						strength: 0,
+						placement: 0,
+						radius: 0,
+						threshold: 0,
+						softness: 0
+					}
+				},
+				undefined,
+				signal
+			);
 		},
 		async process(request, signal) {
 			requireIdle();

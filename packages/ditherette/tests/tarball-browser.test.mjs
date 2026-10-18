@@ -51,6 +51,8 @@ test('installed tarball loads only scalar assets and runs the public contract in
 		'package/dist/wasm/scalar/ditherette_wasm.factory.js',
 		'package/dist/wasm/scalar/ditherette_wasm_bg.wasm',
 		'package/dist/wasm/threads/ditherette_wasm_bg.wasm',
+		'package/dist/wasm/gpu/ditherette_wasm.factory.js',
+		'package/dist/wasm/gpu/ditherette_wasm_bg.wasm',
 		'package/README.md',
 		'package/LICENSE'
 	])

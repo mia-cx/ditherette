@@ -128,6 +128,41 @@ test('async indexed fallback preserves ordinary output, process recipes and owne
 	);
 });
 
+test('async resize captures input before fallback and preserves identity and durable output', async () => {
+	// Proves the async boundary preserves the existing resize ownership contract.
+	const input = {
+		version: 1,
+		source: request().source,
+		output: { width: 13, height: 11, resize: { algorithm: 'trilinear', anchor: 'bottom-right' } }
+	};
+	const cpu = await createDitherette({ wasm });
+	const gpu = await createGpuDither({ ...options, tiling: { height: 3 } });
+	try {
+		const expected = cpu.resize(input);
+		const pending = gpu.resize(input);
+		input.source.data.fill(0);
+		const actual = await pending;
+		assert.deepEqual(actual, expected);
+		assert.equal(gpu.execution.backend, 'cpu');
+		const identity = {
+			...input,
+			output: { ...input.output, width: input.source.width, height: input.source.height }
+		};
+		assert.equal(await gpu.resize(identity), identity.source);
+		gpu.dispose();
+		assert.deepEqual(actual, expected);
+	} finally {
+		cpu.dispose();
+		gpu.dispose();
+	}
+	const required = await createGpuDither({ ...options, fallback: 'error' });
+	try {
+		await assert.rejects(required.resize(input), (error) => error.code === 'capability');
+	} finally {
+		required.dispose();
+	}
+});
+
 test('failed GPU initialization retires bindings before scalar allocation and preserves captured settings', async () => {
 	let release;
 	let retired = false;

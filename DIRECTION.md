@@ -77,6 +77,9 @@ Keep that workflow clear and fast, including large images.
   scan order, palette indices, alpha coverage and the frozen CPU fallback.
   Keep both backends in the package. Clients choose CPU/GPU, fallback and tiling
   independently; the website consumes that public policy rather than owning a fork.
+  The package candidate now includes all three artifacts, CPU row-band controls,
+  strict GPU-only rejection and all GPU resize filters with halo-aware image tiles.
+  Combined processing, Yliluoma, GPU diffusion and wider effects remain in progress.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

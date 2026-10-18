@@ -26,7 +26,8 @@ export async function buildFreshPackage(directory, run = runBuildCommand, benchS
 	// These paths and channels match the package-owned scripts/build.mjs variant selection.
 	for (const [variant, config] of [
 		['scalar', path.join(directory, 'rust-toolchain.toml')],
-		['threads', path.join(crate, 'rust-toolchain-threads.toml')]
+		['threads', path.join(crate, 'rust-toolchain-threads.toml')],
+		['gpu', path.join(directory, 'rust-toolchain.toml')]
 	]) {
 		const channel = (await readFile(config, 'utf8')).match(/^channel = "([^"]+)"$/m)?.[1];
 		if (!channel) throw new Error(`Missing compiler channel in ${config}`);
@@ -52,15 +53,15 @@ export async function buildFreshPackage(directory, run = runBuildCommand, benchS
 	}
 	const packageDirectory = path.join(directory, 'packages/ditherette');
 	run('pnpm', ['check:version'], packageDirectory);
-	for (const variant of ['scalar', 'threads'])
+	for (const variant of ['scalar', 'threads', 'gpu'])
 		run('pnpm', ['--filter', 'ditherette-wasm', `build:${variant}`, '--bench-subjects'], directory);
 	run('node', ['scripts/stage-wasm.mjs'], packageDirectory);
 	run('pnpm', ['exec', 'tsc'], packageDirectory);
 }
 
-/** Reject a stale or mislabeled developer artifact before packing either build variant. */
+/** Reject a stale or mislabeled developer artifact before packing any backend. */
 export async function verifyPackageBuildMode(packageDirectory, benchSubjects) {
-	for (const variant of ['scalar', 'threads']) {
+	for (const variant of ['scalar', 'threads', 'gpu']) {
 		const directory = path.join(packageDirectory, 'dist/wasm', variant);
 		const wasm = new WebAssembly.Module(
 			await readFile(path.join(directory, 'ditherette_wasm_bg.wasm'))

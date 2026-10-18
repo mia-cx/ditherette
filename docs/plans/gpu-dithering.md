@@ -186,3 +186,12 @@ Tiling preserves global coordinates, filter halos, alpha coverage and continuous
 diffusion state. It must neither restart diffusion at tile boundaries nor turn off
 serpentine scanning. Admit all live buffers before allocating; a tile option must
 select an actual execution path rather than being accepted and ignored.
+
+The package now exposes CPU row-band selection independently of thread policy,
+and GPU facades accept `fallback: 'error'`. GPU `resize` runs all seven filters
+with ordinary or coverage carriers, global axis plans, bounded halo tiles and
+mapped output. Trilinear keeps its area mip levels and storage-rounding boundaries.
+Native checks cover 900 ordinary/coverage cases, all anchors, thin images and
+horizontal/vertical tile boundaries. The real browser worker also checks every
+filter against CPU and verifies callback recovery. Combined `process` integration
+and the remaining GPU methods are the next steps.
