@@ -75,7 +75,7 @@ async function startServer(t, missingGpu = false, isolated = false) {
 	return `http://127.0.0.1:${server.address().port}`;
 }
 
-for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion'])
+for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion', 'process'])
 	test(
 		`real indexed dither worker through Chromium CDP (${mode})`,
 		{ timeout: 180_000 },
@@ -93,9 +93,10 @@ for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion'])
 						};
 						worker.onerror = (event) => reject(Error(event.message));
 						worker.postMessage({
-							fallback: !['gpu', 'yliluoma', 'diffusion'].includes(mode),
+							fallback: !['gpu', 'yliluoma', 'diffusion', 'process'].includes(mode),
 							yliluoma: mode === 'yliluoma',
-							gpuDiffusion: mode === 'diffusion'
+							gpuDiffusion: mode === 'diffusion',
+							process: mode === 'process'
 						});
 					});
 				} finally {
@@ -104,7 +105,13 @@ for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion'])
 			}, mode);
 			assert.equal(result.error, undefined, result.error);
 			assert.deepEqual(errors, []);
-			if (mode === 'gpu') {
+			if (mode === 'process') {
+				assert.equal(result.calls, 224);
+				assert.equal(result.reused, true);
+				assert.equal(result.cancelled, true);
+				assert.equal(result.hybrid, true);
+				assert.equal(result.callbackRecovered, true);
+			} else if (mode === 'gpu') {
 				assert.equal(result.cases, 363);
 				assert.equal(result.backends.gpu, 315);
 				assert.equal(result.backends.hybrid, 48);
@@ -732,7 +739,7 @@ test(
 		palette.push({ kind: 'transparent' });
 		assert.equal(palette.length, 64);
 		const result = await tab.evaluate(
-			async ({ palette, mixtures }) => {
+			async ({ palette, mixtures, combined }) => {
 				const data = new Uint8Array(
 					await (await fetch('/__private_gpu_fixture.rgba')).arrayBuffer()
 				);
@@ -748,6 +755,8 @@ test(
 						worker.postMessage(
 							{
 								full: mixtures ? 'yliluoma' : true,
+								process: combined,
+								fullProcess: combined,
 								source: { width: 2600, height: 4168, data },
 								palette
 							},
@@ -758,10 +767,19 @@ test(
 					worker.terminate();
 				}
 			},
-			{ palette, mixtures: Boolean(process.env.DITHERETTE_GPU_YLILUOMA) }
+			{
+				palette,
+				mixtures: Boolean(process.env.DITHERETTE_GPU_YLILUOMA),
+				combined: Boolean(process.env.DITHERETTE_GPU_PROCESS)
+			}
 		);
 		assert.equal(result.error, undefined, result.error);
 		assert.deepEqual(errors, []);
+		if (process.env.DITHERETTE_GPU_PROCESS) {
+			assert.equal(result.calls, 4);
+			t.diagnostic(JSON.stringify({ ...result, system }));
+			return;
+		}
 		assert.equal(result.cases, process.env.DITHERETTE_GPU_YLILUOMA ? 4 : 32);
 		assert.deepEqual(
 			result.backends,

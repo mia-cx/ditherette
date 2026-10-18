@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { createDitherette, createGpuEffects } from '../dist/index.js';
+import { createDitherette, createGpuEffects, createGpuDither } from '../dist/index.js';
 import { gpuEffectsDecoderBytes, initializeGpuEffects } from '../dist/gpu-effects.js';
 import { validateApplyEffects } from '../dist/validation-effects.js';
 import { createScalarBindings } from '../dist/wasm/gpu/ditherette_wasm.factory.js';
@@ -119,6 +119,29 @@ test('the common reserve rejects one byte below admission, including 600-byte sc
 		const processor = await createGpuEffects({ ...options, memoryLimitBytes: 600 });
 		await rejectedWithoutEntry(processor, input);
 		processor.dispose();
+		const combined = await createGpuDither({ ...options, memoryLimitBytes: 600 });
+		const before = { ...entries };
+		await assert.rejects(
+			combined.process({
+				source,
+				palette: [{ kind: 'color', rgb: [0, 0, 0] }],
+				recipe: {
+					version: 2,
+					effects: input.effects,
+					output: { width: 1, height: 1, resize: { algorithm: 'area' } },
+					alpha: { mode: 'preserve', threshold: 0 },
+					match: 'oklab-euclidean',
+					dither: { family: 'none' }
+				}
+			}),
+			{ code: 'memory-limit', path: 'memoryLimitBytes' }
+		);
+		assert.deepEqual(
+			entries,
+			before,
+			'combined call rejects before GPU strings or scalar allocation'
+		);
+		combined.dispose();
 	}
 });
 

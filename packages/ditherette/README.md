@@ -353,8 +353,14 @@ Standalone resize preserves hidden RGB; recipe-v2 coverage handling stays separa
 Explicit row bands currently route indexed work to CPU, or reject with
 `fallback: 'error'`. Hardware workgroups are internal to each GPU algorithm.
 
-`process(request, signal?)` uses GPU dithering for prepared 1:1 images. Effects and resized
-outputs currently use scalar fallback. A CPU fallback retires GPU ownership for that facade;
+`process(request, signal?)` composes resolved GPU effects, every resize filter and
+GPU indexed processing. It preserves the CPU's RGBA8 boundary after effects and
+recipe-v2 coverage filtering. Adaptive coverage follows the prepared source bytes,
+so effects/resize changes invalidate it while dither settings reuse it. All stages
+share one device owner and admit their simultaneously live intermediate capacity.
+Automatic recipe analysis remains CPU fallback; pass an explicit recipe for strict GPU work.
+Choosing CPU diffusion combines it with GPU preparation and reports `hybrid`.
+A CPU fallback retires GPU ownership for that facade;
 create a fresh facade to retry GPU. Cancellation rejects with `AbortError`, preserves the
 verified device, and publishes no image. The normal synchronous API remains unchanged.
 

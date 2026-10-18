@@ -16,6 +16,7 @@ import {
 	fallbackPolicy,
 	gpuFallbackError,
 	gpuEffectsDecoderBytes,
+	type GpuEffectsBindings,
 	type GpuEffectsOptions
 } from './gpu-effects.js';
 import type {
@@ -30,6 +31,7 @@ import type {
 	PaletteEntry,
 	Placement,
 	ProcessRequest,
+	Progress,
 	QuantizeRequest,
 	ResizeAnchor,
 	ResizeRequest,
@@ -46,7 +48,7 @@ export interface GpuDitherOptions extends GpuEffectsOptions {
 	readonly diffusionBackend?: 'cpu' | 'gpu';
 }
 
-/** Hybrid means GPU Adaptive analysis with the unchanged CPU diffusion recurrence. */
+/** Hybrid combines GPU preparation/Adaptive analysis with the CPU diffusion recurrence. */
 export interface DitherExecution {
 	readonly backend: 'gpu' | 'hybrid' | 'cpu';
 	readonly adapter?: string;
@@ -63,13 +65,13 @@ export interface GpuDither {
 	/** Match directly on GPU without a dither field. */
 	quantize(request: QuantizeRequest, signal?: AbortSignal): Promise<IndexedImage>;
 	ditherAndQuantize(request: DitherAndQuantizeRequest, signal?: AbortSignal): Promise<IndexedImage>;
-	/** Effects and resizing currently use scalar fallback; prepared 1:1 images use GPU dithering. */
+	/** Apply resolved effects, coverage-aware resize, then indexed processing on the chosen backends. */
 	process(request: ProcessRequest, signal?: AbortSignal): Promise<IndexedImage>;
 	dispose(): void;
 }
 
 /** Numeric-only bridge, shared with failure-path tests. */
-export interface GpuDitherBindings {
+export interface GpuDitherBindings extends Omit<GpuEffectsBindings, 'privateGpuEffectsDetect'> {
 	privateGpuResizePlan(
 		width: number,
 		height: number,
@@ -369,44 +371,10 @@ export function initializeGpuDither(
 			signal?.throwIfAborted();
 			let reason = unavailable;
 			const d = input.dither;
-			const unsupported =
-				typeof options.tiling === 'object' ||
-				(d.family === 2 && options.diffusionBackend !== 'gpu' && options.fallback === 'error') ||
-				d.placement === 1 ||
-				(d.placement === 2 && d.radius > 100) ||
-				(d.family === 1 && d.strength > 4) ||
-				(process &&
-					(process.outputWidth !== input.sourceWidth ||
-						process.outputHeight !== input.sourceHeight ||
-						process.effects?.enabled));
-			if (bindings) {
-				reason = unsupported ? 'UnsupportedStage' : '';
-				if (!reason) {
-					try {
-						if (
-							(d.family === 3
-								? bindings.privateGpuYliluomaPlan(
-										input.sourceWidth,
-										input.sourceHeight,
-										Math.min(256, input.palette.length),
-										d.parameter
-									)
-								: d.family === 2 && options.diffusionBackend === 'gpu'
-									? bindings.privateGpuDiffusionPlan(input.sourceWidth, input.sourceHeight)
-									: bindings.privateGpuDitherPlan(input.sourceWidth, input.sourceHeight)) >
-							options.memoryLimitBytes
-						)
-							reason = 'MemoryLimit';
-					} catch {
-						reason = 'Failed';
-					}
-				}
-				if (reason) retire(reason);
-			}
-			if (reason && options.fallback === 'error') throw gpuFallbackError(reason);
+			const effectSpace = spaces.findIndex((space) =>
+				matchingModes[input.matching].startsWith(`${space}-`)
+			);
 			const bytes = input.data.byteLength;
-			// Scalar process fallback decodes the same effects representation.
-			// Reserve its outer canonical copy/JS tree before either string ABI.
 			const decoder = process?.effects?.enabled
 				? gpuEffectsDecoderBytes(process.effects.json.length)
 				: 0;
@@ -414,8 +382,87 @@ export function initializeGpuDither(
 				throw new DitheretteError(
 					'memory-limit',
 					'memoryLimitBytes',
-					'Source snapshot exceeds the instance memory limit.'
+					'Source and decoder admission exceed the instance memory limit.'
 				);
+			const width = process?.outputWidth ?? input.sourceWidth;
+			const height = process?.outputHeight ?? input.sourceHeight;
+			const resizing = Boolean(
+				process && (width !== input.sourceWidth || height !== input.sourceHeight)
+			);
+			const preparing = Boolean(process?.effects?.enabled || resizing);
+			const rows =
+				typeof options.tiling === 'object'
+					? options.tiling.height
+					: options.tiling === 'disabled'
+						? 0xffffffff
+						: 0;
+			// Raw input, fresh intermediate results and the previous admitted coverage
+			// generation may coexist during preparation. Charge them outside each stage's
+			// own complete plan; no second facade/device owns a hidden copy.
+			const preparationBytes = preparing
+				? bytes +
+					(process?.effects?.enabled ? bytes : 0) +
+					4 * width * height +
+					decoder +
+					(analysis ? analysis.source.byteLength + analysis.coverage.byteLength : 0)
+				: 0;
+			const gpuLimit = options.memoryLimitBytes - preparationBytes;
+			const unsupported =
+				typeof options.tiling === 'object' ||
+				(d.family === 2 && options.diffusionBackend !== 'gpu' && options.fallback === 'error') ||
+				d.placement === 1 ||
+				(d.placement === 2 && d.radius > 100) ||
+				(d.family === 1 && d.strength > 4);
+			if (bindings) {
+				reason = unsupported ? 'UnsupportedStage' : '';
+				if (!reason) {
+					try {
+						if (
+							gpuLimit <= 0 ||
+							(d.family === 3
+								? bindings.privateGpuYliluomaPlan(
+										width,
+										height,
+										Math.min(256, input.palette.length),
+										d.parameter
+									)
+								: d.family === 2 && options.diffusionBackend === 'gpu'
+									? bindings.privateGpuDiffusionPlan(width, height)
+									: bindings.privateGpuDitherPlan(width, height)) > gpuLimit
+						)
+							reason = 'MemoryLimit';
+						if (!reason && process?.effects?.enabled) {
+							const plan = bindings.privateGpuEffectsPlan(
+								process.effects.json,
+								input.sourceWidth,
+								input.sourceHeight,
+								effectSpace,
+								rows
+							);
+							reason = plan === 0 ? 'UnsupportedChain' : plan > gpuLimit ? 'MemoryLimit' : '';
+						}
+						if (!reason && resizing && process) {
+							if (
+								bindings.privateGpuResizePlan(
+									input.sourceWidth,
+									input.sourceHeight,
+									width,
+									height,
+									process.algorithm,
+									process.anchor,
+									process.support,
+									rows
+								) > gpuLimit
+							)
+								reason = 'MemoryLimit';
+						}
+					} catch {
+						reason = 'Failed';
+					}
+				}
+				if (reason) retire(reason);
+			}
+			if (reason && options.fallback === 'error') throw gpuFallbackError(reason);
 			const available = options.memoryLimitBytes - bytes - decoder;
 			if (cpu && cpuAvailableBytes !== available) {
 				cpu.dispose();
@@ -424,13 +471,14 @@ export function initializeGpuDither(
 			let snapshot: Uint8Array;
 			try {
 				if (
+					!preparing &&
 					analysis &&
 					(analysis.width !== input.sourceWidth ||
 						analysis.height !== input.sourceHeight ||
 						!sameBytes(input.data, analysis.source))
 				)
 					analysis = undefined;
-				if (analysis) snapshot = analysis.source;
+				if (analysis && !preparing) snapshot = analysis.source;
 				else {
 					snapshot = new Uint8Array(bytes);
 					Uint8Array.prototype.set.call(snapshot, input.data);
@@ -461,16 +509,22 @@ export function initializeGpuDither(
 									? {
 											...recipe,
 											version: 2,
-											effects: JSON.parse(process.effects!.json) as Effect[]
+											effects: process.effects!.enabled
+												? (JSON.parse(process.effects!.json) as Effect[])
+												: []
 										}
 									: { ...recipe, version: 1 },
 							onProgress: input.onProgress
 						}
 					: undefined;
 			let adapter: string | undefined;
+			let prepared: Rgba8Image = request.source;
+			let effected: Rgba8Image | undefined;
+			let resized: Rgba8Image | undefined;
 			let value: IndexedImage | undefined;
 			let coverage: Uint8Array | undefined;
 			let retained =
+				!preparing &&
 				d.placement === 2 &&
 				analysis?.sampleSize === d.radius &&
 				analysis.tolerance === Math.fround(d.threshold)
@@ -478,26 +532,107 @@ export function initializeGpuDither(
 					: undefined;
 			const retain =
 				d.placement === 2 &&
-				bytes + 4 * Math.ceil((input.sourceWidth * input.sourceHeight) / 32) + 1024 <=
+				4 * width * height + 4 * Math.ceil((width * height) / 32) + 1024 <=
 					Math.min(256 * 1024 ** 2, Math.floor(options.memoryLimitBytes / 4));
 			let callbackFailed = false;
+			const report = (progress: Progress) => {
+				try {
+					input.onProgress?.(progress);
+				} catch {
+					callbackFailed = true;
+					throw new DitheretteError('callback', 'onProgress', 'Progress callback threw.');
+				}
+			};
 			let reported = 0,
 				lastReport = 0;
-			const total = input.sourceWidth * input.sourceHeight;
+			const total = width * height;
 			if (bindings) {
 				try {
 					if (!detected) {
-						reason = await bindings.privateGpuDitherDetect(options.memoryLimitBytes);
+						reason = await bindings.privateGpuDitherDetect(gpuLimit);
 						detected = !reason;
 					}
 					signal?.throwIfAborted();
 					if (!reason) {
 						adapter = bindings.privateGpuEffectsAdapter();
-						try {
-							input.onProgress?.({ stage: 'prepare', completed: 0, total: 1 });
-						} catch {
-							callbackFailed = true;
-							throw new Error('Progress callback threw.');
+						report({ stage: 'prepare', completed: 0, total: 1 });
+						if (process?.effects?.enabled) {
+							const sink: { value?: Rgba8Image } = {};
+							reason = await bindings.privateGpuApplyEffects(
+								snapshot,
+								input.sourceWidth,
+								input.sourceHeight,
+								process.effects.json,
+								gpuLimit,
+								sink,
+								effectSpace,
+								rows
+							);
+							effected = sink.value;
+							sink.value = undefined;
+							if (!reason && !effected) reason = 'Failed';
+							if (effected) prepared = effected;
+							if (!reason)
+								report({
+									stage: 'effects',
+									completed: input.sourceWidth * input.sourceHeight,
+									total: input.sourceWidth * input.sourceHeight
+								});
+							signal?.throwIfAborted();
+						}
+						if (!reason && resizing && process) {
+							let progress = 0,
+								lastResize = 0;
+							const sink = {
+								value: undefined as Rgba8Image | undefined,
+								check(completed = 0) {
+									if (signal?.aborted) return false;
+									const now = input.onProgress && completed > progress ? performance.now() : 0;
+									if (
+										completed > progress &&
+										(!progress || completed === total || now - lastResize >= 50)
+									) {
+										report({ stage: 'resize', completed, total });
+										progress = completed;
+										lastResize = now;
+									}
+									return true;
+								}
+							};
+							reason = await bindings.privateGpuResize(
+								prepared.data,
+								prepared.width,
+								prepared.height,
+								width,
+								height,
+								process.algorithm,
+								process.anchor,
+								process.support,
+								rows,
+								process.version === 2,
+								gpuLimit,
+								sink
+							);
+							resized = sink.value;
+							sink.value = undefined;
+							if (!reason && !resized) reason = 'Failed';
+							if (resized) prepared = resized;
+							signal?.throwIfAborted();
+						}
+						if (preparing) {
+							if (
+								analysis &&
+								(analysis.width !== width ||
+									analysis.height !== height ||
+									!sameBytes(prepared.data, analysis.source))
+							)
+								analysis = undefined;
+							retained =
+								d.placement === 2 &&
+								analysis?.sampleSize === d.radius &&
+								analysis.tolerance === Math.fround(d.threshold)
+									? analysis.coverage
+									: undefined;
 						}
 						const sink = {
 							value: undefined as IndexedImage | undefined,
@@ -507,12 +642,7 @@ export function initializeGpuDither(
 								if (completed > 0 && input.onProgress) {
 									const now = performance.now();
 									if (reported === 0 || completed === total || now - lastReport >= 50) {
-										try {
-											input.onProgress({ stage: 'dither-and-quantize', completed, total });
-										} catch {
-											callbackFailed = true;
-											throw new Error('Progress callback threw.');
-										}
+										report({ stage: 'dither-and-quantize', completed, total });
 										reported = completed;
 										lastReport = now;
 									}
@@ -520,30 +650,31 @@ export function initializeGpuDither(
 								return true;
 							}
 						};
-						reason = await bindings.privateGpuDitherAndQuantize(
-							snapshot,
-							input.sourceWidth,
-							input.sourceHeight,
-							input.palette,
-							input.matching,
-							input.alphaMode,
-							input.threshold,
-							input.matte,
-							d.family,
-							d.field,
-							d.parameter,
-							d.space,
-							d.strength,
-							d.placement,
-							d.radius,
-							d.threshold,
-							d.softness,
-							options.diffusionBackend === 'gpu',
-							retained,
-							retain,
-							options.memoryLimitBytes,
-							sink
-						);
+						if (!reason)
+							reason = await bindings.privateGpuDitherAndQuantize(
+								prepared.data,
+								prepared.width,
+								prepared.height,
+								input.palette,
+								input.matching,
+								input.alphaMode,
+								input.threshold,
+								input.matte,
+								d.family,
+								d.field,
+								d.parameter,
+								d.space,
+								d.strength,
+								d.placement,
+								d.radius,
+								d.threshold,
+								d.softness,
+								options.diffusionBackend === 'gpu',
+								retained,
+								retain,
+								gpuLimit,
+								sink
+							);
 						value = sink.value;
 						coverage = sink.coverage;
 					}
@@ -559,8 +690,8 @@ export function initializeGpuDither(
 					if (reported !== total)
 						input.onProgress?.({
 							stage: 'dither-and-quantize',
-							completed: input.sourceWidth * input.sourceHeight,
-							total: input.sourceWidth * input.sourceHeight
+							completed: total,
+							total
 						});
 					input.onProgress?.({ stage: 'complete', completed: 1, total: 1 });
 				} catch {
@@ -570,7 +701,7 @@ export function initializeGpuDither(
 				execution = {
 					backend:
 						d.family === 2 && options.diffusionBackend !== 'gpu'
-							? d.placement === 2
+							? d.placement === 2 || preparing
 								? 'hybrid'
 								: 'cpu'
 							: 'gpu',
@@ -579,9 +710,9 @@ export function initializeGpuDither(
 				};
 				if (coverage && retain)
 					analysis = {
-						source: snapshot,
-						width: input.sourceWidth,
-						height: input.sourceHeight,
+						source: prepared.data,
+						width,
+						height,
 						sampleSize: d.radius,
 						tolerance: Math.fround(d.threshold),
 						coverage
@@ -592,6 +723,9 @@ export function initializeGpuDither(
 			if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
 			retained = undefined;
 			coverage = undefined;
+			prepared = request.source;
+			effected = undefined;
+			resized = undefined;
 			cpu ??= await createScalar({
 				wasm: options.wasm,
 				memoryLimitBytes: available,

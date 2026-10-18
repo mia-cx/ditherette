@@ -85,7 +85,9 @@ Keep that workflow clear and fast, including large images.
   serpentine. CPU diffusion remains the default because faithful serpentine is
   substantially slower on the tested GPU. Mixed and masked effects now execute on GPU,
   including all colour-curve models and explicit palette recipes, with client-selected
-  image tiling. Automatic recipe analysis stays on CPU. Combined processing remains in progress.
+  image tiling. Automatic recipe analysis stays on CPU. The combined GPU `process`
+  now composes effects, recipe-v2 coverage resize and indexed stages through the same
+  package facade, preserving the CPU's byte boundary and source-only coverage reuse.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

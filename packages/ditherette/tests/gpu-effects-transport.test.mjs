@@ -5,6 +5,7 @@ import test from 'node:test';
 import { createDitherette, createGpuEffects } from '../dist/index.js';
 import { createScalarBindings } from '../dist/wasm/gpu/ditherette_wasm.factory.js';
 import { installGpuTransport } from './gpu-transport.mjs';
+import { initializeGpuDither } from '../dist/gpu-dither.js';
 
 // Only WebGPU transport is synthetic. The public factory, Wasm planner/tables,
 // upload, mapping, exception boundary and scalar fallback are the built artifacts.
@@ -17,6 +18,7 @@ const gpu = await WebAssembly.compile(
 const { resources, observations } = installGpuTransport();
 const gpuMemories = [];
 let retiredMemory;
+let retiredPrepared;
 let failResultCopy = false;
 const instantiate = WebAssembly.instantiate;
 WebAssembly.instantiate = async (module, imports) => {
@@ -32,7 +34,7 @@ WebAssembly.instantiate = async (module, imports) => {
 		for (let attempt = 0; attempt < 10; attempt++) {
 			await setImmediate();
 			global.gc();
-			if (!retiredMemory.deref()) break;
+			if (!retiredMemory.deref() && !retiredPrepared?.deref()) break;
 		}
 		assert.equal(
 			retiredMemory.deref(),
@@ -40,6 +42,12 @@ WebAssembly.instantiate = async (module, imports) => {
 			'GPU instance unreachable before scalar allocation'
 		);
 		retiredMemory = undefined;
+		assert.equal(
+			retiredPrepared?.deref(),
+			undefined,
+			'prepared GPU bytes unreachable before scalar allocation'
+		);
+		retiredPrepared = undefined;
 	}
 	if (module === gpu) {
 		for (const namespace of Object.values(imports)) {
@@ -97,6 +105,57 @@ const unsupported = {
 		}
 	]
 };
+
+async function combinedProcessRetirement() {
+	// Proves a later-stage failure cannot retain the GPU instance or its prepared
+	// image while the full CPU process allocates fallback capacity.
+	const processor = await (async () => {
+		const artifact = createScalarBindings();
+		await artifact.default({ module_or_path: gpu });
+		return initializeGpuDither(
+			{
+				...artifact,
+				// The synthetic transport covers the real lookup verifier. Indexed startup
+				// and resize transport are separate real-browser proofs.
+				privateGpuDitherDetect: (limit) => artifact.privateGpuEffectsDetect(limit),
+				privateGpuResize: async (input) => {
+					retiredMemory = gpuMemories.at(-1);
+					retiredPrepared = new WeakRef(input);
+					return 'Failed';
+				}
+			},
+			options
+		);
+	})();
+	const request = {
+		source,
+		palette: [
+			{ kind: 'color', rgb: [0, 0, 0] },
+			{ kind: 'color', rgb: [255, 255, 255] }
+		],
+		recipe: {
+			version: 2,
+			effects,
+			output: { width: 13, height: 11, resize: { algorithm: 'area' } },
+			alpha: { mode: 'preserve', threshold: 0 },
+			match: 'oklab-euclidean',
+			dither: { family: 'none' }
+		}
+	};
+	try {
+		const actual = await processor.process(request);
+		assert.equal(processor.execution.backend, 'cpu');
+		assert.equal(processor.execution.fallback, 'Failed');
+		const cpu = await createDitherette({ wasm: scalar });
+		try {
+			assert.deepEqual(actual, cpu.process(request));
+		} finally {
+			cpu.dispose();
+		}
+	} finally {
+		processor.dispose();
+	}
+}
 
 test(
 	'public packed upload settles without external-image calls; fallback retires its artifact before scalar allocation',
@@ -273,4 +332,9 @@ test(
 			})
 		);
 	}
+);
+
+test(
+	'combined process retires the artifact and prepared result before scalar fallback',
+	combinedProcessRetirement
 );
