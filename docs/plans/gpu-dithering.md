@@ -195,3 +195,12 @@ Native checks cover 900 ordinary/coverage cases, all anchors, thin images and
 horizontal/vertical tile boundaries. The real browser worker also checks every
 filter against CPU and verifies callback recovery. Combined `process` integration
 and the remaining GPU methods are the next steps.
+
+Yliluoma now uploads the existing balanced palette-mixture tree through bounded
+texture rows and queries it in WGSL. All fifteen metrics retain raw scoring
+coordinates, conservative pruning and original enumeration ties; global Bayer
+phase and Adaptive output-only placement remain intact. Native 360-case and real
+Chromium 120-case fixtures have zero index differences. Four full-size Celeste
+cases have 4,424 disagreements across 43,347,200 indices, with largest RGBA byte
+difference 238. These are measured disagreements; the GPU result is not byte-exact.
+Palette entries and warnings match exactly.

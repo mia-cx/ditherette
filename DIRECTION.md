@@ -79,7 +79,9 @@ Keep that workflow clear and fast, including large images.
   independently; the website consumes that public policy rather than owning a fork.
   The package candidate now includes all three artifacts, CPU row-band controls,
   strict GPU-only rejection and all GPU resize filters with halo-aware image tiles.
-  Combined processing, Yliluoma, GPU diffusion and wider effects remain in progress.
+  Yliluoma now searches its palette-only mixture index on GPU at every matrix size
+  and matching policy, including Adaptive placement. Combined processing, GPU
+  diffusion and wider effects remain in progress.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

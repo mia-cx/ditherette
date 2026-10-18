@@ -443,6 +443,183 @@ fn gpu_masks_preserve_every_diffusion_kernel_and_scan_order() {
 }
 
 #[test]
+fn yliluoma_matches_literal_search_across_metrics_alpha_and_placement() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    // Proves actual GPU mixture search preserves original palette indices,
+    // duplicate ties, global Bayer phase, alpha preparation and Adaptive output.
+    let source: Vec<_> = (0..17 * 13u32)
+        .flat_map(|i| {
+            [
+                (i * 71) as u8,
+                (i * 37 + 8) as u8,
+                (i * 113 + 12) as u8,
+                [0, 127, 128, 255][i as usize % 4],
+            ]
+        })
+        .collect();
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+        PaletteEntry::Color {
+            rgb: [160, 90, 120],
+        },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+    ];
+    let policies = [
+        MatchPolicy::SrgbEuclidean,
+        MatchPolicy::SrgbCompuphase,
+        MatchPolicy::SrgbRec601,
+        MatchPolicy::SrgbRec709,
+        MatchPolicy::LinearRgbEuclidean,
+        MatchPolicy::OklabEuclidean,
+        MatchPolicy::OklchEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::OklchHueArc,
+        MatchPolicy::CielabEuclidean,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchEuclidean,
+        MatchPolicy::CielchCircularHue,
+        MatchPolicy::CielchHueArc,
+        MatchPolicy::YcbcrEuclidean,
+    ];
+    let mut total = 0;
+    let mut differences = 0;
+    for matching in policies {
+        for size in [
+            BayerSize::Two,
+            BayerSize::Four,
+            BayerSize::Eight,
+            BayerSize::Sixteen,
+        ] {
+            for placement in [
+                Placement::Everywhere {},
+                Placement::SmoothAreaV1 {
+                    sample_size: 4,
+                    contrast_threshold: 1.0,
+                },
+            ] {
+                for alpha in [
+                    AlphaPolicy::Preserve { threshold: 127.0 },
+                    AlphaPolicy::Premultiplied {},
+                    AlphaPolicy::Matte { rgb: [7, 200, 90] },
+                ] {
+                    let request = DitherQuantizeRequest {
+                        quantize: QuantizeRequest {
+                            version: 1,
+                            source: Source {
+                                width: 17,
+                                height: 13,
+                                data: &source,
+                            },
+                            palette: &palette,
+                            alpha,
+                            matching,
+                        },
+                        dither: DitherPolicy::Yliluoma { size, placement },
+                    };
+                    let expected = cpu(request);
+                    let actual =
+                        block_on(backend.dither_and_quantize(request, 128 * 1024 * 1024)).unwrap();
+                    assert_eq!(actual.palette, expected.palette);
+                    assert_eq!(actual.warnings, expected.warnings);
+                    let changed = actual
+                        .indices
+                        .data()
+                        .iter()
+                        .zip(expected.indices.data())
+                        .filter(|(a, b)| a != b)
+                        .count();
+                    assert!(
+                        changed <= 3,
+                        "{matching:?}/{size:?}/{placement:?}/{alpha:?}: {changed}/221"
+                    );
+                    assert!(actual
+                        .indices
+                        .data()
+                        .iter()
+                        .all(|&i| i != 5 && (i as usize) < palette.len()));
+                    differences += changed;
+                    total += 1;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "Yliluoma: {differences} differing indices / {} pixels across {total} cases",
+        total * 221
+    );
+    let request = DitherQuantizeRequest {
+        quantize: QuantizeRequest {
+            version: 1,
+            source: Source {
+                width: 17,
+                height: 13,
+                data: &source,
+            },
+            palette: &palette,
+            alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+        dither: DitherPolicy::Yliluoma {
+            size: BayerSize::Sixteen,
+            placement: Placement::Everywhere {},
+        },
+    };
+    let required = MixMemory::new(
+        ImageDimensions::new(17, 13).unwrap(),
+        palette.len() as u32,
+        16,
+    )
+    .required_bytes;
+    assert_eq!(
+        block_on(backend.dither_and_quantize(request, required - 1)),
+        Err(Fallback::MemoryLimit)
+    );
+    assert_eq!(
+        block_on(backend.dither_and_quantize(request, required)).unwrap(),
+        cpu(request)
+    );
+    let mut checks = 0;
+    assert_eq!(
+        block_on(
+            backend.dither_and_quantize_checked(request, required, &mut || {
+                checks += 1;
+                if checks == 4 {
+                    Err(Fallback::Cancelled)
+                } else {
+                    Ok(())
+                }
+            })
+        ),
+        Err(Fallback::Cancelled)
+    );
+    assert_eq!(
+        block_on(backend.dither_and_quantize(request, required)).unwrap(),
+        cpu(request)
+    );
+    let transparent = [PaletteEntry::Transparent {}];
+    let request = DitherQuantizeRequest {
+        quantize: QuantizeRequest {
+            palette: &transparent,
+            ..request.quantize
+        },
+        ..request
+    };
+    assert_eq!(
+        block_on(backend.dither_and_quantize(request, required)).unwrap(),
+        cpu(request)
+    );
+}
+
+#[test]
 fn cancelled_batches_leave_no_result_and_keep_the_device_usable() {
     let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
         return;

@@ -75,7 +75,7 @@ async function startServer(t, missingGpu = false, isolated = false) {
 	return `http://127.0.0.1:${server.address().port}`;
 }
 
-for (const mode of ['gpu', 'disabled', 'missing'])
+for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma'])
 	test(
 		`real indexed dither worker through Chromium CDP (${mode})`,
 		{ timeout: 180_000 },
@@ -92,7 +92,10 @@ for (const mode of ['gpu', 'disabled', 'missing'])
 							if (event.currentTarget === worker) resolve(event.data);
 						};
 						worker.onerror = (event) => reject(Error(event.message));
-						worker.postMessage({ fallback: mode !== 'gpu' });
+						worker.postMessage({
+							fallback: mode !== 'gpu' && mode !== 'yliluoma',
+							yliluoma: mode === 'yliluoma'
+						});
 					});
 				} finally {
 					worker.terminate();
@@ -109,6 +112,10 @@ for (const mode of ['gpu', 'disabled', 'missing'])
 				assert.equal(result.callbackRecovered, true);
 				assert.equal(result.analyses, 1);
 				assert.equal(result.reuses, 197);
+			} else if (mode === 'yliluoma') {
+				assert.equal(result.cases, 120);
+				assert.equal(result.backends.gpu, 120);
+				assert.equal(result.webgpu.isFallbackAdapter, false);
 			} else assert.equal(result.backends.cpu, 3);
 			t.diagnostic(JSON.stringify({ mode, ...result, system }));
 		}
@@ -575,7 +582,7 @@ test(
 );
 
 test(
-	'full 1x indexed Celeste through the real GPU worker',
+	`full 1x indexed Celeste through the real GPU worker${process.env.DITHERETTE_GPU_YLILUOMA ? ' (Yliluoma)' : ''}`,
 	{ timeout: 360_000, skip: !process.env.DITHERETTE_GPU_RGBA },
 	async (t) => {
 		const origin = await startServer(t);
@@ -587,31 +594,44 @@ test(
 		}));
 		palette.push({ kind: 'transparent' });
 		assert.equal(palette.length, 64);
-		const result = await tab.evaluate(async (palette) => {
-			const data = new Uint8Array(await (await fetch('/__private_gpu_fixture.rgba')).arrayBuffer());
-			const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
-				type: 'module'
-			});
-			try {
-				return await new Promise((resolve, reject) => {
-					worker.onmessage = (event) => {
-						if (event.currentTarget === worker) resolve(event.data);
-					};
-					worker.onerror = (event) => reject(Error(event.message));
-					worker.postMessage({ full: true, source: { width: 2600, height: 4168, data }, palette }, [
-						data.buffer
-					]);
+		const result = await tab.evaluate(
+			async ({ palette, mixtures }) => {
+				const data = new Uint8Array(
+					await (await fetch('/__private_gpu_fixture.rgba')).arrayBuffer()
+				);
+				const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+					type: 'module'
 				});
-			} finally {
-				worker.terminate();
-			}
-		}, palette);
+				try {
+					return await new Promise((resolve, reject) => {
+						worker.onmessage = (event) => {
+							if (event.currentTarget === worker) resolve(event.data);
+						};
+						worker.onerror = (event) => reject(Error(event.message));
+						worker.postMessage(
+							{
+								full: mixtures ? 'yliluoma' : true,
+								source: { width: 2600, height: 4168, data },
+								palette
+							},
+							[data.buffer]
+						);
+					});
+				} finally {
+					worker.terminate();
+				}
+			},
+			{ palette, mixtures: Boolean(process.env.DITHERETTE_GPU_YLILUOMA) }
+		);
 		assert.equal(result.error, undefined, result.error);
 		assert.deepEqual(errors, []);
-		assert.equal(result.cases, 32);
-		assert.deepEqual(result.backends, { gpu: 16, hybrid: 16 });
-		assert.equal(result.analyses, 8);
-		assert.equal(result.reuses, 24);
+		assert.equal(result.cases, process.env.DITHERETTE_GPU_YLILUOMA ? 4 : 32);
+		assert.deepEqual(
+			result.backends,
+			process.env.DITHERETTE_GPU_YLILUOMA ? { gpu: 4 } : { gpu: 16, hybrid: 16 }
+		);
+		assert.equal(result.analyses, process.env.DITHERETTE_GPU_YLILUOMA ? 1 : 8);
+		assert.equal(result.reuses, process.env.DITHERETTE_GPU_YLILUOMA ? 1 : 24);
 		t.diagnostic(JSON.stringify({ ...result, system }));
 	}
 );

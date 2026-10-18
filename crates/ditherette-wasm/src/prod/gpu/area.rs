@@ -18,7 +18,9 @@ use components::WGSL as COMPONENTS;
 use pack::WGSL as PACK;
 use sweeps::WGSL as SWEEPS;
 mod indexed;
+mod yliluoma;
 pub use indexed::IndexedMemory;
+pub use yliluoma::MixMemory;
 
 /// Source snapshots/wire copies, GPU source, three packed triplet work planes,
 /// packed coverage staging and independently owned host results. Compiler and
@@ -196,6 +198,7 @@ struct AreaJob<'a> {
     dispatches: Vec<Dispatch>,
     settings: Vec<u8>,
     coverage: Vec<u8>,
+    mixes: Option<wgpu::Texture>,
 }
 
 impl Drop for AreaJob<'_> {
@@ -204,6 +207,9 @@ impl Drop for AreaJob<'_> {
         self.lab.destroy();
         self.cells.destroy();
         self.work.destroy();
+        if let Some(mixes) = &self.mixes {
+            mixes.destroy();
+        }
     }
 }
 
@@ -259,8 +265,9 @@ impl<'a> AreaJob<'a> {
         gpu.check()?;
         let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
         let limits = gpu.device.limits();
-        if pixels * 12 > limits.max_storage_buffer_binding_size as u64
-            || pixels * 12 > limits.max_buffer_size
+        let binding_bytes = pixels * if analysis { 12 } else { 4 };
+        if binding_bytes > limits.max_storage_buffer_binding_size as u64
+            || binding_bytes > limits.max_buffer_size
             || dimensions.width().div_ceil(8) > limits.max_compute_workgroups_per_dimension
             || dimensions.height().div_ceil(8) > limits.max_compute_workgroups_per_dimension
             || limits.min_uniform_buffer_offset_alignment > 256
@@ -300,6 +307,7 @@ impl<'a> AreaJob<'a> {
             dispatches: Vec::new(),
             settings: vec![0; 4],
             coverage: vec![0; 4],
+            mixes: None,
         })
     }
 
@@ -380,7 +388,7 @@ impl<'a> AreaJob<'a> {
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         );
         self.gpu.queue.write_buffer(&coverage, 0, &self.coverage);
-        let entries = [
+        let mut entries: Vec<_> = [
             (0, true, false),
             (1, false, false),
             (2, false, false),
@@ -402,7 +410,21 @@ impl<'a> AreaJob<'a> {
                 min_binding_size: if uniform { NonZeroU64::new(48) } else { None },
             },
             count: None,
-        });
+        })
+        .into_iter()
+        .collect();
+        if self.mixes.is_some() {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 7,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Uint,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            });
+        }
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Adaptive storage"),
             entries: &entries,
@@ -412,43 +434,54 @@ impl<'a> AreaJob<'a> {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
+        let mut resources = vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: self.source.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: self.cells.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: self.work.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &parameters,
+                    offset: 0,
+                    size: NonZeroU64::new(48),
+                }),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: settings.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: coverage.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: self.lab.as_entire_binding(),
+            },
+        ];
+        let view = self
+            .mixes
+            .as_ref()
+            .map(|texture| texture.create_view(&Default::default()));
+        if let Some(view) = &view {
+            resources.push(wgpu::BindGroupEntry {
+                binding: 7,
+                resource: wgpu::BindingResource::TextureView(view),
+            });
+        }
         let bindings = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.source.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.cells.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: self.work.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &parameters,
-                        offset: 0,
-                        size: NonZeroU64::new(48),
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: settings.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: coverage.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: self.lab.as_entire_binding(),
-                },
-            ],
+            entries: &resources,
         });
         let mut pipelines = HashMap::new();
         for dispatch in &self.dispatches {
@@ -457,9 +490,17 @@ impl<'a> AreaJob<'a> {
                     label: Some(dispatch.entry),
                     source: wgpu::ShaderSource::Wgsl(
                         format!(
-                            "{COMMON}\n{}\n{}",
+                            "{COMMON}\n{}\n{}\n{}",
                             dispatch.shader,
-                            if dispatch.shader == PACK || dispatch.entry == "indexed" {
+                            if dispatch.entry == "yliluoma" {
+                                indexed_shader::WGSL
+                            } else {
+                                ""
+                            },
+                            if dispatch.shader == PACK
+                                || dispatch.entry == "indexed"
+                                || dispatch.entry == "yliluoma"
+                            {
                                 noise_table()
                             } else {
                                 String::new()
