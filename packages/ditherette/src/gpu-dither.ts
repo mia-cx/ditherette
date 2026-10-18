@@ -491,6 +491,7 @@ export function initializeGpuDither(
 				} catch {
 					throw new DitheretteError('callback', 'onProgress', 'Progress callback threw.');
 				}
+				signal?.throwIfAborted();
 				execution = {
 					backend: d.family === 2 ? (d.placement === 2 ? 'hybrid' : 'cpu') : 'gpu',
 					adapter,
@@ -524,17 +525,32 @@ export function initializeGpuDither(
 			active = false;
 		}
 	};
+	// Caller getters execute during validation. Hold the same guard there; the
+	// runner takes it over synchronously before the first asynchronous boundary.
+	const normalize = <T>(read: () => T): T => {
+		requireIdle();
+		active = true;
+		try {
+			return read();
+		} finally {
+			active = false;
+		}
+	};
 	return {
 		get execution() {
 			return execution;
 		},
 		async ditherAndQuantize(request, signal) {
 			requireIdle();
-			return run(validateDitherAndQuantize(request), undefined, signal);
+			return run(
+				normalize(() => validateDitherAndQuantize(request)),
+				undefined,
+				signal
+			);
 		},
 		async process(request, signal) {
 			requireIdle();
-			const input = validateProcess(request);
+			const input = normalize(() => validateProcess(request));
 			return run(input, input, signal);
 		},
 		dispose() {

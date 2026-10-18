@@ -8,6 +8,91 @@ const wasm = await WebAssembly.compile(
 	await readFile(new URL('../dist/wasm/scalar/ditherette_wasm_bg.wasm', import.meta.url))
 );
 const options = { wasm, memoryLimitBytes: 32 * 1024 ** 2 };
+
+test('request getters cannot dispose an entered GPU call and validation failures recover', async () => {
+	// Proves normalisation holds the public active-call guard.
+	const gpu = await createGpuDither(options);
+	try {
+		for (const method of ['ditherAndQuantize', 'process']) {
+			const dither = request();
+			const input =
+				method === 'process'
+					? {
+							source: dither.source,
+							palette: dither.palette,
+							recipe: {
+								version: 1,
+								output: {
+									width: 37,
+									height: 19,
+									resize: { algorithm: 'nearest', anchor: 'center' }
+								},
+								alpha: dither.alpha,
+								match: dither.matching,
+								dither: dither.dither
+							}
+						}
+					: dither;
+			const source = input.source;
+			Object.defineProperty(input, 'source', {
+				get() {
+					assert.throws(
+						() => gpu.dispose(),
+						(error) => error.code === 'reentrant-call'
+					);
+					return source;
+				}
+			});
+			await gpu[method](input);
+			await assert.rejects(gpu[method]({}), (error) => error instanceof DitheretteError);
+		}
+		await gpu.ditherAndQuantize(request());
+	} finally {
+		gpu.dispose();
+	}
+});
+
+test('abort from final progress rejects output and never publishes cold coverage', async () => {
+	// Proves caller cancellation after GPU readback cannot publish reusable state.
+	for (const stage of ['dither-and-quantize', 'complete']) {
+		const input = request(),
+			value = await expected(input),
+			passed = [];
+		const gpu = initializeGpuDither(
+			{
+				privateGpuDitherPlan: () => 1,
+				privateGpuDitherDetect: async () => '',
+				privateGpuEffectsAdapter: () => 'test adapter',
+				privateGpuEffectsDispose() {},
+				async privateGpuDitherAndQuantize(...args) {
+					const sink = args.find((arg) => typeof arg?.check === 'function');
+					passed.push(Boolean(args[args.indexOf(sink) - 3]));
+					sink.value = value;
+					sink.coverage = new Uint8Array(4 * Math.ceil((37 * 19) / 32));
+					return '';
+				}
+			},
+			options
+		);
+		try {
+			const controller = new AbortController();
+			input.onProgress = (progress) => {
+				if (progress.stage === stage) controller.abort();
+			};
+			await assert.rejects(
+				gpu.ditherAndQuantize(input, controller.signal),
+				(error) => error.name === 'AbortError'
+			);
+			assert.equal(gpu.execution, undefined);
+			delete input.onProgress;
+			await gpu.ditherAndQuantize(input);
+			await gpu.ditherAndQuantize(input);
+			assert.deepEqual(passed, [false, false, true]);
+		} finally {
+			gpu.dispose();
+		}
+	}
+});
 const request = () => ({
 	version: 1,
 	source: {
