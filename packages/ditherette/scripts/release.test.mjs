@@ -52,7 +52,7 @@ test('release identity is unscoped browser ESM with separate ordinary and RC tag
 	);
 });
 
-test('packed asset validation preserves both builds and excludes source/developer payload', () => {
+test('packed asset validation requires CPU/GPU builds and excludes source/developer payload', () => {
 	const files = [
 		'package.json',
 		'README.md',
@@ -64,7 +64,7 @@ test('packed asset validation preserves both builds and excludes source/develope
 		'dist/threads.js',
 		'dist/wasm/threads/snippets/wasm-bindgen-rayon-hash/src/workerHelpers.no-bundler.js'
 	];
-	for (const variant of ['scalar', 'threads'])
+	for (const variant of ['scalar', 'threads', 'gpu'])
 		for (const name of [
 			'ditherette_wasm_bg.wasm',
 			'ditherette_wasm.factory.js',
@@ -87,6 +87,9 @@ test('packed asset validation preserves both builds and excludes source/develope
 	assert.throws(() => validateFiles(records.filter(({ path }) => !path.includes('workerHelpers'))));
 	assert.throws(() =>
 		validateFiles(records.filter(({ path }) => !path.endsWith('threads/ditherette_wasm_bg.wasm')))
+	);
+	assert.throws(() =>
+		validateFiles(records.filter(({ path }) => !path.endsWith('gpu/ditherette_wasm_bg.wasm')))
 	);
 });
 

@@ -1410,3 +1410,5 @@ mod gpu;
 mod gpu_dither;
 #[cfg(all(feature = "gpu", target_arch = "wasm32"))]
 mod gpu_effects;
+#[cfg(all(feature = "gpu", target_arch = "wasm32"))]
+mod gpu_resize;

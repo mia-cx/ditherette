@@ -24,7 +24,7 @@ export function websiteGpu({ worker = false } = {}) {
 		},
 		async buildStart() {
 			if (worker || command !== 'build' || process.env.VITEST) return;
-			// The ordinary package still ships CPU artifacts only. Website builds opt in here.
+			// Refresh the optional runtime's artifact for this exact website source.
 			// pnpm exec supplies this crate's declared wasm-pack binary.
 			build ??= new Promise((resolve, reject) => {
 				const child = spawn('pnpm', ['exec', process.execPath, 'scripts/build.mjs', 'gpu'], {

@@ -3,9 +3,10 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"build": "pnpm build:scalar && pnpm build:threads",
+		"build": "pnpm build:scalar && pnpm build:threads && pnpm build:gpu",
 		"build:scalar": "node scripts/build.mjs scalar",
 		"build:threads": "node scripts/build.mjs threads",
+		"build:gpu": "node scripts/build.mjs gpu",
 		"test": "cargo test --locked",
 		"test:glue": "node --test scripts/scalar-factory.test.mjs",
 		"test:glue:built": "node --test scripts/scalar-factory-built.test.mjs scripts/threaded-factory-built.test.mjs",

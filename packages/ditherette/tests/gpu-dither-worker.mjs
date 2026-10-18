@@ -89,6 +89,67 @@ self.onmessage = async (event) => {
 			self.postMessage({ calls: count });
 			return;
 		}
+		if (event.data.resize) {
+			const whole = await createGpuDither({ fallback: 'error', tiling: 'disabled' });
+			const tiled = await createGpuDither({ fallback: 'error', tiling: { height: 3 } });
+			const cpu = await createDitherette();
+			let calls = 0,
+				maximumByteDifference = 0;
+			try {
+				for (const anchor of ['top-left', 'center', 'bottom-right']) {
+					const filters = [
+						{ algorithm: 'nearest', anchor },
+						{ algorithm: 'area' },
+						{ algorithm: 'bilinear', anchor },
+						{ algorithm: 'trilinear', anchor },
+						...['bicubic', 'lanczos2', 'lanczos3'].flatMap((algorithm) =>
+							['fixed', 'scale-aware'].map((support) => ({ algorithm, anchor, support }))
+						)
+					];
+					for (const resize of filters) {
+						const input = { version: 1, source, output: { width: 29, height: 23, resize } };
+						const reference = cpu.resize(input);
+						const a = await whole.resize(input);
+						const b = await tiled.resize(input);
+						if (whole.execution.backend !== 'gpu' || tiled.execution.backend !== 'gpu')
+							throw Error('GPU resize required');
+						for (let i = 0; i < a.data.length; i++) {
+							if (a.data[i] !== b.data[i]) throw Error(`Tile seam at byte ${i}`);
+							maximumByteDifference = Math.max(
+								maximumByteDifference,
+								Math.abs(a.data[i] - reference.data[i])
+							);
+						}
+						calls += 2;
+					}
+				}
+				let callbackRejected = false;
+				const input = {
+					version: 1,
+					source,
+					output: { width: 29, height: 23, resize: { algorithm: 'trilinear', anchor: 'center' } }
+				};
+				try {
+					await tiled.resize({
+						...input,
+						onProgress({ stage }) {
+							if (stage === 'resize') throw Error('callback failure');
+						}
+					});
+				} catch (error) {
+					callbackRejected = error.code === 'callback';
+				}
+				if (!callbackRejected) throw Error('callback failure was ignored');
+				await tiled.resize(input);
+				if (tiled.execution.backend !== 'gpu') throw Error('callback retired the device');
+				self.postMessage({ calls, maximumByteDifference, callbackRecovered: true });
+			} finally {
+				whole.dispose();
+				tiled.dispose();
+				cpu.dispose();
+			}
+			return;
+		}
 		const matching = [
 			'srgb-euclidean',
 			'srgb-compuphase',
@@ -233,7 +294,11 @@ self.onmessage = async (event) => {
 		let analyses = 0,
 			reuses = 0;
 		for (let n = 0; n < requests.length; n++) {
-			const actual = await gpu.ditherAndQuantize(requests[n]);
+			const { dither, ...quantize } = requests[n];
+			const actual =
+				dither.family === 'none'
+					? await gpu.quantize(quantize)
+					: await gpu.ditherAndQuantize(requests[n]);
 			const reference = expected[n];
 			if (
 				JSON.stringify(actual.palette) !== JSON.stringify(reference.palette) ||

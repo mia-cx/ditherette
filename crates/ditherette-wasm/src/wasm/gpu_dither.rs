@@ -84,6 +84,35 @@ pub async fn private_gpu_dither_detect(memory_limit: f64) -> String {
         if coverage != [15, 0, 0, 0] {
             return Err(Fallback::Mismatch);
         }
+        let resized = backend
+            .resize(
+                ResizeRequest {
+                    version: 1,
+                    source: Source {
+                        width: 2,
+                        height: 2,
+                        data: &rgba,
+                    },
+                    output: Output {
+                        width: 4,
+                        height: 2,
+                        resize: ResizePolicy::Nearest {
+                            anchor: Anchor::Center,
+                        },
+                    },
+                },
+                false,
+                crate::prod::gpu::GpuTiling::Auto,
+                memory_limit as u64,
+            )
+            .await?;
+        let expected = rgba
+            .chunks_exact(4)
+            .flat_map(|pixel| pixel.iter().chain(pixel).copied())
+            .collect::<Vec<_>>();
+        if resized != expected {
+            return Err(Fallback::Mismatch);
+        }
         Ok::<_, Fallback>(())
     }
     .await;
