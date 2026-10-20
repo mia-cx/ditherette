@@ -37,11 +37,13 @@ Keep that workflow clear and fast, including large images.
   distance work and is deployed there with exact scalar/threaded output checks.
   Qualified latency measurements remain pending because shared-host browser activity
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
-- The GPU preview deploys the complete processing stack with Perf at `6b48ef81` (2026-10-20).
+- The GPU preview deploys the complete processing stack with Perf at `067d6cc9` (2026-10-20).
   Adaptive analysis runs on GPU and is reused across dither settings; the editor
   keeps CPU diffusion recurrence. Full-size Celeste Bayer/Sierra checks and live
   artifact hashes verify the deployment. Per-kernel timing sweeps remain held.
   Perf exposes GPU/CPU stage wall times, effects compilation and analysis reuse.
+  Its total includes source preparation and output presentation; startup separates
+  downloads from remaining Wasm initialisation. Fine-stepped sliders avoid per-step layout reads.
   Profiling of the earlier effects-only build covers all 27 modes, 15 matching spaces, both
   placements and three effects profiles: 2,610 terminal cases, including 177 timeouts.
   In that earlier build, effects ran on GPU while dithering, matching and Adaptive selection ran on CPU.
@@ -135,7 +137,8 @@ Size/performance exceptions and cache-policy changes require their recorded appr
 
 ## Delegation
 
-Use T3-owned delegates with separate worktrees. UI, copy and public API design
-go to Claude Opus 5.5. Technical work goes to Codex gpt-6.1-sol.
+Use T3-owned delegates with separate worktrees. Claude Opus 5.5 defaults to
+implementation, UI and public API design. Codex handles mechanical work and
+independent technical review; GPT-6-class models may write copy.
 The lead reviews and integrates results, owns this file, and controls deployment.
 Serialize heavy local builds and follow the shared exclusive benchmark lease.
