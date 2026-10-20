@@ -102,8 +102,22 @@ it('regenerates output from the source when no processed payload was admitted', 
 	expect(sourceMeta.get()?.name).toBe('old.png');
 	expect(sourceImageData.get()?.data[0]).toBe(1);
 	expect(processedImage.get()).toBeUndefined();
-	expect(scheduleProcessing).toHaveBeenCalledExactlyOnceWith(0);
+	expect(scheduleProcessing).toHaveBeenCalledExactlyOnceWith(0, expect.anything());
 	expect(clearPersistedImages).not.toHaveBeenCalled();
+});
+
+it('hands the upload validation, decode and save to the processing it schedules', async () => {
+	const startedAt = performance.now();
+	await setSourceFile(new File(['new'], 'new.png', { type: 'image/png' }));
+	expect(scheduleProcessing).toHaveBeenLastCalledWith(0, {
+		startedAt: expect.closeTo(startedAt, -1),
+		timings: [
+			{ name: 'main source validation', ms: expect.any(Number) },
+			{ name: 'main source decode', ms: expect.any(Number) },
+			{ name: 'main source save', ms: expect.any(Number) },
+			{ name: 'main source publish', ms: expect.any(Number) }
+		]
+	});
 });
 
 it.each(['source read', 'decode', 'processed read'])(

@@ -237,6 +237,8 @@ export class ProcessorWorkerPipeline {
 	#sourceCache: SourceCache | undefined;
 	#canceledIds = new Set<number>();
 	#package: Promise<Ditherette | GpuDither> | undefined;
+	/** The latest initialization's stages, reported once by the next request that completes. */
+	#startup: ProcessingStageTiming[] = [];
 	#active: { id: number; controller: AbortController } | undefined;
 
 	handle(request: Exclude<WorkerRequest, { type: 'process' }>): WorkerResponse | undefined {
@@ -271,13 +273,20 @@ export class ProcessorWorkerPipeline {
 		progress('Sizing output', 0.05);
 		const size = clampOutputSize(settings.output.width, settings.output.height);
 		const initializeStart = performance.now();
-		this.#package ??= initializePackageProcessor(true).catch((error: unknown) => {
-			this.#package = undefined;
-			throw error;
-		});
+		this.#package ??= initializePackageProcessor(true).then(
+			(processor) => {
+				this.#startup = startupTimings(initializeStart, performance.now());
+				return processor;
+			},
+			(error: unknown) => {
+				this.#package = undefined;
+				throw error;
+			}
+		);
 		const processor = await this.#package;
 		if (this.#canceledIds.has(id)) return undefined;
 		mark('package initialisation wait', initializeStart);
+		timings.push(...this.#startup.splice(0));
 		const source = applyEffects(cache, request, mark);
 		const requestStart = performance.now();
 		// The mapped source already carries the effects, so the package only resizes and dithers.
@@ -400,6 +409,36 @@ function applyEffects(
 	mark('effects map', start);
 	cache.effects = { key, mapped };
 	return mapped;
+}
+
+/**
+ * Package initialization split by the browser's resource timings for what it fetched: its
+ * module scripts, its Wasm, then compiling and instantiating once the Wasm arrived. Streaming
+ * compilation overlaps the Wasm download, so the last stage is only what remained after it.
+ */
+function startupTimings(startedAt: number, readyAt: number): ProcessingStageTiming[] {
+	const fetched = (performance.getEntriesByType('resource') as PerformanceResourceTiming[]).filter(
+		(entry) => entry.startTime >= startedAt && entry.responseEnd <= readyAt
+	);
+	const wasm = fetched.filter((entry) => new URL(entry.name).pathname.endsWith('.wasm'));
+	const scripts = fetched.filter((entry) => !wasm.includes(entry));
+	const span = (name: string, entries: PerformanceResourceTiming[]) =>
+		entries.length
+			? [
+					{
+						name,
+						ms:
+							Math.max(...entries.map((entry) => entry.responseEnd)) -
+							Math.min(...entries.map((entry) => entry.startTime))
+					}
+				]
+			: [];
+	const wasmArrivedAt = Math.max(...wasm.map((entry) => entry.responseEnd));
+	return [
+		...span('module download', scripts),
+		...span('Wasm download', wasm),
+		...(wasm.length ? [{ name: 'Wasm compile + instantiate', ms: readyAt - wasmArrivedAt }] : [])
+	];
 }
 
 /** An image's pixels as the package's byte view, sharing memory. */

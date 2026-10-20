@@ -52,6 +52,10 @@ class ControlledWorker {
 	}
 }
 
+const FRAME_MS = 16;
+/** One animation frame, then the task that follows it. */
+const nextPaint = () => vi.advanceTimersByTimeAsync(FRAME_MS + 1);
+
 function source(): ImageData {
 	return { width: 1, height: 1, data: new Uint8ClampedArray([0, 0, 0, 255]), colorSpace: 'srgb' };
 }
@@ -72,6 +76,9 @@ function preview(settingsHash = 'previous'): ProcessedImage {
 beforeEach(() => {
 	vi.useFakeTimers();
 	vi.stubGlobal('Worker', ControlledWorker);
+	vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+		setTimeout(() => callback(performance.now()), FRAME_MS)
+	);
 	ControlledWorker.instances = [];
 	sourceImageData.set(source());
 	processedImage.set(preview());
@@ -160,6 +167,7 @@ describe('website processing scheduling', () => {
 		const response = await pipeline.handleAsync(request, () => undefined);
 		worker.receive(response);
 		await pending;
+		await nextPaint();
 		expect(processingError.get()).toBeUndefined();
 		const metrics = currentProcessingMetrics.get();
 		expect(metrics?.settingsHash).toBe(currentSettingsHash());
@@ -176,6 +184,47 @@ describe('website processing scheduling', () => {
 		expect(metrics?.memory).toBeUndefined();
 		expect(processingMetricsHistory.get()).toHaveLength(1);
 	});
+	it('records the wait from an upload until its output paints', async () => {
+		const startedAt = performance.now();
+		await vi.advanceTimersByTimeAsync(40);
+		scheduleProcessing(0, { startedAt, timings: [{ name: 'main source decode', ms: 40 }] });
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		const pipeline = new ProcessorWorkerPipeline();
+		worker.receive(await pipeline.handleAsync(worker.messages[0], () => undefined));
+		worker.receive(await pipeline.handleAsync(worker.messages.at(-1)!, () => undefined));
+		await vi.advanceTimersByTimeAsync(0);
+		expect(processedImage.get()?.settingsHash).toBe(currentSettingsHash());
+		expect(currentProcessingMetrics.get()).toBeUndefined();
+		await nextPaint();
+		const metrics = currentProcessingMetrics.get();
+		expect(metrics?.startedAt).toBe(startedAt);
+		expect(metrics?.totalMs).toBe(metrics!.completedAt - startedAt);
+		expect(metrics?.totalMs).toBeGreaterThanOrEqual(40 + FRAME_MS);
+		expect(metrics?.timings.map(({ name }) => name)).toEqual(
+			expect.arrayContaining([
+				'main source decode',
+				'main worker round trip',
+				'main publish and paint'
+			])
+		);
+	});
+
+	it('records nothing for an output replaced before it painted', async () => {
+		const pending = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		const pipeline = new ProcessorWorkerPipeline();
+		worker.receive(await pipeline.handleAsync(worker.messages[0], () => undefined));
+		worker.receive(await pipeline.handleAsync(worker.messages.at(-1)!, () => undefined));
+		await pending;
+		// A new upload clears the output before the next frame.
+		processedImage.set(undefined);
+		await nextPaint();
+		expect(currentProcessingMetrics.get()).toBeUndefined();
+		expect(processingMetricsHistory.get()).toHaveLength(0);
+	});
+
 	it('keeps initialization errors visible and retries through a fresh worker module registry', async () => {
 		const first = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);

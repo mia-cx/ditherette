@@ -55,6 +55,11 @@ export type ProcessingMetricsSample = {
 	settingsHash: string;
 	sourceId: string;
 	scopeKey: string;
+	/**
+	 * Recorded samples run from the user's action (an upload or restore starting, or the latest
+	 * settings change scheduling) until the output painted. A worker response covers only its own
+	 * work until the page replaces both.
+	 */
 	startedAt: number;
 	completedAt: number;
 	totalMs: number;
