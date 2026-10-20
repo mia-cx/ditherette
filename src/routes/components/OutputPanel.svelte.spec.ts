@@ -38,6 +38,29 @@ it('upscales from scale and dimension inputs while keeping the slider in its ori
 	await expect.element(page.getByLabelText('Scale', { exact: true })).toHaveValue(4);
 });
 
+it('moves the scale slider without measuring the page for each of its steps', async () => {
+	render(OutputPanel, { hasImage: true });
+	const slider = page.getByRole('slider');
+	await expect.element(slider).toHaveAttribute('aria-valuenow', '1');
+	const offsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')!;
+	let reads = 0;
+	Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+		configurable: true,
+		get() {
+			reads++;
+			return offsetWidth.get!.call(this);
+		}
+	});
+	try {
+		outputSettings.set({ ...outputSettings.get(), width: 500, height: 250, scaleFactor: 0.5 });
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '0.5');
+	} finally {
+		Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offsetWidth);
+	}
+	// The thumb and track, not one measurement per 0.0001 step.
+	expect(reads).toBeLessThan(100);
+});
+
 it('keeps tiny positive scales and lets the slider resume controlling the scale', async () => {
 	render(OutputPanel, { hasImage: true });
 	await enter('Scale', '0.000001');
