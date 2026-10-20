@@ -1,4 +1,5 @@
 import { DitheretteError } from './errors.js';
+import { executionTimings } from './timings.js';
 import { normalizeWasmInput } from './scalar.js';
 import { createCpu } from './cpu.js';
 import { validateApplyEffects } from './validation-effects.js';
@@ -56,6 +57,8 @@ export interface EffectsExecution {
 	readonly backend: 'gpu' | 'cpu';
 	readonly adapter?: string;
 	readonly fallback?: string;
+	/** Host wall times, including GPU completion and result transfer. */
+	readonly timings?: readonly import('./timings.js').ExecutionTiming[];
 }
 
 /**
@@ -227,6 +230,8 @@ export function initializeGpuEffects(
 	const run = async (request: ApplyEffectsRequest | EffectMaskRequest, masked = false) => {
 		requireIdle();
 		active = true;
+		const measured = executionTimings();
+		measured.mark('effects preparation', true);
 		try {
 			const input = validateApplyEffects(request, masked);
 			const jsonBytes = input.effects.json.length + (masked ? input.mask.length : 0);
@@ -240,7 +245,7 @@ export function initializeGpuEffects(
 			if (!masked && !input.effects.enabled) {
 				report({ stage: 'prepare', completed: 0, total: 1 });
 				report({ stage: 'complete', completed: 1, total: 1 });
-				execution = { backend: 'cpu', fallback: 'NoEnabledEffects' };
+				execution = { backend: 'cpu', fallback: 'NoEnabledEffects', timings: measured.finish() };
 				return input.source;
 			}
 			const bytes = input.data.length;
@@ -307,15 +312,19 @@ export function initializeGpuEffects(
 				);
 			}
 			const source = { width: input.sourceWidth, height: input.sourceHeight, data: snapshot };
+			measured.mark('effects preparation', false);
 			if (bindings) {
 				try {
 					if (!reason && !detected) {
+						measured.mark('GPU device initialization', true);
 						reason = await bindings.privateGpuEffectsDetect(options.memoryLimitBytes - bytes);
+						measured.mark('GPU device initialization', false);
 						detected = !reason;
 					}
 					if (!reason) {
 						adapter = bindings.privateGpuEffectsAdapter();
 						const sink: { value?: Rgba8Image } = {};
+						measured.mark('GPU effects + readback', true);
 						reason = await bindings.privateGpuApplyEffects(
 							source.data,
 							source.width,
@@ -328,6 +337,7 @@ export function initializeGpuEffects(
 							masked ? input.mask : undefined
 						);
 						output = sink.value;
+						measured.mark('GPU effects + readback', false);
 					}
 				} catch {
 					reason = 'Failed';
@@ -344,12 +354,14 @@ export function initializeGpuEffects(
 				report({ stage: 'prepare', completed: 0, total: 1 });
 				report({ stage: 'effects', completed: total, total });
 				report({ stage: 'complete', completed: 1, total: 1 });
-				execution = { backend: 'gpu', adapter };
+				execution = { backend: 'gpu', adapter, timings: measured.finish() };
 				return output;
 			}
 			// No library-owned GPU artifact may coexist with CPU fallback capacity.
 			retire(reason || 'Failed');
 			if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
+			measured.finish();
+			measured.mark('CPU effects fallback', true);
 			const cpu = await createCpu({
 				threads: options.threads,
 				wasm: options.wasm,
@@ -361,10 +373,12 @@ export function initializeGpuEffects(
 				const result = masked
 					? cpu.effectMask({ ...fallbackRequest, mask: JSON.parse(input.mask) as MaskCurve[] })
 					: cpu.applyEffects(fallbackRequest);
+				measured.mark('CPU effects fallback', false);
 				execution = {
 					backend: 'cpu',
 					...(adapter ? { adapter } : {}),
-					fallback: reason || 'Failed'
+					fallback: reason || 'Failed',
+					timings: measured.finish()
 				};
 				return result;
 			} finally {

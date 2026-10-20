@@ -22,6 +22,8 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "/src/wasm/gpu_helpers.js")]
 extern "C" {
+    #[wasm_bindgen(catch, js_name = timingJob)]
+    fn timing_job(sink: &JsValue, name: &str, begin: bool) -> Result<(), JsValue>;
     #[wasm_bindgen(catch, js_name = checkJob)]
     fn check_job(sink: &JsValue, completed: u32) -> Result<bool, JsValue>;
     #[wasm_bindgen(catch, js_name = completeCoverage)]
@@ -239,6 +241,8 @@ pub async fn private_gpu_dither_and_quantize(
     if bytes != u64::from(input.length()) {
         return Err(JsError::new("source dimensions no longer match"));
     }
+    timing_job(&sink, "Wasm input copy", true)
+        .map_err(|_| JsError::new("timing callback failed"))?;
     let mut rgba = Vec::new();
     rgba.try_reserve_exact(bytes as usize)
         .map_err(|_| JsError::new("source allocation failed"))?;
@@ -260,12 +264,17 @@ pub async fn private_gpu_dither_and_quantize(
     } else {
         None
     };
+    timing_job(&sink, "Wasm input copy", false)
+        .map_err(|_| JsError::new("timing callback failed"))?;
     let mut backend = BACKEND.with(|slot| slot.borrow_mut().take());
     struct Control<'a> {
         sink: &'a JsValue,
         width: u32,
     }
     impl crate::prod::gpu::JobControl for Control<'_> {
+        fn timing(&mut self, name: &'static str, begin: bool) -> Result<(), Fallback> {
+            timing_job(self.sink, name, begin).map_err(|_| Fallback::Callback)
+        }
         fn check(&mut self) -> Result<(), Fallback> {
             self.row(0)
         }
@@ -344,6 +353,8 @@ pub async fn private_gpu_dither_and_quantize(
     BACKEND.with(|slot| *slot.borrow_mut() = backend);
     match result {
         Ok((output, coverage)) => {
+            crate::prod::gpu::JobControl::timing(&mut check, "output transfer", true)
+                .map_err(|_| JsError::new("timing callback failed"))?;
             crate::prod::gpu::JobControl::check(&mut check)
                 .map_err(|reason| JsError::new(&format!("{reason:?}")))?;
             match output {
@@ -368,6 +379,8 @@ pub async fn private_gpu_dither_and_quantize(
                 complete_coverage(&bits, &sink)
                     .map_err(|_| JsError::new("coverage result copy failed"))?;
             }
+            crate::prod::gpu::JobControl::timing(&mut check, "output transfer", false)
+                .map_err(|_| JsError::new("timing callback failed"))?;
             Ok(String::new())
         }
         Err(reason) => Ok(format!("{reason:?}")),

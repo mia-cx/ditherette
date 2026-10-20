@@ -72,6 +72,7 @@ export class EffectsWorkerPipeline {
 			return Promise.resolve();
 		}
 		if (request.type === 'source') {
+			const started = performance.now();
 			const image = bytes(request.source);
 			const { colours, indices } = indexColours(image);
 			this.#loaded = { sourceId: request.sourceId, image, colours };
@@ -79,7 +80,13 @@ export class EffectsWorkerPipeline {
 			for (let pixel = 0; pixel < indices.length; pixel++)
 				indices[pixel] = (indices[pixel]! | (image.data[pixel * 4 + 3]! << 24)) >>> 0;
 			this.post(
-				{ type: 'indexed', sourceId: request.sourceId, pixels: indices, count: colours.length },
+				{
+					type: 'indexed',
+					sourceId: request.sourceId,
+					pixels: indices,
+					count: colours.length,
+					timings: [{ name: 'source colour index', ms: performance.now() - started }]
+				},
 				[indices.buffer]
 			);
 			return Promise.resolve();
@@ -92,7 +99,12 @@ export class EffectsWorkerPipeline {
 			loaded?.sourceId === request.sourceId &&
 			(request.type !== 'compile' || request.id > this.#cancelledThrough);
 		const { id, sourceId, key } = request;
+		const queuedAt = performance.now();
 		this.#queue = this.#queue.then(async () => {
+			const timings: ProcessingStageTiming[] = [];
+			const mark = (name: string, start: number) =>
+				timings.push({ name, ms: performance.now() - start });
+			mark('effects queue wait', queuedAt);
 			let cpu: Ditherette | undefined;
 			try {
 				if (!current() || !loaded) return;
@@ -106,12 +118,16 @@ export class EffectsWorkerPipeline {
 							((step.effect === 'recolour' && step.recipe === null) ||
 								(step.effect === 'palette-fit' && step.curves === null))
 					);
+				let started = performance.now();
 				cpu = needsCpu ? await initializePackageProcessor() : undefined;
+				if (needsCpu) mark('effects CPU initialization', started);
 				if (!current()) return;
 				const fits: AnalysedFit[] = [];
+				started = performance.now();
 				const resolved = cpu
 					? resolveRecipes(cpu, loaded.image, effects, context, crop, analyses, fits)
 					: effects;
+				if (needsCpu) mark('effects recipe analysis', started);
 				if (request.type === 'measure') {
 					this.post({
 						type: 'measured',
@@ -139,6 +155,7 @@ export class EffectsWorkerPipeline {
 				const results = new Uint32Array(loaded.colours.length);
 				let execution: GpuEffects['execution'];
 				if (results.length) {
+					started = performance.now();
 					const width = Math.min(results.length, COLOUR_ROW);
 					const height = Math.ceil(results.length / width);
 					const data = new Uint8Array(width * height * 4);
@@ -149,6 +166,8 @@ export class EffectsWorkerPipeline {
 						data[pixel * 4 + 2] = (colour >>> 16) & 255;
 						data[pixel * 4 + 3] = 255;
 					}
+					mark('effects colour packing', started);
+					started = performance.now();
 					this.#gpu ??= createGpuEffects({
 						memoryLimitBytes: EFFECTS_MEMORY_BYTES - COLOUR_HOST_BYTES
 					}).catch((error: unknown) => {
@@ -156,22 +175,28 @@ export class EffectsWorkerPipeline {
 						throw error;
 					});
 					const gpu = await this.#gpu;
+					mark('effects package initialization wait', started);
 					if (!current()) return;
+					started = performance.now();
 					const output = await gpu.applyEffects({
 						version: 1,
 						source: { width, height, data },
 						effects: resolved,
 						context
 					});
+					mark('effects package total', started);
 					if (!current()) return;
 					execution = gpu.execution;
+					timings.push(...(execution?.timings ?? []));
+					started = performance.now();
 					for (let pixel = 0; pixel < results.length; pixel++)
 						results[pixel] =
 							output.data[pixel * 4]! |
 							(output.data[pixel * 4 + 1]! << 8) |
 							(output.data[pixel * 4 + 2]! << 16);
+					mark('effects result packing', started);
 				}
-				this.post({ type: 'compiled', id, sourceId, key, results, fits, execution }, [
+				this.post({ type: 'compiled', id, sourceId, key, results, fits, execution, timings }, [
 					results.buffer
 				]);
 			} catch (error) {
@@ -259,6 +284,9 @@ export class ProcessorWorkerPipeline {
 		const mapped = packageProcessRequest(source, palette, { ...settings, effects: [] }, size);
 		mark('package request adapter', requestStart);
 		const processStart = performance.now();
+		const stages: ProcessingStageTiming[] = [];
+		let stageName = 'prepare';
+		let stageStart = processStart;
 		const controller = new AbortController();
 		this.#active = { id, controller };
 		let output;
@@ -266,6 +294,13 @@ export class ProcessorWorkerPipeline {
 			const processRequest = {
 				...mapped.request,
 				onProgress({ stage, completed, total }: Progress) {
+					if (stage !== stageName) {
+						const now = performance.now();
+						if (stageName !== 'complete')
+							stages.push({ name: `package ${stageName}`, ms: now - stageStart });
+						stageName = stage;
+						stageStart = now;
+					}
 					progress(stage, stage === 'complete' ? 1 : total ? (completed ?? 0) / total : 0, {
 						completed,
 						total
@@ -296,6 +331,9 @@ export class ProcessorWorkerPipeline {
 		if (this.#canceledIds.has(id)) return undefined;
 		mark('package process', processStart);
 		const adapterStart = performance.now();
+		const execution = 'execution' in processor ? processor.execution : { backend: 'cpu' as const };
+		if (execution && 'timings' in execution) timings.push(...(execution.timings ?? []));
+		if (execution?.backend === 'cpu') timings.push(...stages);
 		const result = packageQuantizeResult(output, palette, mapped.warnings);
 		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
 		mark('package output adapter', adapterStart);
@@ -322,6 +360,7 @@ export class ProcessorWorkerPipeline {
 				completedAt,
 				totalMs: completedAt - startedAt,
 				timings,
+				execution,
 				outputPixels: size.width * size.height,
 				colorSpace: settings.colorSpace,
 				dither: settings.dither.algorithm,

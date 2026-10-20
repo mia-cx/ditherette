@@ -59,6 +59,12 @@ export type ProcessingMetricsSample = {
 	completedAt: number;
 	totalMs: number;
 	timings: ProcessingStageTiming[];
+	execution?: {
+		backend: 'gpu' | 'hybrid' | 'cpu';
+		adapter?: string;
+		fallback?: string;
+		analysisReused?: boolean;
+	};
 	cache?: ProcessingCacheMetrics;
 	memory?: ProcessingMemoryShape;
 	outputPixels: number;
@@ -71,7 +77,7 @@ export type ProcessingMetricsSample = {
 export type TimingSummary = {
 	name: string;
 	count: number;
-	latest: number;
+	latest: number | undefined;
 	average: number;
 	p95: number;
 	p98: number;
@@ -96,7 +102,13 @@ export function summarizeTimingHistory(
 		for (const timing of sample.timings) pushTiming(valuesByName, timing.name, timing.ms);
 	}
 	return [...valuesByName.entries()]
-		.map(([name, values]) => summarizeValues(name, values))
+		.map(([name, values]) => ({
+			...summarizeValues(name, values),
+			latest:
+				name === 'total'
+					? samples.at(-1)?.totalMs
+					: samples.at(-1)?.timings.find((timing) => timing.name === name)?.ms
+		}))
 		.sort((left, right) =>
 			left.name === 'total' ? -1 : right.name === 'total' ? 1 : left.name.localeCompare(right.name)
 		);

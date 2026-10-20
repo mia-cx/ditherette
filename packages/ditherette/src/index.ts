@@ -23,6 +23,7 @@ export type {
 } from './compiled-effects.js';
 export { isEffect } from './validation-effects.js';
 export type { ErrorCode } from './errors.js';
+export type { ExecutionTiming } from './timings.js';
 export type {
 	AlphaPolicy,
 	AnalyzePaletteFitRequest,

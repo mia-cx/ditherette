@@ -1,4 +1,5 @@
 import { DitheretteError } from './errors.js';
+import { executionTimings } from './timings.js';
 import { normalizeWasmInput } from './scalar.js';
 import { createCpu } from './cpu.js';
 import {
@@ -77,6 +78,8 @@ export interface DitherExecution {
 	readonly fallback?: string;
 	/** True when byte-verified source coverage bypassed the complete GPU selector. */
 	readonly analysisReused?: boolean;
+	/** Host wall times; nested GPU spans overlap and include synchronization. */
+	readonly timings?: readonly import('./timings.js').ExecutionTiming[];
 }
 
 /** Keep the CPU operation surface available on the asynchronous engine. */
@@ -433,6 +436,8 @@ export function initializeGpuDither(
 	): Promise<IndexedImage | Rgba8Image> {
 		requireIdle();
 		active = true;
+		const measured = executionTimings();
+		measured.mark('request preparation', true);
 		try {
 			signal?.throwIfAborted();
 			let reason = unavailable;
@@ -616,8 +621,11 @@ export function initializeGpuDither(
 			const stage = rgba ? 'perturb' : 'dither-and-quantize';
 			if (bindings) {
 				try {
+					measured.mark('request preparation', false);
 					if (!detected) {
+						measured.mark('GPU device initialization', true);
 						reason = await bindings.privateGpuDitherDetect(gpuLimit);
+						measured.mark('GPU device initialization', false);
 						detected = !reason;
 					}
 					signal?.throwIfAborted();
@@ -625,6 +633,7 @@ export function initializeGpuDither(
 						adapter = bindings.privateGpuEffectsAdapter();
 						report({ stage: 'prepare', completed: 0, total: 1 });
 						if (process?.effects?.enabled) {
+							measured.mark('GPU effects', true);
 							const sink: { value?: Rgba8Image } = {};
 							reason = await bindings.privateGpuApplyEffects(
 								snapshot,
@@ -637,6 +646,7 @@ export function initializeGpuDither(
 								rows
 							);
 							effected = sink.value;
+							measured.mark('GPU effects', false);
 							sink.value = undefined;
 							if (!reason && !effected) reason = 'Failed';
 							if (effected) prepared = effected;
@@ -649,6 +659,7 @@ export function initializeGpuDither(
 							signal?.throwIfAborted();
 						}
 						if (!reason && resizing && process) {
+							measured.mark('GPU resize', true);
 							let progress = 0,
 								lastResize = 0;
 							const sink = {
@@ -682,6 +693,7 @@ export function initializeGpuDither(
 								sink
 							);
 							resized = sink.value;
+							measured.mark('GPU resize', false);
 							sink.value = undefined;
 							if (!reason && !resized) reason = 'Failed';
 							if (resized) prepared = resized;
@@ -703,6 +715,7 @@ export function initializeGpuDither(
 									: undefined;
 						}
 						const sink = {
+							timing: measured.mark,
 							value: undefined as IndexedImage | Rgba8Image | undefined,
 							coverage: undefined as Uint8Array | undefined,
 							check: (completed = 0) => {
@@ -776,6 +789,7 @@ export function initializeGpuDither(
 								: 'cpu'
 							: 'gpu',
 					adapter,
+					timings: measured.finish(),
 					...(d.placement === 2 ? { analysisReused: Boolean(retained) } : {})
 				};
 				if (coverage && retain)
@@ -791,6 +805,9 @@ export function initializeGpuDither(
 			}
 			retire(reason || 'Failed');
 			if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
+			measured.mark('request preparation', false);
+			measured.finish();
+			measured.mark('CPU fallback', true);
 			retained = undefined;
 			coverage = undefined;
 			prepared = request.source;
@@ -815,7 +832,13 @@ export function initializeGpuDither(
 						})
 					: cpu.ditherAndQuantize(request);
 			signal?.throwIfAborted();
-			execution = { backend: 'cpu', fallback: reason || 'Failed', ...(adapter ? { adapter } : {}) };
+			measured.mark('CPU fallback', false);
+			execution = {
+				backend: 'cpu',
+				fallback: reason || 'Failed',
+				timings: measured.finish(),
+				...(adapter ? { adapter } : {})
+			};
 			return result;
 		} finally {
 			active = false;

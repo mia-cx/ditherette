@@ -5,6 +5,7 @@ import { activeEffectSteps, effectLayers, type EffectLayer } from '$lib/stores/e
 import { packageEffectContext } from './package-adapter';
 import type { MeasuredFit } from './recipes';
 import type { CropRect } from './types';
+import type { ProcessingStageTiming } from './metrics';
 
 type Compile = {
 	id: number;
@@ -38,6 +39,7 @@ export type LiveEffectsResponse =
 			/** One word per pixel: its colour's index in the low 24 bits, its alpha in the top 8. */
 			pixels: Uint32Array;
 			count: number;
+			timings?: ProcessingStageTiming[];
 	  }
 	| {
 			type: 'measured';
@@ -55,6 +57,7 @@ export type LiveEffectsResponse =
 			results: Uint32Array;
 			/** Package backend evidence for the compile. Mask previews always use CPU. */
 			execution?: EffectsExecution;
+			timings?: ProcessingStageTiming[];
 			/** Each palette-fit step's resolved curves, by index into `effects`. Only `compiled`. */
 			fits?: readonly { readonly index: number; readonly curves: readonly Curve[] }[];
 	  }
@@ -77,6 +80,31 @@ export type LiveEffectsResponse =
 export const effectsIndex = atom<
 	{ source: ImageData; pixels: Uint32Array; count: number } | undefined
 >();
+/** Last successful compile for the current source/key, independent of output recomputes. */
+const lastEffectsPerformance = atom<
+	| {
+			source: ImageData;
+			key: string;
+			timings: ProcessingStageTiming[];
+			execution?: EffectsExecution;
+			reused: boolean;
+	  }
+	| undefined
+>();
+export const effectsPerformance = computed(
+	[
+		lastEffectsPerformance,
+		sourceImageData,
+		activeEffectSteps,
+		selectedPalette,
+		colorSpace,
+		outputSettings
+	],
+	(metrics, source) =>
+		metrics && metrics.source === source && metrics.key === currentEffectsKey()
+			? metrics
+			: undefined
+);
 /**
  * The latest compiled effects: each distinct colour's result, for the source and key named.
  * A retained earlier compile can stand in while the current key is still compiling.
@@ -281,7 +309,10 @@ export function startLiveEffects() {
 	type Retained = {
 		results: Uint32Array;
 		fits?: readonly { readonly index: number; readonly curves: readonly Curve[] }[];
+		timings?: ProcessingStageTiming[];
+		execution?: EffectsExecution;
 	};
+	let sourceTimings: ProcessingStageTiming[] = [];
 	/** Successful compiles for the loaded source, oldest first, bounded by count and bytes. */
 	const retained = new Map<string, Retained>();
 
@@ -289,6 +320,8 @@ export function startLiveEffects() {
 	function invalidate() {
 		effectsIndex.set(undefined);
 		compiledEffects.set(undefined);
+		lastEffectsPerformance.set(undefined);
+		sourceTimings = [];
 		compiledMask.set(undefined);
 		analysedFits.set({ key: '', byIndex: new Map() });
 		retained.clear();
@@ -329,8 +362,15 @@ export function startLiveEffects() {
 	}
 
 	/** Show `entry` for `source` under `key` and release whoever waits on it. */
-	function publish(source: ImageData, key: string, entry: Retained) {
+	function publish(source: ImageData, key: string, entry: Retained, reused = false) {
 		compiledEffects.set({ source, key, results: entry.results });
+		lastEffectsPerformance.set({
+			source,
+			key,
+			timings: [...sourceTimings, ...(entry.timings ?? [])],
+			execution: entry.execution,
+			reused
+		});
 		// Publish only the curves for the settings that produced them, by their index in
 		// the sent steps; a stale reply's fits never sit editable under a current layer.
 		if (key === currentEffectsKey()) {
@@ -405,7 +445,7 @@ export function startLiveEffects() {
 			const hit = retained.get(key);
 			if (hit) {
 				retain(key, hit);
-				publish(source, key, hit);
+				publish(source, key, hit, true);
 			} else if (!busy) {
 				busy = true;
 				compiling = { id: ++requestId, source, key };
@@ -443,7 +483,10 @@ export function startLiveEffects() {
 		const source = sourceImageData.get();
 		const current = source && sources.get(source) === data.sourceId ? source : undefined;
 		if (data.type === 'indexed') {
-			if (current) effectsIndex.set({ source: current, pixels: data.pixels, count: data.count });
+			if (current) {
+				sourceTimings = data.timings ?? [];
+				effectsIndex.set({ source: current, pixels: data.pixels, count: data.count });
+			}
 			return;
 		}
 		if (data.type === 'cancelled') {
@@ -500,10 +543,16 @@ export function startLiveEffects() {
 			settle(current, data.key, new Error(data.message));
 		} else if (current && data.type === 'compiled') {
 			// Same-source replies are valid results even when stale, so retain them all.
-			retain(data.key, { results: data.results, fits: data.fits });
+			const entry = {
+				results: data.results,
+				fits: data.fits,
+				timings: data.timings,
+				execution: data.execution
+			};
+			retain(data.key, entry);
 			const key = currentEffectsKey();
 			// Retain completed earlier keys, but a late readback never changes the shown generation.
-			if (data.key === key) publish(current, data.key, { results: data.results, fits: data.fits });
+			if (data.key === key) publish(current, data.key, entry);
 			else settle(current, data.key, data.results);
 		}
 		// An old-source reply must not cancel processing waiting for the selected source and settings.

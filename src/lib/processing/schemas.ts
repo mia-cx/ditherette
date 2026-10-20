@@ -465,6 +465,29 @@ function validateProcessingMetrics(value: unknown): ProcessingMetricsSample | un
 	const cache = isObject(value.cache) ? value.cache : undefined;
 	if (value.cache !== undefined && !cache) throw new Error('Worker metrics cache is invalid.');
 	const timings = Array.isArray(value.timings) ? value.timings.map(validateTiming) : [];
+	let execution: ProcessingMetricsSample['execution'];
+	if (value.execution !== undefined) {
+		if (!isObject(value.execution)) throw new Error('Worker execution metrics are invalid.');
+		execution = {
+			backend: assertOneOf(
+				value.execution.backend,
+				['gpu', 'hybrid', 'cpu'] as const,
+				'Worker backend'
+			),
+			adapter:
+				value.execution.adapter === undefined
+					? undefined
+					: assertString(value.execution.adapter, 'Worker adapter'),
+			fallback:
+				value.execution.fallback === undefined
+					? undefined
+					: assertString(value.execution.fallback, 'Worker fallback'),
+			analysisReused:
+				value.execution.analysisReused === undefined
+					? undefined
+					: assertBoolean(value.execution.analysisReused, 'Worker analysis reuse')
+		};
+	}
 	const warnings = Array.isArray(value.warnings)
 		? value.warnings.filter((warning): warning is string => typeof warning === 'string')
 		: [];
@@ -477,6 +500,7 @@ function validateProcessingMetrics(value: unknown): ProcessingMetricsSample | un
 		completedAt: assertFiniteTimestamp(value.completedAt, 'Worker metrics completion'),
 		totalMs: assertFiniteNonNegativeNumber(value.totalMs, 'Worker metrics total'),
 		timings,
+		execution,
 		cache: cache
 			? {
 					delta: validateCacheSnapshot(cache.delta),

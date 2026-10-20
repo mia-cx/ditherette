@@ -87,6 +87,7 @@ impl super::super::Backend {
             }),
             _ => return Err(Fallback::UnsupportedStage),
         };
+        check.timing("palette mixture preparation", true)?;
         // Analysis planes are gone before the palette tree or atlas is created.
         let prepared = PreparedQuantizer::try_new(
             request.quantize.palette,
@@ -117,7 +118,9 @@ impl super::super::Backend {
             Self::Cpu(reason) => Err(reason.clone()),
             Self::Gpu(gpu) => {
                 gpu.scoped(async {
+                    check.timing("GPU upload setup", true)?;
                     let mut job = AreaJob::new_with_analysis(gpu, dimensions, source.data, false)?;
+                    check.timing("GPU upload setup", false)?;
                     job.settings = indexed::settings(
                         prepared.palette(),
                         request.quantize.matching,
@@ -132,7 +135,11 @@ impl super::super::Backend {
                         job.settings[6 * 4..7 * 4].copy_from_slice(&2u32.to_le_bytes());
                         job.coverage = bits.clone();
                     }
+                    check.timing("palette mixture preparation", false)?;
+                    check.timing("GPU mixture upload", true)?;
                     job.upload_mixtures(tree.as_ref(), check).await?;
+                    check.timing("GPU mixture upload", false)?;
+                    check.timing("GPU Yliluoma", true)?;
                     let bytes = IndexedMemory::new(dimensions).index_bytes;
                     job.indexed_dispatches(
                         shader::WGSL,
@@ -143,6 +150,7 @@ impl super::super::Backend {
                         4,
                     );
                     let mut indices = job.execute_read_checked(&job.work, bytes, check).await?;
+                    check.timing("GPU Yliluoma", false)?;
                     indices.truncate(dimensions.pixel_count().expect("validated dimensions"));
                     Ok(prepared.into_indexed(
                         ImageBuf::from_vec_packed(indices, dimensions).expect("validated indices"),

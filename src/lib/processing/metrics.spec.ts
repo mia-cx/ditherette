@@ -96,6 +96,19 @@ describe('processing metrics helpers', () => {
 		expect(history).toEqual([second]);
 	});
 
+	it('does not present a skipped Adaptive analysis as work in the latest frame', () => {
+		const summary = summarizeTimingHistory([
+			sample({ timings: [{ name: 'GPU Adaptive analysis', ms: 40 }] }),
+			sample({ timings: [{ name: 'GPU dither + quantise', ms: 3 }] })
+		]);
+		expect(summary.find((row) => row.name === 'GPU Adaptive analysis')).toMatchObject({
+			count: 1,
+			average: 40,
+			latest: undefined
+		});
+		expect(summary.find((row) => row.name === 'GPU dither + quantise')?.latest).toBe(3);
+	});
+
 	it('caps rolling history length', () => {
 		const history = Array.from({ length: 105 }, (_, index) => sample({ id: index })).reduce(
 			(current, next) => appendMetricsSample(current, next),

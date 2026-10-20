@@ -310,7 +310,13 @@ test('async indexed fallback preserves ordinary output, process recipes and owne
 	const input = request();
 	const result = await processor.ditherAndQuantize(input);
 	assert.deepEqual(result, await expected(input));
-	assert.deepEqual(processor.execution, { backend: 'cpu', fallback: 'NoAdapter' });
+	assert.equal(processor.execution.backend, 'cpu');
+	assert.equal(processor.execution.fallback, 'NoAdapter');
+	assert.ok(
+		processor.execution.timings.some(
+			({ name, ms }) => name === 'CPU fallback' && Number.isFinite(ms) && ms >= 0
+		)
+	);
 	const process = {
 		source: input.source,
 		palette: input.palette,

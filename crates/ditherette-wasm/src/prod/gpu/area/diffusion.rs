@@ -293,6 +293,7 @@ impl super::super::Backend {
                             }
                         }
                     }
+                    check.timing("GPU diffusion", true)?;
                     let mut bytes = job
                         .execute_read_batched_checked(
                             &job.work,
@@ -301,6 +302,7 @@ impl super::super::Backend {
                             batch_size,
                         )
                         .await?;
+                    check.timing("GPU diffusion", false)?;
                     if bytes[output_bytes as usize..].iter().any(|&byte| byte != 0) {
                         return Err(Fallback::Failed("non-finite diffusion arithmetic".into()));
                     }

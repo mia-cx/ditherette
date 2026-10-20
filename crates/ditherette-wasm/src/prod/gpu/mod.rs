@@ -39,6 +39,10 @@ pub use stage::Stage;
 /// Cancellation is checked between GPU batches and ordinary CPU diffusion rows.
 pub(crate) trait JobControl {
     fn check(&mut self) -> Result<(), Fallback>;
+    /// Optional host wall-time spans. Native callers need no clock or retained records.
+    fn timing(&mut self, _name: &'static str, _begin: bool) -> Result<(), Fallback> {
+        Ok(())
+    }
     fn row(&mut self, _completed: u32) -> Result<(), Fallback> {
         self.check()
     }

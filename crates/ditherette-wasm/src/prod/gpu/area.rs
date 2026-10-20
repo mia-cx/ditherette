@@ -96,6 +96,7 @@ impl super::Backend {
         memory_limit: u64,
         check: &mut dyn JobControl,
     ) -> Result<Vec<u8>, Fallback> {
+        check.timing("GPU Adaptive analysis", true)?;
         check.check()?;
         let memory = AreaMemory::new(dimensions);
         if memory.required_bytes > memory_limit {
@@ -111,7 +112,9 @@ impl super::Backend {
             Self::Cpu(reason) => Err(reason.clone()),
             Self::Gpu(gpu) => {
                 gpu.scoped(async {
+                    check.timing("GPU upload setup", true)?;
                     let mut job = AreaJob::new(gpu, dimensions, rgba)?;
+                    check.timing("GPU upload setup", false)?;
                     let parameters = Parameters::new(dimensions, sample_size, contrast_threshold);
                     job.analysis(parameters);
                     job.dispatches.push(Dispatch {
@@ -127,6 +130,7 @@ impl super::Backend {
             }
         };
         self.retire_failure(&result);
+        check.timing("GPU Adaptive analysis", false)?;
         result
     }
 }
@@ -433,6 +437,7 @@ impl<'a> AreaJob<'a> {
         check: &mut dyn JobControl,
         batch_size: usize,
     ) -> Result<Vec<u8>, Fallback> {
+        check.timing("GPU pipeline setup", true)?;
         let device = &self.gpu.device;
         let limit = device.limits().max_compute_workgroups_per_dimension;
         if self
@@ -633,12 +638,14 @@ impl<'a> AreaJob<'a> {
         let memory = memory.pop();
         let validation = validation.pop();
         let mut readback_mapped = false;
+        check.timing("GPU pipeline setup", false)?;
         let result = async {
             if let Some(error) = validation.await.or(memory.await) {
                 return Err(Fallback::Failed(error.to_string()));
             }
             // A bounded batch completes before the host checks cancellation.
             // No workgroup spins on work owned by an unscheduled workgroup.
+            check.timing("GPU dispatch + sync", true)?;
             for (batch, dispatches) in self.dispatches.chunks(batch_size).enumerate() {
                 check.check()?;
                 let mut encoder = device.create_command_encoder(&Default::default());
@@ -666,6 +673,8 @@ impl<'a> AreaJob<'a> {
                 self.gpu.check()?;
                 check.check()?;
             }
+            check.timing("GPU dispatch + sync", false)?;
+            check.timing("GPU readback", true)?;
             let mut encoder = device.create_command_encoder(&Default::default());
             encoder.copy_buffer_to_buffer(output, 0, &readback, 0, output_bytes);
             self.gpu.queue.submit([encoder.finish()]);
@@ -679,6 +688,7 @@ impl<'a> AreaJob<'a> {
             let mapped = super::device::unwound(|| readback.slice(..).get_mapped_range().to_vec())?;
             self.gpu.check()?;
             check.check()?;
+            check.timing("GPU readback", false)?;
             Ok(mapped)
         }
         .await;

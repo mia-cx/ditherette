@@ -3,6 +3,7 @@
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { Separator } from '$lib/components/ui/separator';
+	import { effectsPerformance } from '$lib/processing/live-effects';
 	import {
 		clearProcessingMetrics,
 		currentProcessingMetrics,
@@ -24,7 +25,8 @@
 	);
 
 	function formatMs(value: number | undefined) {
-		if (!value || !Number.isFinite(value)) return '0ms';
+		if (value === undefined || !Number.isFinite(value)) return '—';
+		if (value === 0) return '0ms';
 		if (value < 10) return `${value.toFixed(2)}ms`;
 		if (value < 100) return `${value.toFixed(1)}ms`;
 		return `${Math.round(value)}ms`;
@@ -90,7 +92,7 @@
 		</PopoverTrigger>
 		<PopoverContent
 			align="end"
-			class="w-[min(34rem,calc(100vw-1rem))] p-0 text-xs"
+			class="max-h-[calc(100dvh-4rem)] w-[min(42rem,calc(100vw-1rem))] overflow-y-auto p-0 text-xs"
 			onpointerenter={openPopover}
 			onpointerleave={closePopoverSoon}
 		>
@@ -98,7 +100,6 @@
 				<div class="flex items-start justify-between gap-3">
 					<div>
 						<h2 class="text-sm font-semibold">Processing metrics</h2>
-						<p class="text-muted-foreground">Rolling stats reset per source + output branch.</p>
 					</div>
 					<Button size="sm" variant="outline" onclick={clearProcessingMetrics}>Reset</Button>
 				</div>
@@ -107,6 +108,16 @@
 					<Badge variant="outline">{status}</Badge>
 					<Badge variant="secondary">{$processingMetricsHistory.length} samples</Badge>
 					<Badge variant="outline">{scopeLabel}</Badge>
+					{#if latest?.execution}
+						<Badge variant="outline"
+							>{latest.execution.backend === 'hybrid'
+								? 'GPU + CPU'
+								: latest.execution.backend.toUpperCase()}</Badge
+						>
+						{#if latest.execution.fallback}<Badge variant="outline"
+								>{latest.execution.fallback}</Badge
+							>{/if}
+					{/if}
 				</div>
 
 				{#if $processingProgress}
@@ -136,6 +147,16 @@
 									formatMs(latest.timings.find((timing) => timing.name === 'package process')?.ms)
 								)}
 							{/if}
+							{#if latest.execution?.analysisReused !== undefined}
+								{@render Metric(
+									'Adaptive analysis',
+									latest.execution.analysisReused
+										? 'cached'
+										: formatMs(
+												latest.timings.find((timing) => timing.name === 'GPU Adaptive analysis')?.ms
+											)
+								)}
+							{/if}
 						</div>
 					</section>
 
@@ -147,7 +168,8 @@
 							<table class="w-full min-w-[28rem] text-left font-mono text-[0.68rem]">
 								<thead class="text-muted-foreground">
 									<tr>
-										<th class="py-1 pr-2 font-medium">stage</th>
+										<th class="py-1 pr-2 font-medium">stage (wall time)</th>
+										<th class="py-1 pr-2 text-right font-medium">latest</th>
 										<th class="py-1 pr-2 text-right font-medium">avg</th>
 										<th class="py-1 pr-2 text-right font-medium">p95</th>
 										<th class="py-1 pr-2 text-right font-medium">p98</th>
@@ -155,9 +177,10 @@
 									</tr>
 								</thead>
 								<tbody>
-									{#each $processingTimingSummary.slice(0, 8) as summary (summary.name)}
+									{#each $processingTimingSummary as summary (summary.name)}
 										<tr class="border-t border-border/60">
 											<td class="py-1 pr-2">{summary.name}</td>
+											<td class="py-1 pr-2 text-right">{formatMs(summary.latest)}</td>
 											<td class="py-1 pr-2 text-right">{formatMs(summary.average)}</td>
 											<td class="py-1 pr-2 text-right">{formatMs(summary.p95)}</td>
 											<td class="py-1 pr-2 text-right">{formatMs(summary.p98)}</td>
@@ -168,6 +191,25 @@
 							</table>
 						</div>
 					</section>
+
+					{#if $effectsPerformance}
+						<Separator />
+						<section class="grid gap-2">
+							<div class="flex items-center gap-2">
+								<h3 class="font-medium">Effects last compile</h3>
+								{#if $effectsPerformance.execution}<Badge variant="outline"
+										>{$effectsPerformance.execution.backend.toUpperCase()}</Badge
+									>{/if}
+								{#if $effectsPerformance.reused}<Badge variant="secondary">cached</Badge>{/if}
+								{#if $effectsPerformance.execution?.fallback}<Badge variant="outline"
+										>{$effectsPerformance.execution.fallback}</Badge
+									>{/if}
+							</div>
+							{#each $effectsPerformance.timings as timing (timing.name)}
+								{@render Stat(timing.name, formatMs(timing.ms))}
+							{/each}
+						</section>
+					{/if}
 
 					{#if latest.cache}
 						<Separator />

@@ -41,6 +41,7 @@ Keep that workflow clear and fast, including large images.
   Adaptive analysis runs on GPU and is reused across dither settings; the editor
   keeps CPU diffusion recurrence. Full-size Celeste Bayer/Sierra checks and live
   artifact hashes verify the deployment. Per-kernel timing sweeps remain held.
+  Perf exposes GPU/CPU stage wall times, effects compilation and analysis reuse.
   Profiling of the earlier effects-only build covers all 27 modes, 15 matching spaces, both
   placements and three effects profiles: 2,610 terminal cases, including 177 timeouts.
   In that earlier build, effects ran on GPU while dithering, matching and Adaptive selection ran on CPU.
