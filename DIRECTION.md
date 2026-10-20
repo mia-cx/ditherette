@@ -135,7 +135,7 @@ Size/performance exceptions and cache-policy changes require their recorded appr
 
 ## Delegation
 
-Use T3-owned delegates with separate worktrees. User-facing changes, including
-new UI, go to Devin Fusion Opus + SWE. Technical work goes to Codex gpt-6.1-sol.
+Use T3-owned delegates with separate worktrees. UI, copy and public API design
+go to Claude Opus 5.5. Technical work goes to Codex gpt-6.1-sol.
 The lead reviews and integrates results, owns this file, and controls deployment.
 Serialize heavy local builds and follow the shared exclusive benchmark lease.
