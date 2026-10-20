@@ -93,6 +93,7 @@ export function appendMetricsSample(
 	return [...scopedHistory, sample].slice(-limit);
 }
 
+/** Summaries start with `total`, then follow first-emitted order so nested spans stay together. */
 export function summarizeTimingHistory(
 	samples: readonly ProcessingMetricsSample[]
 ): TimingSummary[] {
@@ -101,17 +102,13 @@ export function summarizeTimingHistory(
 		pushTiming(valuesByName, 'total', sample.totalMs);
 		for (const timing of sample.timings) pushTiming(valuesByName, timing.name, timing.ms);
 	}
-	return [...valuesByName.entries()]
-		.map(([name, values]) => ({
-			...summarizeValues(name, values),
-			latest:
-				name === 'total'
-					? samples.at(-1)?.totalMs
-					: samples.at(-1)?.timings.find((timing) => timing.name === name)?.ms
-		}))
-		.sort((left, right) =>
-			left.name === 'total' ? -1 : right.name === 'total' ? 1 : left.name.localeCompare(right.name)
-		);
+	return [...valuesByName.entries()].map(([name, values]) => ({
+		...summarizeValues(name, values),
+		latest:
+			name === 'total'
+				? samples.at(-1)?.totalMs
+				: samples.at(-1)?.timings.find((timing) => timing.name === name)?.ms
+	}));
 }
 
 function pushTiming(valuesByName: Map<string, number[]>, name: string, value: number) {

@@ -4,6 +4,7 @@
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { Separator } from '$lib/components/ui/separator';
 	import { effectsPerformance } from '$lib/processing/live-effects';
+	import type { TimingSummary } from '$lib/processing/metrics';
 	import {
 		clearProcessingMetrics,
 		currentProcessingMetrics,
@@ -69,6 +70,54 @@
 		return `${formatMs(computed?.ms)} cold`;
 	}
 
+	// Outer layers contain inner ones: main worker round trip ⊃ worker spans ⊃ package process.
+	const TIMING_LAYERS = ['Main thread', 'Worker', 'Package'] as const;
+	const totalTiming = $derived(
+		$processingTimingSummary.find((summary) => summary.name === 'total')
+	);
+	const timingGroups = $derived(
+		TIMING_LAYERS.map((label, layer) => ({
+			label,
+			layer,
+			rows: $processingTimingSummary.filter(
+				(summary) => summary.name !== 'total' && timingLayer(summary.name) === layer
+			)
+		})).filter((group) => group.rows.length > 0)
+	);
+
+	function timingLayer(name: string) {
+		if (name.startsWith('main ')) return 0;
+		if (name.startsWith('package ') || name.startsWith('output ')) return 1;
+		return 2;
+	}
+
+	/** Display-only: raw names stay in the row title. */
+	function timingLabel(name: string) {
+		const label = name.replace(/^main /, '').replace('initialization', 'initialisation');
+		return label.charAt(0).toUpperCase() + label.slice(1);
+	}
+
+	const FALLBACK_LABELS: Record<string, string> = {
+		NoAdapter: 'No WebGPU adapter',
+		Software: 'Software GPU only',
+		NoDevice: 'GPU device refused',
+		Mismatch: 'GPU check mismatch',
+		Lost: 'GPU device lost',
+		Failed: 'GPU call failed',
+		TooLarge: 'Exceeds GPU limits',
+		MemoryLimit: 'Exceeds memory limit',
+		UnsupportedStage: 'Stage runs on CPU',
+		UnsupportedChain: 'Effects run on CPU',
+		Cancelled: 'Cancelled',
+		Callback: 'Callback failed',
+		Identity: 'No-op',
+		NoEnabledEffects: 'No enabled effects'
+	};
+
+	function fallbackLabel(code: string) {
+		return FALLBACK_LABELS[code.match(/^\w+/)?.[0] ?? code] ?? code;
+	}
+
 	function openPopover() {
 		if (closeTimer) clearTimeout(closeTimer);
 		open = true;
@@ -114,8 +163,9 @@
 								? 'GPU + CPU'
 								: latest.execution.backend.toUpperCase()}</Badge
 						>
-						{#if latest.execution.fallback}<Badge variant="outline"
-								>{latest.execution.fallback}</Badge
+						{#if latest.execution.fallback}<Badge
+								variant="outline"
+								title={latest.execution.fallback}>{fallbackLabel(latest.execution.fallback)}</Badge
 							>{/if}
 					{/if}
 				</div>
@@ -177,15 +227,19 @@
 									</tr>
 								</thead>
 								<tbody>
-									{#each $processingTimingSummary as summary (summary.name)}
+									{#if totalTiming}{@render TimingRow(totalTiming, 0)}{/if}
+									{#each timingGroups as group (group.label)}
 										<tr class="border-t border-border/60">
-											<td class="py-1 pr-2">{summary.name}</td>
-											<td class="py-1 pr-2 text-right">{formatMs(summary.latest)}</td>
-											<td class="py-1 pr-2 text-right">{formatMs(summary.average)}</td>
-											<td class="py-1 pr-2 text-right">{formatMs(summary.p95)}</td>
-											<td class="py-1 pr-2 text-right">{formatMs(summary.p98)}</td>
-											<td class="py-1 text-right">{formatMs(summary.p99)}</td>
+											<th
+												colspan="6"
+												scope="rowgroup"
+												class="py-1 font-sans font-medium text-muted-foreground"
+												style:padding-left="{group.layer * 0.75}rem">{group.label}</th
+											>
 										</tr>
+										{#each group.rows as summary (summary.name)}
+											{@render TimingRow(summary, group.layer + 1)}
+										{/each}
 									{/each}
 								</tbody>
 							</table>
@@ -196,17 +250,21 @@
 						<Separator />
 						<section class="grid gap-2">
 							<div class="flex items-center gap-2">
-								<h3 class="font-medium">Effects last compile</h3>
+								<h3 class="font-medium">
+									{$effectsPerformance.reused ? 'Effects original compile' : 'Effects last compile'}
+								</h3>
 								{#if $effectsPerformance.execution}<Badge variant="outline"
 										>{$effectsPerformance.execution.backend.toUpperCase()}</Badge
 									>{/if}
 								{#if $effectsPerformance.reused}<Badge variant="secondary">cached</Badge>{/if}
-								{#if $effectsPerformance.execution?.fallback}<Badge variant="outline"
-										>{$effectsPerformance.execution.fallback}</Badge
+								{#if $effectsPerformance.execution?.fallback}<Badge
+										variant="outline"
+										title={$effectsPerformance.execution.fallback}
+										>{fallbackLabel($effectsPerformance.execution.fallback)}</Badge
 									>{/if}
 							</div>
 							{#each $effectsPerformance.timings as timing (timing.name)}
-								{@render Stat(timing.name, formatMs(timing.ms))}
+								{@render Stat(timingLabel(timing.name), formatMs(timing.ms), timing.name)}
 							{/each}
 						</section>
 					{/if}
@@ -279,8 +337,22 @@
 	</div>
 {/snippet}
 
-{#snippet Stat(label: string, value: string)}
-	<div class="flex items-center justify-between gap-3 rounded bg-muted/40 px-2 py-1 font-mono">
+{#snippet TimingRow(summary: TimingSummary, depth: number)}
+	<tr class="border-t border-border/60" title={summary.name}>
+		<td class="py-1 pr-2" style:padding-left="{depth * 0.75}rem">{timingLabel(summary.name)}</td>
+		<td class="py-1 pr-2 text-right">{formatMs(summary.latest)}</td>
+		<td class="py-1 pr-2 text-right">{formatMs(summary.average)}</td>
+		<td class="py-1 pr-2 text-right">{formatMs(summary.p95)}</td>
+		<td class="py-1 pr-2 text-right">{formatMs(summary.p98)}</td>
+		<td class="py-1 text-right">{formatMs(summary.p99)}</td>
+	</tr>
+{/snippet}
+
+{#snippet Stat(label: string, value: string, title?: string)}
+	<div
+		class="flex items-center justify-between gap-3 rounded bg-muted/40 px-2 py-1 font-mono"
+		{title}
+	>
 		<span class="text-muted-foreground">{label}</span>
 		<span class="text-right">{value}</span>
 	</div>

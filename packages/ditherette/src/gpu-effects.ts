@@ -1,5 +1,5 @@
 import { DitheretteError } from './errors.js';
-import { executionTimings } from './timings.js';
+import { executionTimings, type ExecutionTiming } from './timings.js';
 import { normalizeWasmInput } from './scalar.js';
 import { createCpu } from './cpu.js';
 import { validateApplyEffects } from './validation-effects.js';
@@ -58,7 +58,7 @@ export interface EffectsExecution {
 	readonly adapter?: string;
 	readonly fallback?: string;
 	/** Host wall times, including GPU completion and result transfer. */
-	readonly timings?: readonly import('./timings.js').ExecutionTiming[];
+	readonly timings?: readonly ExecutionTiming[];
 }
 
 /**

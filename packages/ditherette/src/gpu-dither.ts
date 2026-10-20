@@ -1,5 +1,5 @@
 import { DitheretteError } from './errors.js';
-import { executionTimings } from './timings.js';
+import { executionTimings, type ExecutionTiming } from './timings.js';
 import { normalizeWasmInput } from './scalar.js';
 import { createCpu } from './cpu.js';
 import {
@@ -79,7 +79,7 @@ export interface DitherExecution {
 	/** True when byte-verified source coverage bypassed the complete GPU selector. */
 	readonly analysisReused?: boolean;
 	/** Host wall times; nested GPU spans overlap and include synchronization. */
-	readonly timings?: readonly import('./timings.js').ExecutionTiming[];
+	readonly timings?: readonly ExecutionTiming[];
 }
 
 /** Keep the CPU operation surface available on the asynchronous engine. */

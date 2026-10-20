@@ -1,4 +1,7 @@
-/** Host wall time, including awaited GPU completion; nested spans overlap. */
+/**
+ * Host wall time, including awaited GPU completion; nested spans overlap.
+ * Names are diagnostic labels and may change between releases.
+ */
 export interface ExecutionTiming {
 	readonly name: string;
 	readonly ms: number;
