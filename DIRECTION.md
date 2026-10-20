@@ -37,10 +37,13 @@ Keep that workflow clear and fast, including large images.
   distance work and is deployed there with exact scalar/threaded output checks.
   Qualified latency measurements remain pending because shared-host browser activity
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
-- The GPU preview integrates exact channel-lookup effects with bounded CPU fallback.
-  Full-resolution Celeste profiling covers all 27 modes, 15 matching spaces, both
+- The GPU preview deploys the complete processing stack at `b935526a` (2026-10-20).
+  Adaptive analysis runs on GPU and is reused across dither settings; the editor
+  keeps CPU diffusion recurrence. Full-size Celeste Bayer/Sierra checks and live
+  artifact hashes verify the deployment. Per-kernel timing sweeps remain held.
+  Profiling of the earlier effects-only build covers all 27 modes, 15 matching spaces, both
   placements and three effects profiles: 2,610 terminal cases, including 177 timeouts.
-  Effects execute on GPU; dithering, matching and Adaptive selection remain scalar CPU.
+  In that earlier build, effects ran on GPU while dithering, matching and Adaptive selection ran on CPU.
   Adaptive selection dominates common calls; matching and diffusion dominate ordinary
   Sierra, with expensive matching behind most timeouts. Optimize the exact selector
   and reconstruction first, then matching/diffusion; investigate Yliluoma separately.
