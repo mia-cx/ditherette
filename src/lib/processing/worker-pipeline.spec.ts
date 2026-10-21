@@ -160,6 +160,7 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(signal.aborted).toBe(true);
 		expect(await pending).toBeUndefined();
 		expect(createDitherette).not.toHaveBeenCalled();
+		expect(createGpuDither).toHaveBeenCalledWith({ diffusionBackend: 'gpu-approximate' });
 	});
 
 	it('restarts lazy GPU fallback initialization without retaining the failed facade', async () => {

@@ -463,8 +463,9 @@ export async function initializePackageProcessor(gpu = false) {
 		throw new PackageInitializationError(message, { cause: error });
 	}
 	try {
+		// The editor accepts visually similar diffusion for parallel GPU speed.
 		if (gpu && typeof navigator !== 'undefined' && 'gpu' in navigator)
-			return await createGpuDither();
+			return await createGpuDither({ diffusionBackend: 'gpu-approximate' });
 		return await module.createDitherette();
 	} catch (error) {
 		if (
