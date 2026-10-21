@@ -37,13 +37,15 @@ Keep that workflow clear and fast, including large images.
   distance work and is deployed there with exact scalar/threaded output checks.
   Qualified latency measurements remain pending because shared-host browser activity
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
-- The GPU preview deploys the complete processing stack with Perf at `067d6cc9` (2026-10-20).
+- The GPU preview deploys the complete processing stack with Perf at `b470df6a` (2026-10-21).
   Adaptive analysis runs on GPU and is reused across dither settings; the editor
   keeps CPU diffusion recurrence. Full-size Celeste Bayer/Sierra checks and live
   artifact hashes verify the deployment. Per-kernel timing sweeps remain held.
   Perf exposes GPU/CPU stage wall times, effects compilation and analysis reuse.
   Its total includes source preparation and output presentation; startup separates
   downloads from remaining Wasm initialisation. Fine-stepped sliders avoid per-step layout reads.
+  Adaptive sweeps prune empty tiles and prepare source gates before serial steps;
+  full-size browser Bayer/Sierra outputs match. Speed gains remain unmeasured.
   Profiling of the earlier effects-only build covers all 27 modes, 15 matching spaces, both
   placements and three effects profiles: 2,610 terminal cases, including 177 timeouts.
   In that earlier build, effects ran on GPU while dithering, matching and Adaptive selection ran on CPU.
