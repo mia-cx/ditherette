@@ -27,7 +27,9 @@ mod stage;
 #[cfg(test)]
 mod tests;
 
-pub use area::{AreaMemory, DiffusionMemory, IndexedMemory, MixMemory, PerturbMemory};
+pub use area::{
+    AreaMemory, DiffusionMemory, DiffusionSchedule, IndexedMemory, MixMemory, PerturbMemory,
+};
 pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
 pub use memory::LookupMemory;

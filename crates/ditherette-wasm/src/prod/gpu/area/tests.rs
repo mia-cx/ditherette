@@ -1376,3 +1376,290 @@ fn retained_gpu_coverage_bypasses_analysis_across_fields_and_diffusion() {
         );
     }
 }
+
+/// Mean palette lightness of each opaque 8x8 block, from reconstructed RGB.
+fn block_tones(image: &IndexedImage, source: &[u8], width: usize) -> Vec<f64> {
+    let rgba = &image.palette.rgba;
+    let height = image.indices.data().len() / width;
+    let mut tones = Vec::new();
+    for by in 0..height / 8 {
+        for bx in 0..width / 8 {
+            let (mut sum, mut count) = (0.0, 0);
+            for y in by * 8..by * 8 + 8 {
+                for x in bx * 8..bx * 8 + 8 {
+                    let i = y * width + x;
+                    if source[i * 4 + 3] == 255 {
+                        let at = usize::from(image.indices.data()[i]) * 4;
+                        sum += rgba[at..at + 3].iter().map(|&c| f64::from(c)).sum::<f64>();
+                        count += 3;
+                    }
+                }
+            }
+            if count > 0 {
+                tones.push(sum / f64::from(count));
+            }
+        }
+    }
+    tones
+}
+
+#[test]
+fn banded_gpu_diffusion_keeps_tone_texture_and_exact_pixels() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    // Proves the banded schedule keeps each kernel's local tone and texture
+    // density for both scans and feedback modes across band and segment edges,
+    // with exact transparent targets and palette metadata, deterministically.
+    let (width, height) = (97u32, 75u32);
+    let source: Vec<_> = (0..width * height)
+        .flat_map(|i| {
+            let (x, y) = (i % width, i / width);
+            let v = (x * 255 / (width - 1)) as u8;
+            let alpha = if x % 31 == 7 && y % 3 == 0 { 0 } else { 255 };
+            [v, v.saturating_add((y / 5) as u8), 255 - v / 2, alpha]
+        })
+        .collect();
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color { rgb: [128; 3] },
+        PaletteEntry::Color { rgb: [200, 60, 90] },
+        PaletteEntry::Color {
+            rgb: [40, 110, 230],
+        },
+    ];
+    let kernels = [
+        Diffusion::FloydSteinberg,
+        Diffusion::Sierra,
+        Diffusion::SierraLite,
+        Diffusion::Atkinson,
+        Diffusion::JarvisJudiceNinke,
+        Diffusion::Stucki,
+        Diffusion::Burkes,
+        Diffusion::TwoRowSierra,
+        Diffusion::Fan,
+        Diffusion::ShiauFan,
+        Diffusion::ShiauFan2,
+        Diffusion::Simple2d,
+    ];
+    let mut worst: f64 = 0.0;
+    for (kernel, matching) in kernels
+        .into_iter()
+        .map(|kernel| (kernel, MatchPolicy::SrgbEuclidean))
+        .chain([
+            (Diffusion::Sierra, MatchPolicy::OklabEuclidean),
+            (Diffusion::Sierra, MatchPolicy::CielabCiede2000),
+            (Diffusion::Sierra, MatchPolicy::OklchHueArc),
+        ])
+    {
+        for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+            for serpentine in [false, true] {
+                let request = DitherQuantizeRequest {
+                    quantize: QuantizeRequest {
+                        version: 1,
+                        source: Source {
+                            width,
+                            height,
+                            data: &source,
+                        },
+                        palette: &palette,
+                        alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+                        matching,
+                    },
+                    dither: DitherPolicy::Diffusion {
+                        kernel,
+                        feedback,
+                        serpentine,
+                        strength: 1.0,
+                        placement: Placement::Everywhere {},
+                    },
+                };
+                let case = format!("{kernel:?}/{matching:?}/{feedback:?}/{serpentine}");
+                let expected = cpu(request);
+                let actual = block_on(backend.diffuse_gpu_banded(request, 128 << 20)).unwrap();
+                assert_eq!(actual.palette, expected.palette, "{case}");
+                assert_eq!(actual.warnings, expected.warnings, "{case}");
+                for (i, (&a, &e)) in actual
+                    .indices
+                    .data()
+                    .iter()
+                    .zip(expected.indices.data())
+                    .enumerate()
+                {
+                    if source[i * 4 + 3] == 0 {
+                        assert_eq!(a, e, "{case}: transparent pixel {i}");
+                    } else {
+                        assert!(a != 1 && usize::from(a) < palette.len(), "{case}: {i}");
+                    }
+                }
+                let ours = block_tones(&actual, &source, width as usize);
+                let theirs = block_tones(&expected, &source, width as usize);
+                let mean = ours
+                    .iter()
+                    .zip(&theirs)
+                    .map(|(a, b)| (a - b).abs())
+                    .sum::<f64>()
+                    / ours.len() as f64;
+                worst = worst.max(mean);
+                assert!(mean < 6.0, "{case}: mean 8x8 tone differs by {mean:.2}");
+                let again = block_on(backend.diffuse_gpu_banded(request, 128 << 20)).unwrap();
+                assert_eq!(again.indices.data(), actual.indices.data(), "{case}");
+            }
+        }
+    }
+    // The bound is meaningful: undithered matching misses it by far.
+    let plain = cpu(DitherQuantizeRequest {
+        quantize: QuantizeRequest {
+            version: 1,
+            source: Source {
+                width,
+                height,
+                data: &source,
+            },
+            palette: &palette,
+            alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+        dither: DitherPolicy::None {},
+    });
+    let flat = block_tones(&plain, &source, width as usize);
+    eprintln!("banded: worst mean 8x8 tone difference {worst:.2} levels");
+    let reference = cpu(DitherQuantizeRequest {
+        quantize: QuantizeRequest {
+            version: 1,
+            source: Source {
+                width,
+                height,
+                data: &source,
+            },
+            palette: &palette,
+            alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+        dither: DitherPolicy::Diffusion {
+            kernel: Diffusion::Sierra,
+            feedback: DiffusionFeedback::SrgbBytes,
+            serpentine: true,
+            strength: 1.0,
+            placement: Placement::Everywhere {},
+        },
+    });
+    let dithered = block_tones(&reference, &source, width as usize);
+    let undithered = flat
+        .iter()
+        .zip(&dithered)
+        .map(|(a, b)| (a - b).abs())
+        .sum::<f64>()
+        / flat.len() as f64;
+    eprintln!("banded: undithered matching differs by {undithered:.2} levels");
+    assert!(undithered > 12.0);
+}
+
+#[test]
+fn banded_gpu_diffusion_masks_only_output_and_admits_its_lookup() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    // Proves Adaptive coverage leaves the banded recurrence unchanged, that the
+    // lookup table is admitted before allocation, and that a failed callback
+    // publishes nothing and keeps the device usable.
+    let (width, height) = (301, 37);
+    let dimensions = ImageDimensions::new(width, height).unwrap();
+    let source: Vec<_> = (0..width * height)
+        .flat_map(|i| [(i * 17) as u8, (i * 73) as u8, (i * 29 + 40) as u8, 255])
+        .collect();
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+        PaletteEntry::Color {
+            rgb: [160, 90, 120],
+        },
+    ];
+    let base = QuantizeRequest {
+        version: 1,
+        source: Source {
+            width,
+            height,
+            data: &source,
+        },
+        palette: &palette,
+        alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+        matching: MatchPolicy::OklabEuclidean,
+    };
+    let plain = block_on(backend.dither_and_quantize(
+        DitherQuantizeRequest {
+            quantize: base,
+            dither: DitherPolicy::None {},
+        },
+        128 << 20,
+    ))
+    .unwrap();
+    let bits: Vec<_> = (0..AreaMemory::new(dimensions).coverage_bytes / 4)
+        .flat_map(|_| 0x96cf_30a5u32.to_le_bytes())
+        .collect();
+    let required = DiffusionMemory::banded(dimensions).required_bytes;
+    for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+        for serpentine in [false, true] {
+            let dither = |placement| DitherQuantizeRequest {
+                quantize: base,
+                dither: DitherPolicy::Diffusion {
+                    kernel: Diffusion::Sierra,
+                    feedback,
+                    serpentine,
+                    strength: 1.0,
+                    placement,
+                },
+            };
+            let banded = |backend: &mut super::super::Backend,
+                          request,
+                          limit,
+                          bits: Option<Vec<u8>>,
+                          check: &mut dyn JobControl| {
+                block_on(backend.diffuse_gpu_tiled_checked(
+                    request,
+                    limit,
+                    bits,
+                    false,
+                    super::super::GpuTiling::Auto,
+                    DiffusionSchedule::Banded,
+                    check,
+                ))
+            };
+            let request = dither(Placement::Everywhere {});
+            assert_eq!(
+                block_on(backend.diffuse_gpu_banded(request, required - 1)),
+                Err(Fallback::MemoryLimit)
+            );
+            let failed = banded(&mut backend, request, required, None, &mut || {
+                Err(Fallback::Callback)
+            });
+            assert_eq!(failed, Err(Fallback::Callback));
+            let ordinary = block_on(backend.diffuse_gpu_banded(request, required)).unwrap();
+            let masked = dither(Placement::SmoothAreaV1 {
+                sample_size: 64,
+                contrast_threshold: 0.12,
+            });
+            let (actual, _) = banded(
+                &mut backend,
+                masked,
+                required,
+                Some(bits.clone()),
+                &mut || Ok(()),
+            )
+            .unwrap();
+            for (i, &actual) in actual.indices.data().iter().enumerate() {
+                let expected = if bits[i / 8] & (1 << (i % 8)) != 0 {
+                    ordinary.indices.data()[i]
+                } else {
+                    plain.indices.data()[i]
+                };
+                assert_eq!(actual, expected, "{feedback:?}/{serpentine}/pixel {i}");
+            }
+        }
+    }
+}

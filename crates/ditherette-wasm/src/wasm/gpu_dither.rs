@@ -13,7 +13,7 @@ use crate::{
     },
     prod::{
         contract::request::*,
-        gpu::{Backend, Fallback, IndexedMemory, PerturbMemory},
+        gpu::{Backend, DiffusionSchedule, Fallback, IndexedMemory, PerturbMemory},
         pipeline::quantize::{IndexedMetadataRef, QuantizeBoundary},
     },
 };
@@ -67,12 +67,18 @@ pub fn private_gpu_yliluoma_plan(
     Ok(crate::prod::gpu::MixMemory::new(dimensions, entries, size).required_bytes as f64)
 }
 
-/// Continuous ring and immutable row-dispatch admission precede source capture.
+/// Continuous ring or banded lookup, and immutable dispatch admission, precede
+/// source capture.
 #[wasm_bindgen(js_name = privateGpuDiffusionPlan)]
-pub fn private_gpu_diffusion_plan(width: u32, height: u32) -> Result<f64, JsError> {
+pub fn private_gpu_diffusion_plan(width: u32, height: u32, banded: bool) -> Result<f64, JsError> {
     let dimensions =
         ImageDimensions::new(width, height).map_err(|error| JsError::new(&error.to_string()))?;
-    Ok(crate::prod::gpu::DiffusionMemory::new(dimensions).required_bytes as f64)
+    Ok(if banded {
+        crate::prod::gpu::DiffusionMemory::banded(dimensions)
+    } else {
+        crate::prod::gpu::DiffusionMemory::new(dimensions)
+    }
+    .required_bytes as f64)
 }
 
 /// Verifies indexed readback and complete coverage before accepting image jobs.
@@ -191,7 +197,8 @@ pub async fn private_gpu_dither_and_quantize(
     threshold: f64,
     softness: f64,
     rgba_output: bool,
-    gpu_diffusion: bool,
+    // 0 keeps CPU diffusion; 1 runs the faithful GPU scan; 2 the banded schedule.
+    diffusion: u32,
     coverage: Option<Uint8Array>,
     retain: bool,
     memory_limit: f64,
@@ -209,7 +216,17 @@ pub async fn private_gpu_dither_and_quantize(
     if required > memory_limit {
         return Ok("MemoryLimit".into());
     }
-    if gpu_diffusion && family == 2.0 && private_gpu_diffusion_plan(width, height)? > memory_limit {
+    let schedule = match diffusion {
+        0 => None,
+        1 => Some(DiffusionSchedule::Faithful),
+        2 => Some(DiffusionSchedule::Banded),
+        _ => return Err(JsError::new("invalid diffusion backend")),
+    };
+    if family == 2.0
+        && schedule.is_some()
+        && private_gpu_diffusion_plan(width, height, schedule == Some(DiffusionSchedule::Banded))?
+            > memory_limit
+    {
         return Ok("MemoryLimit".into());
     }
     let dither = parse_dither(
@@ -322,7 +339,7 @@ pub async fn private_gpu_dither_and_quantize(
                         .map(|(bytes, coverage)| (ImageOutput::Rgba(bytes), coverage)),
                     _ => Err(Fallback::UnsupportedStage),
                 }
-            } else if gpu_diffusion && matches!(dither, DitherPolicy::Diffusion { .. }) {
+            } else if let (Some(schedule), DitherPolicy::Diffusion { .. }) = (schedule, dither) {
                 backend
                     .diffuse_gpu_tiled_checked(
                         request,
@@ -330,6 +347,7 @@ pub async fn private_gpu_dither_and_quantize(
                         coverage,
                         retain,
                         super::gpu_resize::tiling(rows),
+                        schedule,
                         &mut check,
                     )
                     .await

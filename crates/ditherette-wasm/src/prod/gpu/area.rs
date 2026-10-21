@@ -21,7 +21,7 @@ mod diffusion;
 mod indexed;
 mod perturb;
 mod yliluoma;
-pub use diffusion::DiffusionMemory;
+pub use diffusion::{DiffusionMemory, DiffusionSchedule};
 pub use indexed::IndexedMemory;
 pub use perturb::PerturbMemory;
 pub use yliluoma::MixMemory;
@@ -214,6 +214,7 @@ struct AreaJob<'a> {
     settings: Vec<u8>,
     coverage: Vec<u8>,
     mixes: Option<wgpu::Texture>,
+    lookup: Option<wgpu::Buffer>,
 }
 
 impl Drop for AreaJob<'_> {
@@ -224,6 +225,9 @@ impl Drop for AreaJob<'_> {
         self.work.destroy();
         if let Some(mixes) = &self.mixes {
             mixes.destroy();
+        }
+        if let Some(lookup) = &self.lookup {
+            lookup.destroy();
         }
     }
 }
@@ -374,6 +378,7 @@ impl<'a> AreaJob<'a> {
             settings: vec![0; 4],
             coverage: vec![0; 4],
             mixes: None,
+            lookup: None,
         })
     }
 
@@ -522,6 +527,18 @@ impl<'a> AreaJob<'a> {
                 count: None,
             });
         }
+        if self.lookup.is_some() {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 8,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        }
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Adaptive storage"),
             entries: &entries,
@@ -575,6 +592,12 @@ impl<'a> AreaJob<'a> {
                 resource: wgpu::BindingResource::TextureView(view),
             });
         }
+        if let Some(lookup) = &self.lookup {
+            resources.push(wgpu::BindGroupEntry {
+                binding: 8,
+                resource: lookup.as_entire_binding(),
+            });
+        }
         let bindings = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &layout,
@@ -583,43 +606,22 @@ impl<'a> AreaJob<'a> {
         let mut pipelines = HashMap::new();
         for dispatch in &self.dispatches {
             pipelines.entry(dispatch.entry).or_insert_with(|| {
+                let diffusing = diffusion::ENTRIES.contains(&dispatch.entry);
+                let indexed =
+                    diffusing || ["indexed", "perturb", "yliluoma"].contains(&dispatch.entry);
                 let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some(dispatch.entry),
                     source: wgpu::ShaderSource::Wgsl(
                         format!(
                             "{COMMON}\n{}\n{}\n{}\n{}",
                             dispatch.shader,
-                            if [
-                                "indexed",
-                                "perturb",
-                                "yliluoma",
-                                "prepare_row",
-                                "diffuse",
-                                "wavefront",
-                                "cooperative"
-                            ]
-                            .contains(&dispatch.entry)
-                            {
-                                indexed_shader::WGSL
-                            } else {
-                                ""
-                            },
-                            if ["prepare_row", "diffuse", "wavefront", "cooperative"]
-                                .contains(&dispatch.entry)
-                            {
+                            if indexed { indexed_shader::WGSL } else { "" },
+                            if diffusing {
                                 diffusion::shader::COMMON
                             } else {
                                 ""
                             },
-                            if dispatch.shader == PACK
-                                || dispatch.entry == "indexed"
-                                || dispatch.entry == "perturb"
-                                || dispatch.entry == "yliluoma"
-                                || dispatch.entry == "prepare_row"
-                                || dispatch.entry == "diffuse"
-                                || dispatch.entry == "wavefront"
-                                || dispatch.entry == "cooperative"
-                            {
+                            if dispatch.shader == PACK || indexed {
                                 noise_table()
                             } else {
                                 String::new()
