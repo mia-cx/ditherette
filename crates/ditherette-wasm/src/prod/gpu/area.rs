@@ -397,10 +397,21 @@ impl<'a> AreaJob<'a> {
         parameters.reverse_x = reverse_x as u32;
         parameters.reverse_y = reverse_y as u32;
         let tiles_y = parameters.height.div_ceil(16);
+        // Tile (tu, ty) holds x = 16(tu-ty) + [-15, 15], so it reaches the
+        // image only when 0 <= tu-ty <= (width+14)/16. Skipped skew-grid tiles
+        // would have no valid pixel and write nothing.
+        let reach = (parameters.width + 14) / 16;
         for diagonal in 0..parameters.tiles_u + tiles_y - 1 {
             parameters.diagonal = diagonal;
-            let first_y = diagonal.saturating_sub(parameters.tiles_u - 1);
-            let last_y = diagonal.min(tiles_y - 1);
+            let first_y = diagonal
+                .saturating_sub(parameters.tiles_u - 1)
+                .max(diagonal.saturating_sub(reach).div_ceil(2));
+            let last_y = (diagonal / 2).min(tiles_y - 1);
+            if first_y > last_y {
+                continue;
+            }
+            // The sweep shader reads its first tile row from this spare word.
+            parameters.minimum = first_y;
             self.dispatches.push(Dispatch {
                 shader: SWEEPS,
                 entry: "sweep",

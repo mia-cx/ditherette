@@ -354,7 +354,8 @@ fn skew_tiles_keep_all_four_reconstruction_orders() {
     };
     // Proves the tile DAG preserves the frozen predecessor order, especially
     // upper-right dependencies that make ordinary rectangular tiles cyclic.
-    for (width, height) in [(67, 53), (1, 79), (79, 1), (17, 17)] {
+    // Launches skip skew tiles outside the image, so cover both aspects.
+    for (width, height) in [(67, 53), (37, 101), (1, 79), (79, 1), (17, 17)] {
         let dimensions = ImageDimensions::new(width, height).unwrap();
         let pixels = width as usize * height as usize;
         let source = vec![128; pixels * 4];

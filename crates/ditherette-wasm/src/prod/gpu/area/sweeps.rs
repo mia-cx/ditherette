@@ -15,8 +15,8 @@ fn coordinate(u: i32, y: i32) -> vec2<i32> {
 // Dispatch boundaries order tiles; workgroup barriers order its local diagonals.
 @compute @workgroup_size(16, 16)
 fn sweep(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) local: vec3<u32>) {
-    let first_y = max(0, i32(p.diagonal) - i32(p.tiles_u) + 1);
-    let ty = first_y + i32(group.x);
+    // The host skips skew tiles outside the image; p.minimum is the first row.
+    let ty = i32(p.minimum + group.x);
     let tu = i32(p.diagonal) - ty;
     let u = tu*16 + i32(local.x);
     let y = ty*16 + i32(local.y);
