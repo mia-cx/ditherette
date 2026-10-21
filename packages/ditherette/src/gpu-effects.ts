@@ -8,6 +8,7 @@ import { spaces } from './validation-fields.js';
 import type {
 	ApplyEffectsRequest,
 	CpuInitOptions,
+	DiffusionBackend,
 	Effect,
 	EffectMaskRequest,
 	MaskCurve,
@@ -36,6 +37,17 @@ export function fallbackPolicy(value: unknown): 'cpu' | 'error' {
 	if (value === undefined || value === 'cpu') return 'cpu';
 	if (value === 'error') return value;
 	throw new DitheretteError('invalid-settings', 'fallback', 'Unknown GPU fallback policy.');
+}
+
+const DIFFUSION_BACKENDS: readonly DiffusionBackend[] = ['cpu', 'gpu', 'gpu-approximate'];
+
+export function diffusionBackend(value: unknown): DiffusionBackend {
+	if (DIFFUSION_BACKENDS.includes(value as DiffusionBackend)) return value as DiffusionBackend;
+	throw new DitheretteError(
+		'invalid-settings',
+		'diffusionBackend',
+		'Expected cpu, gpu or gpu-approximate.'
+	);
 }
 
 export function gpuFallbackError(reason: string): DitheretteError {

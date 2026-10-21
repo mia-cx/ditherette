@@ -24,6 +24,137 @@ self.onmessage = async (event) => {
 			{ kind: 'color', rgb: [90, 120, 100] },
 			{ kind: 'transparent' }
 		];
+		if (event.data.approximate) {
+			// Proves strict GPU-only approximate diffusion runs every kernel and both
+			// scans and feedback modes in a real worker, keeping exact palette metadata
+			// and transparent pixels, local tone and determinism.
+			const kernels = event.data.kernels ?? [
+				'floyd-steinberg',
+				'sierra',
+				'sierra-lite',
+				'atkinson',
+				'jarvis-judice-ninke',
+				'stucki',
+				'burkes',
+				'two-row-sierra',
+				'fan',
+				'shiau-fan',
+				'shiau-fan-2',
+				'simple-2d'
+			];
+			// The default fixture's alternating alpha resets every horizontal carry,
+			// so approximate runs use an opaque ramp with sparse transparent pixels.
+			const image = event.data.source ?? {
+				width: 211,
+				height: 77,
+				data: Uint8Array.from({ length: 211 * 77 * 4 }, (_, i) => {
+					const pixel = i >>> 2;
+					const x = pixel % 211;
+					const y = Math.floor(pixel / 211);
+					if (i % 4 === 3) return x % 37 === 5 && y % 4 === 0 ? 0 : 255;
+					return (x + [0, y, 90][i % 4]) & 255;
+				})
+			};
+			const requests = [];
+			for (const kernel of kernels)
+				for (const serpentine of [true, false])
+					for (const feedback of event.data.feedback ?? ['srgb-bytes', 'matching'])
+						requests.push({
+							version: 1,
+							source: image,
+							palette,
+							alpha: { mode: 'preserve', threshold: 127.9 },
+							matching: event.data.matching ?? 'oklab-euclidean',
+							dither: {
+								family: 'diffusion',
+								kernel,
+								feedback,
+								strength: 1,
+								serpentine,
+								placement: { mode: 'everywhere' }
+							}
+						});
+			const tones = (result) => {
+				const values = [];
+				for (let by = 0; by + 8 <= image.height; by += 8)
+					for (let bx = 0; bx + 8 <= image.width; bx += 8) {
+						let sum = 0;
+						let count = 0;
+						for (let y = by; y < by + 8; y++)
+							for (let x = bx; x < bx + 8; x++) {
+								const i = y * image.width + x;
+								if (image.data[i * 4 + 3] !== 255) continue;
+								for (let c = 0; c < 3; c++) sum += result.palette.rgba[result.indices[i] * 4 + c];
+								count += 3;
+							}
+						if (count) values.push(sum / count);
+					}
+				return values;
+			};
+			const cpu = await createDitherette();
+			const gpu = await createGpuDither({ diffusionBackend: 'gpu-approximate', fallback: 'error' });
+			const records = [];
+			try {
+				for (const request of requests) {
+					let start = performance.now();
+					const expected = cpu.ditherAndQuantize(request);
+					const cpuMs = performance.now() - start;
+					start = performance.now();
+					const actual = await gpu.ditherAndQuantize(request);
+					const gpuMs = performance.now() - start;
+					const again = await gpu.ditherAndQuantize(request);
+					if (gpu.execution.backend !== 'gpu' || gpu.execution.fallback)
+						throw Error(`Not on GPU: ${JSON.stringify(gpu.execution)}`);
+					if (
+						JSON.stringify(actual.palette) !== JSON.stringify(expected.palette) ||
+						JSON.stringify(actual.warnings) !== JSON.stringify(expected.warnings)
+					)
+						throw Error('Palette metadata differs');
+					let differences = 0;
+					for (let i = 0; i < actual.indices.length; i++) {
+						if (actual.indices[i] !== again.indices[i]) throw Error('Not deterministic');
+						if (actual.indices[i] !== expected.indices[i]) {
+							if (image.data[i * 4 + 3] <= 127) throw Error('Transparent pixel differs');
+							differences++;
+						}
+					}
+					const ours = tones(actual);
+					const theirs = tones(expected);
+					const tone =
+						ours.reduce((sum, value, i) => sum + Math.abs(value - theirs[i]), 0) / ours.length;
+					records.push({
+						kernel: request.dither.kernel,
+						serpentine: request.dither.serpentine,
+						feedback: request.dither.feedback,
+						tone,
+						differences: differences / actual.indices.length,
+						cpuMs,
+						gpuMs
+					});
+				}
+				let faithful;
+				if (event.data.faithful) {
+					const old = await createGpuDither({ diffusionBackend: 'gpu', fallback: 'error' });
+					try {
+						const start = performance.now();
+						await old.ditherAndQuantize(requests[0]);
+						faithful = { ...requests[0].dither, gpuMs: performance.now() - start };
+					} finally {
+						old.dispose();
+					}
+				}
+				self.postMessage({
+					adapter: gpu.execution.adapter,
+					records,
+					faithful,
+					worstTone: Math.max(...records.map(({ tone }) => tone))
+				});
+			} finally {
+				cpu.dispose();
+				gpu.dispose();
+			}
+			return;
+		}
 		if (event.data.unified) {
 			// Proves callers can mix operations through one factory/device and that
 			// CPU-only analysis retires that same owner for all subsequent methods.

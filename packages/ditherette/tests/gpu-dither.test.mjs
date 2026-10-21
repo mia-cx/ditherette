@@ -504,3 +504,60 @@ test('coverage reuse verifies source bytes and controls and publishes only after
 	assert.equal(processor.execution.analysisReused, true);
 	processor.dispose();
 });
+
+test('approximate diffusion admits and runs the banded GPU schedule, even under strict fallback', async () => {
+	// Proves clients select parallel approximate diffusion explicitly, apart from
+	// the faithful GPU scan, with its own memory plan and a GPU execution report.
+	const input = {
+		...request(),
+		dither: {
+			family: 'diffusion',
+			kernel: 'sierra',
+			feedback: 'srgb-bytes',
+			strength: 1,
+			serpentine: true,
+			placement: { mode: 'everywhere' }
+		}
+	};
+	const result = await expected(input);
+	for (const [diffusionBackend, mode] of [
+		['gpu', 1],
+		['gpu-approximate', 2]
+	]) {
+		const plans = [];
+		const modes = [];
+		const processor = initializeGpuDither(
+			{
+				privateGpuDitherPlan: () => assert.fail('diffusion uses its own plan'),
+				privateGpuDiffusionPlan: (width, height, approximate) => {
+					plans.push(approximate);
+					return 1;
+				},
+				privateGpuDitherDetect: async () => '',
+				privateGpuEffectsAdapter: () => 'test adapter',
+				privateGpuEffectsDispose() {},
+				async privateGpuDitherAndQuantize(...args) {
+					const sink = args.at(-2);
+					modes.push(args.at(-6));
+					sink.value = result;
+					return '';
+				}
+			},
+			{ ...options, fallback: 'error', diffusionBackend }
+		);
+		try {
+			assert.deepEqual(await processor.ditherAndQuantize(input), result);
+			assert.equal(processor.execution.backend, 'gpu');
+			assert.deepEqual(plans, [mode === 2]);
+			assert.deepEqual(modes, [mode]);
+		} finally {
+			processor.dispose();
+		}
+	}
+	const gpu = await createDitherette({
+		...options,
+		engine: 'gpu',
+		diffusionBackend: 'gpu-approximate'
+	});
+	gpu.dispose();
+});

@@ -348,8 +348,14 @@ run on GPU. The GPU engine also executes every diffusion kernel and both feedbac
 modes on GPU by default. Non-serpentine scans use dependency-ordered wavefronts; serpentine
 uses a continuous three-row ring with cooperative matching. Neither restarts at
 dispatch boundaries. Faithful serpentine is substantially slower on the tested
-GPU. Set `diffusionBackend: 'cpu'` to keep the ordinary CPU recurrence with GPU
-preparation; this reports `hybrid` and requires CPU fallback permission.
+GPU. Set `diffusionBackend: 'gpu-approximate'` for parallel diffusion that looks
+like the original scan but selects different indices. Bands of rows run in order
+and carry their exact errors downward; row segments inside a band run in parallel,
+each warmed over a few neighbouring pixels, and their edges move every band. Kernel,
+strength, feedback, scan direction, transparent pixels and Adaptive placement are
+unchanged, and the output is deterministic. Set `diffusionBackend: 'cpu'` to keep the
+ordinary CPU recurrence with GPU preparation; this reports `hybrid` and requires CPU
+fallback permission.
 GPU arithmetic may select a different palette entry at numerical boundaries.
 Yliluoma prepares its palette-only mixture tree on CPU, then searches image pixels
 and selects global Bayer indices on GPU. The transient tree, texture atlas and

@@ -3,7 +3,7 @@ import { createCpu } from './cpu.js';
 import { field, object, validateOptions } from './validation.js';
 import type { Ditherette, InitOptions, CpuInitOptions, GpuInitOptions } from './types.js';
 import type { GpuDither, GpuDitherOptions } from './gpu-dither.js';
-import { fallbackPolicy } from './gpu-effects.js';
+import { diffusionBackend, fallbackPolicy } from './gpu-effects.js';
 
 export { DitheretteError } from './errors.js';
 export { createGpuEffects } from './gpu-effects.js';
@@ -73,6 +73,7 @@ export type {
 	InitInput,
 	InitOptions,
 	CpuInitOptions,
+	DiffusionBackend,
 	GpuInitOptions,
 	TilingPolicy,
 	Progress,
@@ -124,15 +125,11 @@ export async function createDitherette(options?: InitOptions): Promise<Ditherett
 			);
 			return createCpu(normalized);
 		}
-		const selectedDiffusion = field(input, 'diffusionBackend');
-		const diffusionBackend = selectedDiffusion === undefined ? 'gpu' : selectedDiffusion;
-		if (diffusionBackend !== 'cpu' && diffusionBackend !== 'gpu')
-			throw new DitheretteError('invalid-settings', 'diffusionBackend', 'Expected cpu or gpu.');
 		const gpuOptions: GpuDitherOptions = {
 			...normalized,
 			gpuWasm: validateOptions({ wasm: field(input, 'gpuWasm') }).wasm,
 			fallback: fallbackPolicy(field(input, 'fallback')),
-			diffusionBackend
+			diffusionBackend: diffusionBackend(field(input, 'diffusionBackend') ?? 'gpu')
 		};
 		const { createGpuDither } = await import('./gpu-dither.js');
 		return createGpuDither(gpuOptions);
