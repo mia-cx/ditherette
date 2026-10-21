@@ -95,6 +95,8 @@ Keep that workflow clear and fast, including large images.
   serpentine. The compatibility factory keeps CPU diffusion as its default because
   faithful serpentine is slower on the tested GPU. The unified GPU engine explicitly defaults
   to GPU diffusion; clients can select the CPU recurrence. Mixed and masked effects now execute on GPU,
+  Mia accepts visually similar GPU diffusion rather than identical recurrence (2026-10-21).
+  Prioritize parallel GPU scheduling with seam/texture comparisons; retain faithful CPU diffusion.
   including all colour-curve models and explicit palette recipes, with client-selected
   image tiling. Automatic recipe analysis stays on CPU. The combined GPU `process`
   now composes effects, recipe-v2 coverage resize and indexed stages through the same
