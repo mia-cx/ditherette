@@ -7,6 +7,8 @@
 
 use std::mem::size_of;
 
+mod rows;
+
 use super::{
     preparation::{Call, Store},
     processor::{dimensions, Allocator, Boundary, InputBoundary},
@@ -59,9 +61,17 @@ pub fn validate(effects: &[EffectStep], context: &EffectContext<'_>) -> Result<(
 }
 
 /// Extra bytes a recipe-v2 `process` owns: the retained raw snapshot and the chain's scratch.
-pub(super) fn process_capacity_bytes(effects: &[EffectStep], dimensions: ImageDimensions) -> u64 {
+pub(super) fn process_capacity_bytes(
+    effects: &[EffectStep],
+    dimensions: ImageDimensions,
+    policy: Option<super::execution::RowBandPolicy>,
+) -> Result<u64, Failure> {
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
-    pixels * Rgba8::CHANNEL_COUNT as u64 + carrier_bytes(effects, dimensions)
+    Ok(pixels * Rgba8::CHANNEL_COUNT as u64
+        + carrier_bytes(effects, dimensions)
+        + rows::Rows::new(dimensions, policy, effects)?
+            .as_ref()
+            .map_or(0, rows::Rows::capacity_bytes))
 }
 
 pub(super) fn run<B: Boundary, A: Allocator>(
@@ -86,6 +96,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     let owned = overhead
         .checked_add(size_of::<EffectsRequest<'_>>() as u64)
         .ok_or_else(memory_limit)?;
+    let store_policy = store.row_policy(super::execution::ExecutionStage::Indexed, None);
     let mut call = Call::snapshot(store, len, owned, limit, peak, allocator)?;
     let parent = call.source(dimensions, |bytes, compare| {
         boundary.snapshot_input(bytes, compare)
@@ -96,7 +107,9 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         let result = boundary.complete(&image.bytes, image.dimensions);
         return call.finish(progress.finish(result, boundary.progress()));
     }
-    let carrier = carrier_bytes(request.effects, dimensions);
+    let rows = rows::Rows::new(dimensions, store_policy, request.effects)?;
+    let carrier = carrier_bytes(request.effects, dimensions)
+        + rows.as_ref().map_or(0, rows::Rows::capacity_bytes);
     call.charge_working_capacity(carrier, peak)?;
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
@@ -105,7 +118,11 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     output.copy_from_slice(source);
     let steps = resolve_analyses(output, dimensions, request.effects, &request.context)
         .map_err(|_| unavailable())?;
-    apply_in_place(output, dimensions, &steps, &request.context).map_err(|_| unavailable())?;
+    if let Some(rows) = rows {
+        rows.apply(output, &steps, &request.context, None)?;
+    } else {
+        apply_in_place(output, dimensions, &steps, &request.context).map_err(|_| unavailable())?;
+    }
     progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
     call.release_working_capacity(carrier);
     call.retain_rgba(1, key, 1, dimensions, peak);
@@ -316,6 +333,11 @@ pub(super) fn mask<B: Boundary, A: Allocator>(
     // Only the code survives, so the step prefix of the reference path is irrelevant.
     validate_mask(mask, "").map_err(|error| Failure::new(error.code, ErrorPath::Mask))?;
     let dimensions = dimensions(request.source_width, request.source_height, true)?;
+    let rows = rows::Rows::new(
+        dimensions,
+        store.row_policy(super::execution::ExecutionStage::Indexed, None),
+        request.effects,
+    )?;
     let len = dimensions
         .storage_len::<Rgba8>()
         .map_err(|_| Failure::new(ErrorCode::InvalidImage, ErrorPath::Source))?;
@@ -331,7 +353,8 @@ pub(super) fn mask<B: Boundary, A: Allocator>(
     call.source(dimensions, |bytes, compare| {
         boundary.snapshot_input(bytes, compare)
     })?;
-    let carrier = carrier_after_bytes(request.effects, dimensions);
+    let carrier = carrier_after_bytes(request.effects, dimensions)
+        + rows.as_ref().map_or(0, rows::Rows::capacity_bytes);
     call.charge_working_capacity(carrier, peak)?;
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
@@ -339,8 +362,12 @@ pub(super) fn mask<B: Boundary, A: Allocator>(
     let [source, output, _, _] = &mut call.scratch.buffers;
     let steps = resolve_analyses(source, dimensions, request.effects, &request.context)
         .map_err(|_| unavailable())?;
-    write_mask(source, dimensions, &steps, mask, &request.context, output)
-        .map_err(|_| unavailable())?;
+    if let Some(rows) = rows {
+        rows.apply(output, &steps, &request.context, Some((source, mask)))?;
+    } else {
+        write_mask(source, dimensions, &steps, mask, &request.context, output)
+            .map_err(|_| unavailable())?;
+    }
     progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;
     call.release_working_capacity(carrier);
     let result = boundary.complete(&call.scratch.buffers[1], dimensions);
@@ -378,6 +405,7 @@ pub(super) struct EffectedInput<'a, B> {
     raw: Vec<u8>,
     key: Identity,
     previous: Option<Identity>,
+    rows: Option<rows::Rows>,
 }
 
 impl<'a, B: InputBoundary> EffectedInput<'a, B> {
@@ -388,13 +416,14 @@ impl<'a, B: InputBoundary> EffectedInput<'a, B> {
         dimensions: ImageDimensions,
         key: Identity,
         previous: Option<EffectsSource>,
-    ) -> Self {
+        policy: Option<super::execution::RowBandPolicy>,
+    ) -> Result<Self, Failure> {
         let progress = Control::new(inner.progress().is_some());
         let (raw, previous) = match previous {
             Some(source) if source.dimensions == dimensions => (source.raw, Some(source.key)),
             _ => (Vec::new(), None),
         };
-        Self {
+        Ok(Self {
             inner,
             effects,
             context,
@@ -403,7 +432,8 @@ impl<'a, B: InputBoundary> EffectedInput<'a, B> {
             raw,
             key,
             previous,
-        }
+            rows: rows::Rows::new(dimensions, policy, effects)?,
+        })
     }
 
     /// Keeps the raw snapshot for the next call. The caller retains it only after success.
@@ -438,8 +468,12 @@ impl<'a, B: InputBoundary> EffectedInput<'a, B> {
         destination.copy_from_slice(&self.raw);
         let steps = resolve_analyses(destination, self.dimensions, self.effects, &self.context)
             .map_err(|_| unavailable())?;
-        apply_in_place(destination, self.dimensions, &steps, &self.context)
-            .map_err(|_| unavailable())?;
+        if let Some(rows) = &self.rows {
+            rows.apply(destination, &steps, &self.context, None)?;
+        } else {
+            apply_in_place(destination, self.dimensions, &steps, &self.context)
+                .map_err(|_| unavailable())?;
+        }
         self.progress
             .report(self.inner.progress(), Stage::Effects, pixels, pixels)
     }

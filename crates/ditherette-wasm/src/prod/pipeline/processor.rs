@@ -320,21 +320,31 @@ impl Processor {
         let preflight = super::effects::validate(effects, &context)
             .and_then(|()| dimensions(request.source_width, request.source_height, true));
         let previous = self.effects_source.take();
+        let row_policy = self
+            .preparation
+            .row_policy(super::execution::ExecutionStage::Indexed, None);
         let preflight = preflight.and_then(|source| {
-            super::effects::EffectsSource::key(effects, &context).map(|key| (source, key))
+            let key = super::effects::EffectsSource::key(effects, &context)?;
+            let capacity = super::effects::process_capacity_bytes(effects, source, row_policy)?;
+            Ok((source, key, capacity))
         });
         let result = match preflight {
-            Ok((source, key)) => {
-                let extra = super::effects::process_capacity_bytes(effects, source)
+            Ok((source, key, capacity)) => {
+                let extra = capacity
                     + crate::prod::effects::analysis_cache::AnalysisCache::fit_working_bytes();
-                let mut effected = super::effects::EffectedInput::new(
-                    boundary, effects, context, source, key, previous,
-                );
-                let result = self.process_owning(request, &mut effected, allocator, extra, true);
-                if result.is_ok() {
-                    self.effects_source = Some(effected.into_source());
+                match super::effects::EffectedInput::new(
+                    boundary, effects, context, source, key, previous, row_policy,
+                ) {
+                    Ok(mut effected) => {
+                        let result =
+                            self.process_owning(request, &mut effected, allocator, extra, true);
+                        if result.is_ok() {
+                            self.effects_source = Some(effected.into_source());
+                        }
+                        result
+                    }
+                    Err(error) => self.fail_preflight(error),
                 }
-                result
             }
             Err(error) => self.fail_preflight(error),
         };

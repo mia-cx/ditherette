@@ -80,7 +80,9 @@ impl YliluomaBands {
         placement: Placement,
         progress: &mut impl FnMut(u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
-        self.execute_indexed(source, prepared, indices, size, placement, None, progress)
+        self.execute_indexed(
+            source, prepared, indices, size, placement, None, None, progress,
+        )
     }
 
     /// Share one caller-accounted index across every worker.
@@ -92,6 +94,7 @@ impl YliluomaBands {
         size: BayerSize,
         placement: Placement,
         index: Option<&super::index::MixIndex>,
+        coverage: Option<crate::prod::dither::smooth_area_v1::coverage::CoverageRef<'_>>,
         progress: &mut impl FnMut(u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         self.buffers.execute(
@@ -106,7 +109,7 @@ impl YliluomaBands {
                     placement,
                     band,
                     &mut [],
-                    None,
+                    coverage,
                     &mut [],
                     index,
                     |_| Ok(()),

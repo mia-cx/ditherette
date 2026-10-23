@@ -7,6 +7,28 @@ pub(crate) struct Coverage {
     bits: Vec<u8>,
 }
 
+/// Workers borrow either retained bits or this call's completed selector cells.
+/// Neither representation allocates or reruns analysis at a band boundary.
+#[derive(Clone, Copy)]
+pub(crate) enum CoverageRef<'a> {
+    Packed(&'a Coverage),
+    Cells(ImageDimensions, &'a [[f32; 3]]),
+}
+
+impl CoverageRef<'_> {
+    #[inline(always)]
+    pub(crate) fn covers(self, x: u32, y: u32) -> bool {
+        match self {
+            Self::Packed(mask) => mask.covers(x, y),
+            Self::Cells(dimensions, cells) => super::covers(
+                cells[y as usize * dimensions.width_usize() + x as usize][2],
+                x,
+                y,
+            ),
+        }
+    }
+}
+
 impl Coverage {
     /// Takes coverage produced by the admitted GPU job for this exact image.
     /// The bridge never accepts a mask independently from its captured source.

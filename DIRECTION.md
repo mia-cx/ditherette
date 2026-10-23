@@ -95,6 +95,9 @@ Keep that workflow clear and fast, including large images.
   global phase. Whole-image dispatch splitting now admits 4096×4096 quantisation.
   Standalone RGBA perturbation and continuous-carrier mask previews now also have
   GPU package methods, with the same CPU fallback and client tiling controls.
+  Complete explicit CPU/GPU tiling coverage before tuning per-kernel defaults.
+  Timing sweeps wait for Mia's explicit go-ahead and a quiet host/GPU; never
+  interfere with Remora's workload. Keep global analysis and diffusion state intact.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

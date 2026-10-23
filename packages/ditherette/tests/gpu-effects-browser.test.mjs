@@ -42,6 +42,8 @@ async function startServer(t, missingGpu = false, isolated = false) {
 			if (
 				!path.startsWith('/packages/ditherette/dist/') &&
 				path !== '/packages/ditherette/tests/gpu-dither-worker.mjs' &&
+				path !== '/packages/ditherette/tests/tiling-worker.mjs' &&
+				path !== '/packages/ditherette/tests/tiling-cases.mjs' &&
 				!path.startsWith('/benchmark-fixtures/')
 			) {
 				response.writeHead(404).end();
@@ -84,18 +86,22 @@ for (const mode of [
 	'process',
 	'gpu-tiling',
 	'pixels',
-	'unified'
+	'unified',
+	'all-tiling'
 ])
 	test(
 		`real indexed dither worker through Chromium CDP (${mode})`,
 		{ timeout: 180_000 },
 		async (t) => {
-			const origin = await startServer(t, mode === 'missing');
+			const origin = await startServer(t, mode === 'missing', mode === 'all-tiling');
 			const { tab, errors, system } = await browser(t, origin, mode === 'disabled');
 			const result = await tab.evaluate(async (mode) => {
-				const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
-					type: 'module'
-				});
+				const worker = new Worker(
+					`/packages/ditherette/tests/${mode === 'all-tiling' ? 'tiling-worker' : 'gpu-dither-worker'}.mjs`,
+					{
+						type: 'module'
+					}
+				);
 				try {
 					return await new Promise((resolve, reject) => {
 						worker.onmessage = (event) => {
@@ -125,7 +131,11 @@ for (const mode of [
 			}, mode);
 			assert.equal(result.error, undefined, result.error);
 			assert.deepEqual(errors, []);
-			if (mode === 'unified') {
+			if (mode === 'all-tiling') {
+				assert.ok(result.calls > 350);
+				assert.equal(result.exact, true);
+				assert.equal(result.threadsRequired, true);
+			} else if (mode === 'unified') {
 				assert.equal(result.calls, 22);
 				assert.equal(result.deviceRequests, 2);
 				assert.equal(result.retired, true);
@@ -135,10 +145,10 @@ for (const mode of [
 				assert.equal(result.exactTiles, true);
 				assert.equal(result.alphaPreserved, true);
 			} else if (mode === 'gpu-tiling') {
-				assert.equal(result.calls, 50);
+				assert.equal(result.calls, 54);
 				assert.equal(result.largeCorrect, true);
 				assert.equal(result.exact, true);
-				assert.equal(result.diffusionRejected, true);
+				assert.equal(result.continuousDiffusion, true);
 			} else if (mode === 'process') {
 				assert.equal(result.calls, 224);
 				assert.equal(result.reused, true);

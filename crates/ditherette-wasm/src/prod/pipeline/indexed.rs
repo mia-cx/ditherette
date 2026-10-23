@@ -196,10 +196,18 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     call.charge_working_capacity(coverage_capacity, peak)?;
     let placement_policy = match dither {
         DitherPolicy::Diffusion { placement, .. } => placement,
-        DitherPolicy::Separable { perturb } if !perturbed_hit && band_plan.is_none() => {
+        DitherPolicy::Separable { perturb }
+            if !perturbed_hit
+                && (band_plan.is_none()
+                    || matches!(perturb.placement, Placement::SmoothAreaV1 { .. })) =>
+        {
             perturb.placement
         }
-        DitherPolicy::Yliluoma { placement, .. } if mixing_policy.is_none() => placement,
+        DitherPolicy::Yliluoma { placement, .. }
+            if mixing_policy.is_none() || matches!(placement, Placement::SmoothAreaV1 { .. }) =>
+        {
+            placement
+        }
         _ => Placement::Everywhere {},
     };
     let coverage_key = rgba_key
@@ -386,7 +394,17 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     )
                 };
                 if let Some(work) = &mut bands {
-                    perturb::execute_bands(source, perturbed, perturb, work, &mut report)?;
+                    perturb::execute_bands(
+                        source,
+                        perturbed,
+                        perturb,
+                        work,
+                        coverage,
+                        placement
+                            .as_mut()
+                            .map_or(&mut [], AdaptivePlacementWork::scratch),
+                        &mut report,
+                    )?;
                 } else {
                     let output = ImageViewMut::packed(perturbed, output_dimensions)
                         .expect("reserved perturb");
@@ -544,6 +562,25 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 _ => &mut [],
             };
             if let Some(work) = &mut mixing {
+                use crate::prod::dither::smooth_area_v1::{self, coverage::CoverageRef};
+                let shared = if let Some(coverage) = coverage {
+                    Some(CoverageRef::Packed(coverage))
+                } else if let Placement::SmoothAreaV1 {
+                    sample_size,
+                    contrast_threshold,
+                } = mix_placement
+                {
+                    smooth_area_v1::select(
+                        view,
+                        sample_size,
+                        contrast_threshold,
+                        placement_rows,
+                        || report_row(0),
+                    )?;
+                    Some(CoverageRef::Cells(output_dimensions, placement_rows))
+                } else {
+                    None
+                };
                 work.execute_indexed(
                     view,
                     prepared,
@@ -551,6 +588,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     matrix,
                     mix_placement,
                     mix_index,
+                    shared,
                     &mut report_row,
                 )?;
             } else if enabled {

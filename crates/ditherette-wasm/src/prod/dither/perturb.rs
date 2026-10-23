@@ -131,22 +131,42 @@ pub fn perturb_by_field_bands_into(
     field: impl Fn(u32, u32, u64) -> f32 + Sync,
     progress: &mut impl FnMut(u64) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    perturb_by_field_bands_with_coverage(
+        source, output, space, strength, placement, work, None, field, progress,
+    )
+}
+
+/// Shares preflighted full-image coverage across disjoint field workers.
+pub(crate) fn perturb_by_field_bands_with_coverage(
+    source: ImageView<'_, Rgba8>,
+    output: &mut [u8],
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    work: &mut RowBandBuffers<[f32; 3]>,
+    coverage: Option<super::smooth_area_v1::coverage::CoverageRef<'_>>,
+    field: impl Fn(u32, u32, u64) -> f32 + Sync,
+    progress: &mut impl FnMut(u64) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let width = source.dimensions().width();
     work.execute(
         output,
         width as usize * 4,
         &|band, output, rows| {
             let dimensions = ImageDimensions::new(width, band.height()).expect("validated band");
-            perturb_by_field_band_into(
+            perturb_rows(
                 source,
                 ImageViewMut::packed(output, dimensions).expect("disjoint packed output"),
                 space,
                 strength,
                 placement,
                 band,
+                band.y_start(),
                 rows,
+                coverage,
                 &field,
-            );
+                |_| Ok(()),
+            )?;
             Ok(u64::from(band.height()))
         },
         progress,
@@ -253,7 +273,17 @@ pub(crate) fn perturb_by_field_with_coverage(
 ) -> Result<(), Failure> {
     assert_eq!(source.dimensions(), output.dimensions());
     perturb_rows(
-        source, output, space, strength, placement, rows, 0, scratch, coverage, field, progress,
+        source,
+        output,
+        space,
+        strength,
+        placement,
+        rows,
+        0,
+        scratch,
+        coverage.map(super::smooth_area_v1::coverage::CoverageRef::Packed),
+        field,
+        progress,
     )
 }
 
@@ -299,7 +329,7 @@ fn perturb_rows(
     rows: RowBand,
     output_y_start: u32,
     scratch: &mut [[f32; 3]],
-    coverage: Option<&super::smooth_area_v1::coverage::Coverage>,
+    coverage: Option<super::smooth_area_v1::coverage::CoverageRef<'_>>,
     field: impl Fn(u32, u32, u64) -> f32,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {

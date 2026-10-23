@@ -26,6 +26,8 @@ pub use indexed::IndexedMemory;
 pub use perturb::PerturbMemory;
 pub use yliluoma::MixMemory;
 
+const MAX_DISPATCHES_PER_BATCH: usize = 64;
+
 /// Source snapshots/wire copies, GPU source, three packed triplet work planes,
 /// packed coverage staging and independently owned host results. Compiler and
 /// driver internals are outside this requested-capacity accounting.
@@ -420,6 +422,17 @@ impl<'a> AreaJob<'a> {
         output_bytes: u64,
         check: &mut dyn JobControl,
     ) -> Result<Vec<u8>, Fallback> {
+        self.execute_read_batched_checked(output, output_bytes, check, MAX_DISPATCHES_PER_BATCH)
+            .await
+    }
+
+    async fn execute_read_batched_checked(
+        &self,
+        output: &wgpu::Buffer,
+        output_bytes: u64,
+        check: &mut dyn JobControl,
+        batch_size: usize,
+    ) -> Result<Vec<u8>, Fallback> {
         let device = &self.gpu.device;
         let limit = device.limits().max_compute_workgroups_per_dimension;
         if self
@@ -626,7 +639,7 @@ impl<'a> AreaJob<'a> {
             }
             // A bounded batch completes before the host checks cancellation.
             // No workgroup spins on work owned by an unscheduled workgroup.
-            for (batch, dispatches) in self.dispatches.chunks(64).enumerate() {
+            for (batch, dispatches) in self.dispatches.chunks(batch_size).enumerate() {
                 check.check()?;
                 let mut encoder = device.create_command_encoder(&Default::default());
                 {
@@ -636,7 +649,7 @@ impl<'a> AreaJob<'a> {
                         pass.set_bind_group(
                             0,
                             &bindings,
-                            &[((batch * 64 + local) as u64 * stride) as u32],
+                            &[((batch * batch_size + local) as u64 * stride) as u32],
                         );
                         pass.dispatch_workgroups(dispatch.groups[0], dispatch.groups[1], 1);
                     }

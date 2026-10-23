@@ -204,15 +204,33 @@ pub(super) fn execute_bands(
     output: &mut [u8],
     policy: PerturbPolicy,
     work: &mut RowBandBuffers<[f32; 3]>,
+    coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
+    scratch: &mut [[f32; 3]],
     progress: &mut impl FnMut(u64) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    crate::prod::dither::perturb::perturb_by_field_bands_into(
+    use crate::prod::dither::smooth_area_v1::{self, coverage::CoverageRef};
+    let shared = if let Some(coverage) = coverage {
+        Some(CoverageRef::Packed(coverage))
+    } else if let Placement::SmoothAreaV1 {
+        sample_size,
+        contrast_threshold,
+    } = policy.placement
+    {
+        smooth_area_v1::select(source, sample_size, contrast_threshold, scratch, || {
+            progress(0)
+        })?;
+        Some(CoverageRef::Cells(source.dimensions(), scratch))
+    } else {
+        None
+    };
+    crate::prod::dither::perturb::perturb_by_field_bands_with_coverage(
         source,
         output,
         policy.space,
         policy.strength,
         policy.placement,
         work,
+        shared,
         |x, y, index| field_value(policy.field, x, y, index),
         progress,
     )
@@ -307,7 +325,10 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     let band_rows_capacity = bands.as_ref().map_or(0, |(_, rows)| *rows);
     call.charge_optional_capacity(band_rows_capacity, peak)?;
     let mut bands = bands.map(|(buffers, _)| buffers);
-    let mut placement = if bands.is_none() && !coverage_hit {
+    let mut placement = if (bands.is_none()
+        || matches!(request.perturb.placement, Placement::SmoothAreaV1 { .. }))
+        && !coverage_hit
+    {
         AdaptivePlacementWork::try_for_image(
             dimensions,
             request.perturb.placement,
@@ -354,7 +375,17 @@ pub(super) fn run<B: Boundary, A: Allocator>(
             )
         };
         if let Some(work) = &mut bands {
-            execute_bands(source, output, request.perturb, work, &mut report)?;
+            execute_bands(
+                source,
+                output,
+                request.perturb,
+                work,
+                coverage,
+                placement
+                    .as_mut()
+                    .map_or(&mut [], AdaptivePlacementWork::scratch),
+                &mut report,
+            )?;
         } else {
             let output = ImageViewMut::packed(output, dimensions).expect("reserved output storage");
             execute_with_scratch(
