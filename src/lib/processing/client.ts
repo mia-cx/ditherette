@@ -62,9 +62,8 @@ const OUTPUT_SLIDER_FIELDS = new Set<keyof OutputSettings>([
 ]);
 const DITHER_SLIDER_FIELDS = new Set<keyof DitherSettings>([
 	'strength',
-	'placementRadius',
-	'placementThreshold',
-	'placementSoftness'
+	'placementSampleSize',
+	'placementContrastThreshold'
 ]);
 
 class ProcessingCanceled extends Error {

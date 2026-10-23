@@ -8,7 +8,13 @@ import {
 	validateWorkerRequest,
 	validateWorkerResponse
 } from './schemas';
-import type { ColorSpaceId, DitherId, ProcessedImage, ProcessingSettings } from './types';
+import type {
+	ColorSpaceId,
+	DitherId,
+	EnabledPaletteColor,
+	ProcessedImage,
+	ProcessingSettings
+} from './types';
 import { compileEffects } from 'ditherette';
 import { initializePackageProcessor, ProcessorWorkerPipeline } from './worker-pipeline';
 
@@ -63,9 +69,8 @@ const settings: ProcessingSettings = {
 		algorithm: 'none',
 		strength: 100,
 		placement: 'everywhere',
-		placementRadius: 3,
-		placementThreshold: 12,
-		placementSoftness: 8,
+		placementSampleSize: 64,
+		placementContrastThreshold: 12,
 		serpentine: true,
 		seed: 1,
 		useColorSpace: false
@@ -334,5 +339,143 @@ describe('installed package website integration', () => {
 				() => undefined
 			)
 		).rejects.toThrow(/fractional crop/);
+	});
+});
+
+describe('smooth-area adaptive placement', () => {
+	// 192x48, identical rows: 1px black/white checkerboard | gentle 1-level/px grey ramp.
+	const WIDTH = 192;
+	const HEIGHT = 48;
+	function rampSource() {
+		const data = new Uint8ClampedArray(WIDTH * HEIGHT * 4);
+		for (let y = 0; y < HEIGHT; y++) {
+			for (let x = 0; x < WIDTH; x++) {
+				const offset = (y * WIDTH + x) * 4;
+				const value = x < 64 ? ((x + y) & 1) * 255 : 64 + (x - 64);
+				data[offset] = value;
+				data[offset + 1] = value;
+				data[offset + 2] = value;
+				data[offset + 3] = 255;
+			}
+		}
+		return new ImageData(data, WIDTH, HEIGHT);
+	}
+
+	const rampPalette: EnabledPaletteColor[] = [0, 64, 128, 192, 255].map((level) => {
+		const key = `#${level.toString(16).padStart(2, '0').repeat(3)}`;
+		return {
+			name: `Grey ${level}`,
+			key,
+			rgb: { r: level, g: level, b: level },
+			kind: 'custom',
+			enabled: true
+		};
+	});
+
+	const areaOutput = {
+		...settings.output,
+		width: WIDTH,
+		height: HEIGHT,
+		crop: undefined
+	};
+	const areaSettings = (dither: Partial<ProcessingSettings['dither']>, useColorSpace = false) =>
+		({
+			...settings,
+			colorSpace: 'oklab',
+			output: areaOutput,
+			dither: {
+				...settings.dither,
+				strength: 30,
+				placementSampleSize: 16,
+				useColorSpace,
+				...dither
+			}
+		}) satisfies ProcessingSettings;
+
+	function region(indices: Uint8Array, x0: number, x1: number) {
+		const pixels = new Uint8Array((x1 - x0 + 1) * HEIGHT);
+		for (let y = 0; y < HEIGHT; y++) {
+			pixels.set(indices.subarray(y * WIDTH + x0, y * WIDTH + x1 + 1), y * (x1 - x0 + 1));
+		}
+		return pixels;
+	}
+
+	function diffSet(indices: Uint8Array, baseline: Uint8Array) {
+		const set = new Set<number>();
+		for (let i = 0; i < indices.length; i++) {
+			if (indices[i] !== baseline[i]) set.add(i);
+		}
+		return set;
+	}
+
+	let requestId = 1;
+	async function run(
+		pipeline: ProcessorWorkerPipeline,
+		sourceId: string,
+		dither: Partial<ProcessingSettings['dither']>,
+		useColorSpace = false
+	) {
+		const response = await pipeline.handleAsync(
+			{
+				id: ++requestId,
+				type: 'process',
+				sourceId,
+				settings: areaSettings(dither, useColorSpace),
+				palette: rampPalette,
+				settingsHash: `area-${sourceId}-${JSON.stringify(dither)}-${useColorSpace}`
+			},
+			() => undefined
+		);
+		if (response?.type !== 'complete') throw new Error('Expected area output.');
+		return response.image.indices;
+	}
+
+	it('Adaptive dithers gradual areas, leaves sharp detail clean, and widens with tolerance', async () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle({
+			id: 1,
+			type: 'load-source',
+			sourceId: 'area',
+			source: rampSource()
+		});
+		const baseline = await run(pipeline, 'area', { algorithm: 'none' });
+
+		// Interior regions stay at least 16px (one sample) from the x=64 boundary.
+		function expectAreas(indices: Uint8Array) {
+			expect(region(indices, 0, 47)).toEqual(region(baseline, 0, 47));
+			expect(region(indices, 80, 191)).not.toEqual(region(baseline, 80, 191));
+		}
+
+		const bayer12 = await run(pipeline, 'area', {
+			algorithm: 'bayer-16',
+			placement: 'adaptive',
+			placementContrastThreshold: 12
+		});
+		expectAreas(bayer12);
+
+		// Ordered dither is pointwise: everything tolerance 12 admits, tolerance 100 admits too.
+		const bayer100 = await run(pipeline, 'area', {
+			algorithm: 'bayer-16',
+			placement: 'adaptive',
+			placementContrastThreshold: 100
+		});
+		const lowDiff = diffSet(bayer12, baseline);
+		for (const i of diffSet(bayer100, baseline)) lowDiff.delete(i);
+		expect(lowDiff.size).toBe(0);
+
+		const diffusion12 = await run(pipeline, 'area', {
+			algorithm: 'floyd-steinberg',
+			placement: 'adaptive',
+			placementContrastThreshold: 12
+		});
+		expectAreas(diffusion12);
+
+		const colorSpace12 = await run(
+			pipeline,
+			'area',
+			{ algorithm: 'bayer-16', placement: 'adaptive', placementContrastThreshold: 12 },
+			true
+		);
+		expectAreas(colorSpace12);
 	});
 });

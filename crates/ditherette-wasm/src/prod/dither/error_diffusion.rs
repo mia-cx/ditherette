@@ -275,6 +275,35 @@ impl ErrorDiffusionKernel {
 /// Byte feedback rounds/clips before matching; matching feedback keeps unrounded coordinates.
 /// Representational overflow returns a structured error and exposes no partial output.
 pub fn diffuse(request: DitherQuantizeRequest<'_>) -> Result<IndexedImage, DitheretteError> {
+    if matches!(
+        request.dither,
+        DitherPolicy::Diffusion {
+            placement: crate::prod::contract::request::Placement::SmoothAreaV1 { .. },
+            ..
+        }
+    ) {
+        return prepared::diffuse(
+            request,
+            crate::prod::contract::request::DEFAULT_MEMORY_LIMIT_BYTES,
+        )
+        .map_err(|error| match error {
+            prepared::DiffusionError::Request(error) => error,
+            prepared::DiffusionError::Preparation(error) => DitheretteError::new(
+                error.code,
+                error.path,
+                "Gradient diffusion preparation failed.",
+            ),
+            prepared::DiffusionError::Execution(error) => DitheretteError::new(
+                error.code,
+                if error.code == ErrorCode::MemoryLimit {
+                    "memoryLimitBytes"
+                } else {
+                    "dither"
+                },
+                "Gradient diffusion execution failed.",
+            ),
+        });
+    }
     let layout = Request::DitherAndQuantize(request).validate()?;
     let DitherPolicy::Diffusion {
         kernel,

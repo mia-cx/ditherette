@@ -53,8 +53,10 @@ pub fn diffuse(
     let fixed = (size_of::<ImageBuf<PaletteIndex8>>()
         + size_of::<DiffusionPolicy>()
         + size_of::<Converter>()) as u64;
+    let smooth_capacity =
+        AdaptivePlacementWork::required_for_image(layout.output, policy.placement);
     let preparation_limit = memory_limit
-        .checked_sub(fixed + count as u64)
+        .checked_sub(fixed + count as u64 + smooth_capacity)
         .ok_or(DiffusionError::Preparation(PreparationError::memory()))?;
     let mut prepared = PreparedDiffusion::try_new(
         layout.source.dimensions().width(),
@@ -71,11 +73,16 @@ pub fn diffuse(
         .reserve(&mut indices, count)
         .map_err(DiffusionError::Preparation)?;
     indices.resize(count, 0);
-    let mut placement = AdaptivePlacementWork::try_new(
-        layout.output.width(),
+    let mut placement = AdaptivePlacementWork::try_for_image(
+        layout.output,
         policy.placement,
-        memory_limit - budget.used,
-    );
+        if smooth_capacity > 0 {
+            smooth_capacity
+        } else {
+            memory_limit - budget.used
+        },
+    )
+    .map_err(DiffusionError::Execution)?;
     execute_with_placement_progress(
         &prepared.quantizer,
         &mut prepared.work,
@@ -121,6 +128,24 @@ impl DiffusionPolicy {
             ));
         };
         nonnegative(strength, ErrorPath::DitherStrength)?;
+        if let Placement::SmoothAreaV1 {
+            sample_size,
+            contrast_threshold,
+        } = placement
+        {
+            if !(4..=32768).contains(&sample_size) {
+                return Err(Failure::new(
+                    ErrorCode::InvalidSettings,
+                    ErrorPath::DitherSampleSize,
+                ));
+            }
+            if !contrast_threshold.is_finite() || !(0.0..=1.0).contains(&contrast_threshold) {
+                return Err(Failure::new(
+                    ErrorCode::InvalidSettings,
+                    ErrorPath::DitherContrastThreshold,
+                ));
+            }
+        }
         if let Placement::Adaptive {
             radius,
             threshold,
@@ -236,7 +261,8 @@ impl PreparedDiffusion {
         self.quantizer.into_indexed(indices)
     }
 
-    /// Executes without allocation. The source is unchanged and fixed-index pixels remain sinks.
+    /// Executes legacy placement without allocation. The source is unchanged and fixed-index pixels remain sinks.
+    /// SmoothAreaV1 needs full-image analysis; use `diffuse` or the public Processor route.
     pub fn execute(
         &mut self,
         source: ImageView<'_, Rgba8>,
@@ -301,6 +327,15 @@ pub(crate) fn execute_with_placement_progress(
     policy: DiffusionPolicy,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    if matches!(policy.placement, Placement::SmoothAreaV1 { .. })
+        && placement_scratch.len()
+            != crate::prod::dither::smooth_area_v1::scratch_len(source.dimensions())
+    {
+        return Err(Failure::new(
+            ErrorCode::MemoryLimit,
+            ErrorPath::MemoryLimitBytes,
+        ));
+    }
     let rgb_cache = (policy.feedback == DiffusionFeedback::SrgbBytes && !rgb_cache.is_empty())
         .then(|| RgbCache::new(rgb_cache));
     BorrowedDiffusion {
@@ -331,17 +366,31 @@ impl BorrowedDiffusion<'_> {
         assert_eq!(self.work.len(), width * ROWS);
         assert_eq!(indices.len(), width * height);
         let quantizer = self.quantizer;
-        let mut placement_rows = match policy.placement {
-            Placement::Adaptive { radius, .. } if !placement_scratch.is_empty() => {
+        let (mut placement_rows, smooth) = match policy.placement {
+            Placement::Adaptive { radius, .. } if !placement_scratch.is_empty() => (
                 Some(AdaptivePlacementRows::new(
                     source,
                     quantizer.converter(),
                     quantizer.matcher().matching.space(),
                     radius,
                     placement_scratch,
-                ))
+                )),
+                None,
+            ),
+            Placement::SmoothAreaV1 {
+                sample_size,
+                contrast_threshold,
+            } => {
+                crate::prod::dither::smooth_area_v1::select(
+                    source,
+                    sample_size,
+                    contrast_threshold,
+                    placement_scratch,
+                    || progress(0),
+                )?;
+                (None, Some(&*placement_scratch))
             }
-            _ => None,
+            _ => (None, None),
         };
         let palette = self.quantizer.palette();
         let fixed_alpha = if palette.visible.is_empty() {
@@ -359,7 +408,15 @@ impl BorrowedDiffusion<'_> {
             let placement_row = placement_rows
                 .as_mut()
                 .map(|rows| rows.prepare_row(y as u32));
-            self.execute_row(source, indices, policy, fixed_alpha, y, placement_row)?;
+            self.execute_row(
+                source,
+                indices,
+                policy,
+                fixed_alpha,
+                y,
+                placement_row,
+                smooth,
+            )?;
             if y + ROWS < height {
                 self.fill_row(source, y + ROWS, policy.feedback);
             }
@@ -378,6 +435,7 @@ impl BorrowedDiffusion<'_> {
         fixed_alpha: Option<(u8, u8)>,
         y: usize,
         placement_row: Option<AdaptivePlacementRow<'_>>,
+        smooth: Option<&[[f32; 3]]>,
     ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
         let height = source.dimensions().height_usize();
@@ -435,8 +493,30 @@ impl BorrowedDiffusion<'_> {
                     (selected.index, error)
                 }
             };
-            indices[offset] = index;
+            // Placement controls visible output, not the kernel's continuous recurrence.
+            // Skipping masked work depletes feedback and destroys the selected Sierra texture.
+            indices[offset] = if smooth.is_some_and(|mask| {
+                !crate::prod::dither::smooth_area_v1::covers(mask[offset][2], x as u32, y as u32)
+            }) {
+                match self.quantizer.palette().prepare_pixel([
+                    row[x * 4],
+                    row[x * 4 + 1],
+                    row[x * 4 + 2],
+                    row[x * 4 + 3],
+                ]) {
+                    PalettePixel::Index(index) => index,
+                    PalettePixel::Color(rgb) => {
+                        self.quantizer
+                            .nearest_finite(self.quantizer.converter().coordinates(rgb))
+                            .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))?
+                            .index
+                    }
+                }
+            } else {
+                index
+            };
             let mask = match (&placement_row, policy.placement) {
+                (_, Placement::SmoothAreaV1 { .. }) => 1.0,
                 (
                     Some(row),
                     Placement::Adaptive {

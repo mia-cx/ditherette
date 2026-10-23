@@ -156,6 +156,7 @@ pub fn perturb_by_field_bands_into(
 /// Shared field composition. The callback returns one threshold in [-0.5,0.5] per global pixel.
 /// It runs once per written pixel even when alpha, strength, or placement would suppress an effect.
 /// Adaptive calls reserve three coordinate rows fallibly and use direct conversion if unavailable.
+/// Smooth-gradient calls require full-image analysis; bounded callers use the Processor API.
 pub fn perturb_by_field_rows_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -165,7 +166,8 @@ pub fn perturb_by_field_rows_into(
     rows: RowBand,
     field: impl Fn(u32, u32, u64) -> f32,
 ) {
-    let mut work = AdaptivePlacementWork::try_new(source.dimensions().width(), placement, u64::MAX);
+    let mut work = AdaptivePlacementWork::try_for_image(source.dimensions(), placement, u64::MAX)
+        .expect("unbounded native field scratch allocation");
     if work.is_none() {
         return perturb_by_field_with_progress(
             source,
@@ -240,6 +242,7 @@ pub(crate) fn perturb_by_field_with_scratch(
 /// Output row zero corresponds to `rows.y_start()`; field coordinates remain absolute.
 /// Adaptive placement reuses converted rows when `scratch` holds three source-width rows;
 /// empty scratch keeps the allocation-free per-pixel neighbor conversion.
+/// SmoothAreaV1 requires the full-image `smooth_area_v1::scratch_len` records instead.
 pub fn perturb_by_field_band_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -294,11 +297,27 @@ fn perturb_rows(
     }
     let ranges = coordinate_domain(space).ranges().map(f64::from);
     let converter = Converter::new(PackedSpace::from_working(space));
-    let mut cached = match placement {
-        Placement::Adaptive { radius, .. } if !scratch.is_empty() => Some(
-            AdaptivePlacementRows::new(source, &converter, space, radius, scratch),
+    let (mut cached, smooth) = match placement {
+        Placement::Adaptive { radius, .. } if !scratch.is_empty() => (
+            Some(AdaptivePlacementRows::new(
+                source, &converter, space, radius, scratch,
+            )),
+            None,
         ),
-        _ => None,
+        Placement::SmoothAreaV1 {
+            sample_size,
+            contrast_threshold,
+        } => {
+            super::smooth_area_v1::select(
+                source,
+                sample_size,
+                contrast_threshold,
+                scratch,
+                || progress(0),
+            )?;
+            (None, Some(&*scratch))
+        }
+        _ => (None, None),
     };
     for y in rows.y_start()..rows.y_end() {
         let cached_row = cached.as_mut().map(|cache| cache.prepare_row(y));
@@ -310,6 +329,17 @@ fn perturb_rows(
             let global_index = u64::from(y) * u64::from(dimensions.width()) + u64::from(x);
             let threshold = field(x, y, global_index);
             let mask = match (&cached_row, placement) {
+                (_, Placement::SmoothAreaV1 { .. }) => {
+                    if super::smooth_area_v1::covers(
+                        smooth.expect("prepared mask")[global_index as usize][2],
+                        x,
+                        y,
+                    ) {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }
                 (
                     Some(row),
                     Placement::Adaptive {

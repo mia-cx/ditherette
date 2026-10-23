@@ -144,6 +144,13 @@ export type Placement =
 			readonly radius: number;
 			readonly threshold: number;
 			readonly softness: number;
+	  }
+	| {
+			readonly mode: 'smooth-area-v1';
+			/** Spatial scale and square side, integer 4..32768 working pixels. Editor default: 64. */
+			readonly sampleSize: number;
+			/** Max fine/coarse Oklab contrast, clipped to 1. Finite 0..1. Editor default: 0.12. */
+			readonly contrastThreshold: number;
 	  };
 
 /** Finite nonnegative f32 controls. Adaptive radius is an integer from 1 through 32768. */

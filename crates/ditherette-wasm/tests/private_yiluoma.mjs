@@ -41,7 +41,8 @@ test('private Yliluoma preserves strict borrowed controls, caught copies, reentr
 			[1, Infinity, 36],
 			[2, 1, 25],
 			[3, 1, 25],
-			[4, 2, 27],
+			[4, 2, 44], // Area placement requires a square side of at least four.
+			[4, 3, 27],
 			[5, 0, 28],
 			[5, 1.5, 28],
 			[6, Infinity, 29],
@@ -51,6 +52,11 @@ test('private Yliluoma preserves strict borrowed controls, caught copies, reentr
 			policy[slot] = value;
 			assert.equal(invoke(policy).status, 4);
 			assert.equal(bindings.privateErrorPath(), path);
+		}
+		assert.equal(invoke([0, 2, 0, 0, 2, 4, 0.12, 0]).status, 0);
+		for (const contrast of [-0.001, 1.001, Infinity, NaN]) {
+			assert.equal(invoke([0, 2, 0, 0, 2, 4, contrast, 0]).status, 4);
+			assert.equal(bindings.privateErrorPath(), 46);
 		}
 		const table = Object.values(raw).find((value) => value instanceof WebAssembly.Table);
 		const state = () => ({

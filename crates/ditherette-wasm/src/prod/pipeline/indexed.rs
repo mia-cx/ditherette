@@ -194,6 +194,17 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         0
     };
     call.charge_working_capacity(coverage_capacity, peak)?;
+    let placement_policy = match dither {
+        DitherPolicy::Diffusion { placement, .. } => placement,
+        DitherPolicy::Separable { perturb } if !perturbed_hit && band_plan.is_none() => {
+            perturb.placement
+        }
+        DitherPolicy::Yliluoma { placement, .. } if mixing_policy.is_none() => placement,
+        _ => Placement::Everywhere {},
+    };
+    let smooth_capacity =
+        AdaptivePlacementWork::required_for_image(output_dimensions, placement_policy);
+    call.charge_working_capacity(smooth_capacity, peak)?;
     call.prepare(
         Some(request),
         resize
@@ -248,23 +259,19 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     let band_rows_capacity = bands.as_ref().map_or(0, |(_, rows)| *rows);
     call.charge_optional_capacity(band_rows_capacity, peak)?;
     let mut bands = bands.map(|(buffers, _)| buffers);
-    let placement_policy = match dither {
-        DitherPolicy::Diffusion { placement, .. } => placement,
-        DitherPolicy::Separable { perturb } if !perturbed_hit && bands.is_none() => {
-            perturb.placement
-        }
-        DitherPolicy::Yliluoma { placement, .. } if mixing.is_none() => placement,
-        _ => Placement::Everywhere {},
-    };
-    let mut placement = AdaptivePlacementWork::try_new(
-        output_dimensions.width(),
+    let mut placement = AdaptivePlacementWork::try_for_image(
+        output_dimensions,
         placement_policy,
-        call.available_working_capacity(),
-    );
+        if smooth_capacity > 0 {
+            smooth_capacity
+        } else {
+            call.available_working_capacity()
+        },
+    )?;
     let placement_capacity = placement
         .as_ref()
         .map_or(0, AdaptivePlacementWork::capacity_bytes);
-    call.charge_optional_capacity(placement_capacity, peak)?;
+    call.charge_optional_capacity(placement_capacity - smooth_capacity, peak)?;
     if resize.is_some() && !resized_hit {
         let source_opaque = !sparse && call.resize_source_opaque();
         let coverage_limit = call

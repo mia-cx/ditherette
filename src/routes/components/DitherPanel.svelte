@@ -13,8 +13,8 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	const PLACEMENT_RADIUS_MIN = 1;
-	const PLACEMENT_RADIUS_MAX = 32;
+	const PLACEMENT_SAMPLE_SIZE_MIN = 4;
+	const PLACEMENT_SAMPLE_SIZE_MAX = 512;
 	const PLACEMENT_PERCENT_MIN = 0;
 	const PLACEMENT_PERCENT_MAX = 100;
 	const initial = ditherSettings.get();
@@ -23,9 +23,8 @@
 	let placement = $state(
 		initial.placement ?? (initial.coverage === 'full' ? 'everywhere' : 'adaptive')
 	);
-	let placementRadius = $state(initial.placementRadius ?? 3);
-	let placementThreshold = $state(initial.placementThreshold ?? 12);
-	let placementSoftness = $state(initial.placementSoftness ?? 8);
+	let placementSampleSize = $state(initial.placementSampleSize ?? 64);
+	let placementContrastThreshold = $state(initial.placementContrastThreshold ?? 12);
 	let serpentine = $state(initial.serpentine);
 	let seed = $state(initial.seed);
 	let useColorSpace = $state(initial.useColorSpace ?? false);
@@ -44,9 +43,8 @@
 			algorithm = settings.algorithm;
 			strength = settings.strength;
 			placement = settings.placement ?? (settings.coverage === 'full' ? 'everywhere' : 'adaptive');
-			placementRadius = settings.placementRadius ?? 3;
-			placementThreshold = settings.placementThreshold ?? 12;
-			placementSoftness = settings.placementSoftness ?? 8;
+			placementSampleSize = settings.placementSampleSize ?? 64;
+			placementContrastThreshold = settings.placementContrastThreshold ?? 12;
 			serpentine = settings.serpentine;
 			seed = settings.seed;
 			useColorSpace = settings.useColorSpace ?? false;
@@ -58,9 +56,8 @@
 			algorithm,
 			strength,
 			placement,
-			placementRadius,
-			placementThreshold,
-			placementSoftness,
+			placementSampleSize,
+			placementContrastThreshold,
 			serpentine,
 			seed,
 			useColorSpace
@@ -119,12 +116,11 @@
 
 		<AdaptivePlacementControls
 			bind:placement
-			bind:placementRadius
-			bind:placementThreshold
-			bind:placementSoftness
+			bind:placementSampleSize
+			bind:placementContrastThreshold
 			{supportsPlacement}
-			placementRadiusMin={PLACEMENT_RADIUS_MIN}
-			placementRadiusMax={PLACEMENT_RADIUS_MAX}
+			placementSampleSizeMin={PLACEMENT_SAMPLE_SIZE_MIN}
+			placementSampleSizeMax={PLACEMENT_SAMPLE_SIZE_MAX}
 			placementPercentMin={PLACEMENT_PERCENT_MIN}
 			placementPercentMax={PLACEMENT_PERCENT_MAX}
 		/>

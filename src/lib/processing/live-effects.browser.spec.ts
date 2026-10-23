@@ -128,9 +128,8 @@ const settings: ProcessingSettings = {
 		algorithm: 'floyd-steinberg',
 		strength: 100,
 		placement: 'everywhere',
-		placementRadius: 3,
-		placementThreshold: 12,
-		placementSoftness: 8,
+		placementSampleSize: 64,
+		placementContrastThreshold: 12,
 		serpentine: true,
 		seed: 1,
 		useColorSpace: true

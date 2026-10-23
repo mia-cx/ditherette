@@ -210,6 +210,14 @@ impl Serialize for SortedPlacement {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
         match self.0 {
+            Placement::SmoothAreaV1 {
+                sample_size,
+                contrast_threshold,
+            } => {
+                map.serialize_entry("contrastThreshold", &normalized_float(contrast_threshold))?;
+                map.serialize_entry("mode", "smooth-area-v1")?;
+                map.serialize_entry("sampleSize", &sample_size)?;
+            }
             Placement::Everywhere {} => map.serialize_entry("mode", "everywhere")?,
             Placement::Adaptive {
                 radius,

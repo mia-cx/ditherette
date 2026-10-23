@@ -2024,6 +2024,285 @@
 				}
 			],
 			"contentSha256": "78369584919c1e82b0909cca71ba67edd43523e831b630517a08f979e553f96e"
+		},
+		{
+			"name": "smooth-gradient-v1",
+			"summary": "Append a palette-independent gradient selector and readable field/diffusion composition without changing legacy recipes",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "4a03062e0aa3302d5da3fadf5261fec32b8104ba5f13a37992c9b8d64268a252"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "8e76e1bdc891de0b9524a9fd87196115d7030cfeddab3c3b57f680f35065885f"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+						"mode": "100644",
+						"sha256": "199834e3a551b27dfa9c47d28c70d97d89b0996836a271a85bc351f757b84a7b"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+						"mode": "100644",
+						"sha256": "d4e79207cd413b8ab66d84b817077fa442bc75229a10385e647c4fe49f72f233"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+						"mode": "100644",
+						"sha256": "b49efdeccdb2ac6cc16d3a4e03bbe44a758259a3586b67c133d034117b0de987"
+					}
+				}
+			],
+			"contentSha256": "4a0e9dc7fa9affd851488f75250d56ebaa549696aae97e62c32cb2dd603aa0ca"
+		},
+		{
+			"name": "smooth-gradient-v1-texture",
+			"summary": "Preserve kernel texture and tolerate bounded RGB8 quantization in the unmerged gradient placement extension",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+						"mode": "100644",
+						"sha256": "199834e3a551b27dfa9c47d28c70d97d89b0996836a271a85bc351f757b84a7b"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+						"mode": "100644",
+						"sha256": "1701d0d983a97e9074d69fd6e17c198b8754576c1fd5f796e5ca3378573deb26"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+						"mode": "100644",
+						"sha256": "d4e79207cd413b8ab66d84b817077fa442bc75229a10385e647c4fe49f72f233"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+						"mode": "100644",
+						"sha256": "72c8e8873146b8ebc248856f5e71e367593d22a61e6d4e57b15a983148cae8bf"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+						"mode": "100644",
+						"sha256": "b49efdeccdb2ac6cc16d3a4e03bbe44a758259a3586b67c133d034117b0de987"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+						"mode": "100644",
+						"sha256": "07499bfa5d541af73bb4e962bde1459f203980f30acb4fd6a22509fe453fe12b"
+					}
+				}
+			],
+			"contentSha256": "6f2ee0a0f8823b1295be16d07323cfe73c3e1b43370e26da6d388dc57557b7f3"
+		},
+		{
+			"name": "smooth-area-v1",
+			"summary": "Replace the unshipped directional preview with overlapping areas bounded by local perceptual contrast",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "8e76e1bdc891de0b9524a9fd87196115d7030cfeddab3c3b57f680f35065885f"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "7bd36efc6e97499b8b943735aa4a4d28bd75e596f7c9047b34ba2287f9d27654"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "e31e10d0fbefb70c1454cf86475f377f4399e6e4759428ca742b4876dc066407"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "6f862f6d2e64f43e306a92722a3d436db8da304d4acb31af4afdb68bafd11a1f"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1/render.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1/render.rs",
+						"mode": "100644",
+						"sha256": "43159a3a3543aa54e587d8f14e415f2de284e956d0e44a5ad04146a766fcf71a"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.md",
+						"mode": "100644",
+						"sha256": "1701d0d983a97e9074d69fd6e17c198b8754576c1fd5f796e5ca3378573deb26"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1.rs",
+						"mode": "100644",
+						"sha256": "72c8e8873146b8ebc248856f5e71e367593d22a61e6d4e57b15a983148cae8bf"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_gradient_v1/render.rs",
+						"mode": "100644",
+						"sha256": "07499bfa5d541af73bb4e962bde1459f203980f30acb4fd6a22509fe453fe12b"
+					},
+					"after": null
+				}
+			],
+			"contentSha256": "6829540f6a7cae4378b10757b4d74b41095d44d5eed73f4eed78af0439633db4"
+		},
+		{
+			"name": "smooth-area-scale-v1",
+			"summary": "Account for spatial tightness with an amplitude-preserving fine/coarse Oklab residual",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "e31e10d0fbefb70c1454cf86475f377f4399e6e4759428ca742b4876dc066407"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "3a4d0900024ef292f9c447114c6c07ac5dfa59c726e555426f9c2a934404cbb9"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "6f862f6d2e64f43e306a92722a3d436db8da304d4acb31af4afdb68bafd11a1f"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "8903f1e1daf2cf2c091232b17fed89a4d0b8f05faad05945a0636db645cf9be9"
+					}
+				}
+			],
+			"contentSha256": "8e53447f8a526fa0ccc9271ff195fd8681b351139fb58e74a03337a190254598"
+		},
+		{
+			"name": "smooth-area-boundaries-v1",
+			"summary": "Reconstruct source-aware smooth region boundaries, suppress isolated patches and feather normal algorithm pixels without crossing hard source jumps",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "3a4d0900024ef292f9c447114c6c07ac5dfa59c726e555426f9c2a934404cbb9"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "1b434bbc6ea91c585e5623d4f8ebdea9ea4729293ec79c1b46c5b3dd0ddb4f95"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "8903f1e1daf2cf2c091232b17fed89a4d0b8f05faad05945a0636db645cf9be9"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "86f5399c068f8eeae3a9b5f1e097b44ea13c90d3dce1373250b769f982208967"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1/render.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1/render.rs",
+						"mode": "100644",
+						"sha256": "43159a3a3543aa54e587d8f14e415f2de284e956d0e44a5ad04146a766fcf71a"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1/render.rs",
+						"mode": "100644",
+						"sha256": "9ec7379d70e0eec9451aff15ddec154fb3ef6626a3609185b44d043c28f9b88d"
+					}
+				}
+			],
+			"contentSha256": "7a5a82d8104e5c9eb8bbf8fc9aa3086126b2db675a1f619280619c5e312f5e89"
+		},
+		{
+			"name": "smooth-area-monotonic-v1",
+			"summary": "Evaluate both smoothstep weights in f64 before rounding to preserve nondecreasing coverage and selected-set inclusion at adjacent f32 tolerances",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "1b434bbc6ea91c585e5623d4f8ebdea9ea4729293ec79c1b46c5b3dd0ddb4f95"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.md",
+						"mode": "100644",
+						"sha256": "7302915c41267b7141d16defaeb142577647117f267e5692141788af8786b970"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "86f5399c068f8eeae3a9b5f1e097b44ea13c90d3dce1373250b769f982208967"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/smooth_area_v1.rs",
+						"mode": "100644",
+						"sha256": "003ca9e56d514b68a87cee854e53d9f921842022a12d66e97b7063aff51ef15b"
+					}
+				}
+			],
+			"contentSha256": "a54d80be4a5f476c99faf4c87e3bc45e0159cde31e622f5a81aff2df5afcb0c5"
 		}
 	]
 }
