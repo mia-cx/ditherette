@@ -24,6 +24,296 @@ self.onmessage = async (event) => {
 			{ kind: 'color', rgb: [90, 120, 100] },
 			{ kind: 'transparent' }
 		];
+		if (event.data.process) {
+			// Proves the public combined call composes the real GPU stages at the
+			// same RGBA8 boundary and recipe-v2 coverage semantics as CPU process.
+			const cpu = await createDitherette();
+			const gpu = await createGpuDither({ fallback: 'error', diffusionBackend: 'gpu' });
+			const area = { mode: 'smooth-area-v1', sampleSize: 20, contrastThreshold: 0.12 };
+			if (event.data.fullProcess) {
+				const effects = [
+					{ effect: 'exposure', enabled: true, stops: 0.5 },
+					{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: 0.2, lightness: 0 }
+				];
+				const records = [];
+				try {
+					for (let i = 0; i < 4; i++) {
+						const width = i === 3 ? 1300 : source.width,
+							height = i === 3 ? 2084 : source.height;
+						const input = {
+							source,
+							palette,
+							recipe: {
+								version: 2,
+								effects,
+								output: {
+									width,
+									height,
+									resize: { algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' }
+								},
+								alpha: { mode: 'preserve', threshold: 0 },
+								match: 'oklab-euclidean',
+								dither:
+									i === 0
+										? { family: 'none' }
+										: {
+												family: 'separable',
+												perturb: {
+													field: { algorithm: 'bayer', size: '16' },
+													space: 'oklab',
+													strength: i === 2 ? 0.5 : 0.3,
+													placement: area
+												}
+											}
+							}
+						};
+						const expected = cpu.process(input),
+							actual = await gpu.process(input);
+						if (gpu.execution.backend !== 'gpu') throw Error('Full process left GPU');
+						if (
+							JSON.stringify(actual.palette) !== JSON.stringify(expected.palette) ||
+							JSON.stringify(actual.warnings) !== JSON.stringify(expected.warnings)
+						)
+							throw Error('Full process metadata differs');
+						let changed = 0,
+							maxByte = 0,
+							alphaDifferences = 0;
+						for (let pixel = 0; pixel < actual.indices.length; pixel++) {
+							const a = actual.indices[pixel],
+								b = expected.indices[pixel];
+							if (a !== b) changed++;
+							for (let c = 0; c < 4; c++)
+								maxByte = Math.max(
+									maxByte,
+									Math.abs(actual.palette.rgba[4 * a + c] - expected.palette.rgba[4 * b + c])
+								);
+							if (actual.palette.rgba[4 * a + 3] !== expected.palette.rgba[4 * b + 3])
+								alphaDifferences++;
+						}
+						if (alphaDifferences) throw Error('Full process alpha differs');
+						const hash = Array.from(
+							new Uint8Array(await crypto.subtle.digest('SHA-256', actual.indices)),
+							(b) => b.toString(16).padStart(2, '0')
+						).join('');
+						records.push({
+							i,
+							width,
+							height,
+							changed,
+							maxByte,
+							alphaDifferences,
+							hash,
+							...gpu.execution
+						});
+					}
+					if (!records[2].analysisReused || records[3].analysisReused)
+						throw Error('Full prepared geometry cache identity differs');
+					self.postMessage({ calls: 4, records });
+				} finally {
+					cpu.dispose();
+					gpu.dispose();
+				}
+				return;
+			}
+			const dithers = [
+				{ family: 'none' },
+				{
+					family: 'separable',
+					perturb: {
+						field: { algorithm: 'bayer', size: '16' },
+						space: 'oklab',
+						strength: 0.3,
+						placement: area
+					}
+				},
+				{
+					family: 'diffusion',
+					kernel: 'sierra',
+					feedback: 'matching',
+					serpentine: false,
+					strength: 1,
+					placement: area
+				},
+				{ family: 'yliluoma', size: '4', placement: area }
+			];
+			const filters = [
+				{ algorithm: 'nearest', anchor: 'center' },
+				{ algorithm: 'area' },
+				{ algorithm: 'bilinear', anchor: 'bottom-right' },
+				{ algorithm: 'trilinear', anchor: 'center' },
+				...['bicubic', 'lanczos2', 'lanczos3'].map((algorithm) => ({
+					algorithm,
+					anchor: 'center',
+					support: 'scale-aware'
+				}))
+			];
+			const profiles = [
+				undefined,
+				[],
+				[
+					{ effect: 'exposure', enabled: true, stops: 0.5 },
+					{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: 0.2, lightness: 0 }
+				],
+				[
+					{
+						effect: 'curves',
+						enabled: true,
+						curves: [
+							{
+								kind: 'adjust',
+								x: { model: 'hsl', channel: 'hue' },
+								y: { model: 'oklab', channel: 'a' },
+								points: [
+									[0, 0.6],
+									[0.5, 0.4],
+									[1, 0.6]
+								]
+							}
+						],
+						mask: [
+							{
+								x: { model: 'srgb', channel: 'red' },
+								points: [
+									[0, 0.1],
+									[1, 1]
+								]
+							}
+						]
+					}
+				]
+			];
+			let calls = 0,
+				differences = 0,
+				maximumByteDifference = 0;
+			let last;
+			try {
+				for (const resize of filters)
+					for (const effects of profiles)
+						for (const dither of dithers)
+							for (const alpha of [
+								{ mode: 'preserve', threshold: 127.9 },
+								{ mode: 'matte', rgb: [7, 200, 90] }
+							]) {
+								const request = {
+									source,
+									palette,
+									recipe: {
+										version: effects === undefined ? 1 : 2,
+										...(effects === undefined ? {} : { effects }),
+										output: { width: 29, height: 23, resize },
+										alpha,
+										match: 'oklab-euclidean',
+										dither
+									}
+								};
+								const expected = cpu.process(request);
+								const actual = await gpu.process(request);
+								if (gpu.execution.backend !== 'gpu')
+									throw Error('Combined process must stay on GPU');
+								if (
+									actual.width !== 29 ||
+									actual.height !== 23 ||
+									actual.indices.length !== 29 * 23
+								)
+									throw Error('Output dimensions changed');
+								if (
+									JSON.stringify(actual.palette) !== JSON.stringify(expected.palette) ||
+									JSON.stringify(actual.warnings) !== JSON.stringify(expected.warnings)
+								)
+									throw Error('Palette metadata changed');
+								let changed = 0;
+								for (let i = 0; i < actual.indices.length; i++) {
+									if (actual.indices[i] !== expected.indices[i]) changed++;
+									for (let c = 0; c < 4; c++)
+										maximumByteDifference = Math.max(
+											maximumByteDifference,
+											Math.abs(
+												actual.palette.rgba[4 * actual.indices[i] + c] -
+													expected.palette.rgba[4 * expected.indices[i] + c]
+											)
+										);
+								}
+								if (changed > 40)
+									throw Error(
+										`Combined case ${calls} changed ${changed} indices: ${JSON.stringify(request.recipe)}`
+									);
+								differences += changed;
+								calls++;
+								last = request;
+							}
+				// Unchanged prepared bytes reuse coverage across dither settings; changed
+				// effects invalidate it even though the caller's original source is identical.
+				last.recipe.dither = dithers[1];
+				await gpu.process(last);
+				await gpu.process(last);
+				if (!gpu.execution.analysisReused) throw Error('Prepared-source coverage did not reuse');
+				last.recipe.effects[0].curves[0].points[1][1] = 0.8;
+				await gpu.process(last);
+				if (gpu.execution.analysisReused) throw Error('Changed effects reused stale coverage');
+				const pendingSource = { ...source, data: source.data.slice() };
+				const capturedRequest = { ...last, source: pendingSource };
+				const expected = cpu.process(capturedRequest);
+				const pending = gpu.process(capturedRequest);
+				pendingSource.data.fill(0);
+				const captured = await pending;
+				if (captured.indices.some((index, i) => index !== expected.indices[i]))
+					throw Error('Source changed after capture');
+				const controller = new AbortController();
+				let cancelled = false;
+				try {
+					await gpu.process(
+						{
+							...last,
+							onProgress({ stage }) {
+								if (stage === 'resize') controller.abort();
+							}
+						},
+						controller.signal
+					);
+				} catch (error) {
+					cancelled = error.name === 'AbortError';
+				}
+				if (!cancelled) throw Error('Preparation cancellation did not reject');
+				let callbackRejected = false;
+				try {
+					await gpu.process({
+						...last,
+						onProgress({ stage }) {
+							if (stage === 'resize') throw Error('callback');
+						}
+					});
+				} catch (error) {
+					callbackRejected = error.code === 'callback';
+				}
+				if (!callbackRejected) throw Error('Resize callback failure did not reject');
+				await gpu.process(last);
+				if (gpu.execution.backend !== 'gpu') throw Error('Callback retired a healthy device');
+				const hybrid = await createGpuDither();
+				try {
+					await hybrid.process({
+						...last,
+						recipe: { ...last.recipe, dither: { ...dithers[2], placement: { mode: 'everywhere' } } }
+					});
+					if (hybrid.execution.backend !== 'hybrid')
+						throw Error('CPU diffusion must report GPU preparation as hybrid');
+				} finally {
+					hybrid.dispose();
+				}
+				self.postMessage({
+					calls,
+					differences,
+					maximumByteDifference,
+					reused: true,
+					hybrid: true,
+					cancelled,
+					callbackRecovered: true
+				});
+			} finally {
+				cpu.dispose();
+				gpu.dispose();
+			}
+			return;
+		}
 		if (event.data.tiling) {
 			// Proves explicit schedules reach both real scalar and shared-memory artifacts.
 			const input = {
