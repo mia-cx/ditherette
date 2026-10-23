@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 
-/** Ordinary 0.x releases use latest; explicitly qualified release candidates use rc. */
+/** Stable releases use latest; explicitly qualified release candidates use rc. */
 export function releaseChannel(version) {
-	assert.match(version, /^0\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-rc\.(?:0|[1-9]\d*))?$/);
+	assert.match(version, /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-rc\.(?:0|[1-9]\d*))?$/);
 	return version.includes('-rc.') ? 'rc' : 'latest';
 }
 
