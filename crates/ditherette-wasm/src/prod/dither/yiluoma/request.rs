@@ -213,6 +213,34 @@ pub(crate) fn dither_yiluoma_with_progress_indexed(
     mix_index: Option<&MixIndex>,
     progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
+    dither_yiluoma_with_coverage(
+        source,
+        prepared,
+        indices,
+        size,
+        placement,
+        placement_rows,
+        None,
+        mixes,
+        mix_index,
+        progress,
+    )
+}
+
+/// Shares palette-independent coverage with fields and diffusion.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dither_yiluoma_with_coverage(
+    source: crate::image::ImageView<'_, crate::image::Rgba8>,
+    prepared: &PreparedQuantizer,
+    indices: &mut [u8],
+    size: BayerSize,
+    placement: Placement,
+    placement_rows: &mut [[f32; 3]],
+    coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
+    mixes: &mut [u64],
+    mix_index: Option<&MixIndex>,
+    progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+) -> Result<(), crate::prod::contract::failure::Failure> {
     let band = crate::prod::tiling::RowBand::new(0, source.dimensions().height())
         .expect("validated source height");
     dither_yiluoma_band_with_progress(
@@ -223,6 +251,7 @@ pub(crate) fn dither_yiluoma_with_progress_indexed(
         placement,
         band,
         placement_rows,
+        coverage,
         mixes,
         mix_index,
         progress,
@@ -239,6 +268,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
     placement: Placement,
     band: crate::prod::tiling::RowBand,
     placement_rows: &mut [[f32; 3]],
+    coverage: Option<&crate::prod::dither::smooth_area_v1::coverage::Coverage>,
     mixes: &mut [u64],
     mix_index: Option<&MixIndex>,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
@@ -265,6 +295,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
             )),
             None,
         ),
+        Placement::SmoothAreaV1 { .. } if coverage.is_some() => (None, None),
         Placement::SmoothAreaV1 {
             sample_size,
             contrast_threshold,
@@ -300,13 +331,18 @@ pub(super) fn dither_yiluoma_band_with_progress(
             *index = match palette.prepare_pixel([pixel[0], pixel[1], pixel[2], pixel[3]]) {
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
-                    if smooth.is_some_and(|mask| {
-                        !crate::prod::dither::smooth_area_v1::covers(
-                            mask[y as usize * dimensions.width_usize() + x as usize][2],
-                            x,
-                            y,
-                        )
-                    }) {
+                    if coverage.map_or_else(
+                        || {
+                            smooth.is_some_and(|mask| {
+                                !crate::prod::dither::smooth_area_v1::covers(
+                                    mask[y as usize * dimensions.width_usize() + x as usize][2],
+                                    x,
+                                    y,
+                                )
+                            })
+                        },
+                        |mask| !mask.covers(x, y),
+                    ) {
                         *index = matcher.nearest(converter.coordinates(rgb)).index;
                         continue;
                     }

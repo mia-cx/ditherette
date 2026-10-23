@@ -35,13 +35,34 @@ Keep that workflow clear and fast, including large images.
   distance work and is deployed there with exact scalar/threaded output checks.
   Qualified latency measurements remain pending because shared-host browser activity
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
-- The opt-in package GPU effects API uses exact channel lookup with bounded CPU
-  fallback. Website integration, the remaining GPU stages, and physical GPU
-  validation of the new API remain open. Start editor integration now alongside
-  host preview/save memory bounds. Reuse the existing backend and keep CPU fallback.
-  Port generated pointwise effects and recipe application, resize, palette matching,
-  ordered/noise dithering, then Yliluoma. Error diffusion comes last because its
-  recurrence constrains parallel execution.
+- The GPU preview integrates exact channel-lookup effects with bounded CPU fallback.
+  Full-resolution Celeste profiling covers all 27 modes, 15 matching spaces, both
+  placements and three effects profiles: 2,610 terminal cases, including 177 timeouts.
+  Effects execute on GPU; dithering, matching and Adaptive selection remain scalar CPU.
+  Adaptive selection dominates common calls; matching and diffusion dominate ordinary
+  Sierra, with expensive matching behind most timeouts. Optimize the exact selector
+  and reconstruction first, then matching/diffusion; investigate Yliluoma separately.
+  Shared-host timings are diagnostic, not qualified benchmarks. The reviewed
+  integration and host memory bounds await merge.
+  A further CPU selector candidate expands hot three-channel loops, prunes
+  uncompetitive reconstruction paths and converts colours lazily in the existing
+  row workspace. Exact mask, checkpoint and budget checks pass; review and
+  deployment remain separate.
+  The follow-up expands fixed neighbourhood visits and reuses consecutive RGB
+  conversions within the call. Boundary scans also reuse overlapping column bounds
+  and expand coarse probes without changing masks, checkpoints or storage.
+  Further CPU gains remain worthwhile alongside GPU work.
+  Mia's CPU target is Adaptive below twice the matching ordinary dither call.
+  The CPU candidate reuses source-only coverage across algorithm, strength, palette and matching changes;
+  invalidate it for processed-input, sample-size or contrast-tolerance changes.
+  Retention uses the existing bounded cache and success-only publication.
+  Warm Celeste edits meet that target in diagnostic checks; first-call analysis still needs work.
+  Remaining GPU stages and physical browser/device qualification stay open.
+  The next dither milestone combines palette matching, ordered/noise fields and
+  the complete Adaptive selector/reconstruction on GPU. Keeping selection on CPU
+  would retain the dominant delay. Preserve ordinary serpentine diffusion while
+  investigating its scheduling separately; GPU Adaptive masks can also feed CPU diffusion.
+  Read [the port plan](docs/plans/gpu-dithering.md) before implementing those stages.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 
@@ -52,10 +73,15 @@ https://ditherette.mia.cx. This is the ongoing delivery target for this work.
 Merge changes after required CI and review checks, then deploy the tested source.
 Website delivery proceeds independently of npm publication holds.
 
+GPU testing uses https://gpu.ditherette.mia.cx for the combined reviewed Adaptive,
+output-memory and GPU effects stack. It has a separate Worker and uses preview
+analytics while the pull requests complete their merge gates.
+
 ## Priorities
 
 1. Make direct production delivery reliable and keep dependencies secure.
-   Optimize accepted adaptive placement with profiling, exact-output checks and benchmarks.
+   Use the completed profile to prioritize exact Adaptive selector/reconstruction
+   work, then matching/diffusion, while preserving accepted output and storage bounds.
 2. Reconcile release evidence against the current artifact, explain size growth,
    and resolve technical qualification blockers without weakening their checks.
 3. Improve large-output rendering, PNG export, and persistence.

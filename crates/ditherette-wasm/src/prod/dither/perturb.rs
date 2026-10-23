@@ -232,9 +232,28 @@ pub(crate) fn perturb_by_field_with_scratch(
     field: impl Fn(u32, u32, u64) -> f32,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    perturb_by_field_with_coverage(
+        source, output, space, strength, placement, rows, scratch, None, field, progress,
+    )
+}
+
+/// Reuses exact source-only coverage prepared by another dither on this image.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn perturb_by_field_with_coverage(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    rows: RowBand,
+    scratch: &mut [[f32; 3]],
+    coverage: Option<&super::smooth_area_v1::coverage::Coverage>,
+    field: impl Fn(u32, u32, u64) -> f32,
+    progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     assert_eq!(source.dimensions(), output.dimensions());
     perturb_rows(
-        source, output, space, strength, placement, rows, 0, scratch, field, progress,
+        source, output, space, strength, placement, rows, 0, scratch, coverage, field, progress,
     )
 }
 
@@ -264,6 +283,7 @@ pub fn perturb_by_field_band_into(
         rows,
         rows.y_start(),
         scratch,
+        None,
         field,
         |_| Ok(()),
     )
@@ -279,6 +299,7 @@ fn perturb_rows(
     rows: RowBand,
     output_y_start: u32,
     scratch: &mut [[f32; 3]],
+    coverage: Option<&super::smooth_area_v1::coverage::Coverage>,
     field: impl Fn(u32, u32, u64) -> f32,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
@@ -304,6 +325,7 @@ fn perturb_rows(
             )),
             None,
         ),
+        Placement::SmoothAreaV1 { .. } if coverage.is_some() => (None, None),
         Placement::SmoothAreaV1 {
             sample_size,
             contrast_threshold,
@@ -330,10 +352,15 @@ fn perturb_rows(
             let threshold = field(x, y, global_index);
             let mask = match (&cached_row, placement) {
                 (_, Placement::SmoothAreaV1 { .. }) => {
-                    if super::smooth_area_v1::covers(
-                        smooth.expect("prepared mask")[global_index as usize][2],
-                        x,
-                        y,
+                    if coverage.map_or_else(
+                        || {
+                            super::smooth_area_v1::covers(
+                                smooth.expect("prepared mask")[global_index as usize][2],
+                                x,
+                                y,
+                            )
+                        },
+                        |mask| mask.covers(x, y),
                     ) {
                         1.0
                     } else {
