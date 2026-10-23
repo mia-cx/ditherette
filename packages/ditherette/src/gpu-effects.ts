@@ -1,10 +1,12 @@
 import { DitheretteError } from './errors.js';
-import { createScalar, normalizeWasmInput } from './scalar.js';
+import { normalizeWasmInput } from './scalar.js';
+import { createCpu } from './cpu.js';
 import { validateApplyEffects } from './validation-effects.js';
 import { field, object, TRANSPARENT_CODE, validateOptions } from './validation.js';
 import { spaces } from './validation-fields.js';
 import type {
 	ApplyEffectsRequest,
+	CpuInitOptions,
 	Effect,
 	EffectMaskRequest,
 	MaskCurve,
@@ -18,6 +20,7 @@ import type {
 
 /** GPU assets are opt-in; `wasm` supplies the ordinary scalar fallback artifact. */
 export interface GpuEffectsOptions {
+	readonly threads?: CpuInitOptions['threads'];
 	readonly memoryLimitBytes?: number;
 	readonly wasm?: InitInput;
 	readonly gpuWasm?: InitInput;
@@ -112,18 +115,41 @@ export function gpuEffectsDecoderBytes(effectsBytes: number): number {
 	return 512 * 1024 + (96 + 3 * 64 + 32 + 4) * effectsBytes;
 }
 
+/** Rebuild a validated recipe around owned bytes before asynchronous CPU fallback. */
+export function capturedEffects(
+	input: ReturnType<typeof validateApplyEffects>,
+	source: Rgba8Image
+) {
+	return {
+		version: 1 as const,
+		source,
+		effects: JSON.parse(input.effects.json) as Effect[],
+		context: {
+			palette: (input.palette ?? []).map(
+				(code): PaletteEntry =>
+					code === TRANSPARENT_CODE
+						? { kind: 'transparent' }
+						: { kind: 'color', rgb: [(code >>> 16) & 255, (code >>> 8) & 255, code & 255] }
+			),
+			space: input.space < 0 ? undefined : (spaces[input.space] as WorkingSpace)
+		},
+		onProgress: input.onProgress
+	};
+}
+
 /**
- * Create an optional effects processor without changing synchronous createDitherette.
- * Missing WebGPU or optional assets uses the scalar artifact. No Wasm loads on package import.
+ * Compatibility effects-only factory. Prefer createDitherette({ engine: 'gpu' })
+ * to share one device with resizing and dithering. Missing GPU assets use CPU fallback.
  */
 export async function createGpuEffects(options?: GpuEffectsOptions): Promise<GpuEffects> {
 	const input = object(
 		options === undefined ? {} : options,
-		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling'],
+		['memoryLimitBytes', 'wasm', 'gpuWasm', 'fallback', 'tiling', 'threads'],
 		'invalid-settings',
 		''
 	);
 	const normalized = validateOptions({
+		threads: field(input, 'threads'),
 		memoryLimitBytes: field(input, 'memoryLimitBytes'),
 		wasm: field(input, 'wasm'),
 		tiling: field(input, 'tiling')
@@ -158,6 +184,7 @@ export async function createGpuEffects(options?: GpuEffectsOptions): Promise<Gpu
 export function initializeGpuEffects(
 	bindings: GpuEffectsBindings | undefined,
 	options: {
+		threads?: CpuInitOptions['threads'];
 		wasm?: InitInput;
 		memoryLimitBytes: number;
 		fallback?: 'cpu' | 'error';
@@ -323,29 +350,14 @@ export function initializeGpuEffects(
 			// No library-owned GPU artifact may coexist with CPU fallback capacity.
 			retire(reason || 'Failed');
 			if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
-			const cpu = await createScalar({
+			const cpu = await createCpu({
+				threads: options.threads,
 				wasm: options.wasm,
 				tiling: options.tiling,
 				memoryLimitBytes: options.memoryLimitBytes - bytes
 			});
 			try {
-				const palette = input.palette?.map(
-					(code): PaletteEntry =>
-						code === TRANSPARENT_CODE
-							? { kind: 'transparent' }
-							: { kind: 'color', rgb: [(code >>> 16) & 255, (code >>> 8) & 255, code & 255] }
-				);
-				const fallbackRequest = {
-					version: 1,
-					source,
-					effects: JSON.parse(input.effects.json) as Effect[],
-					context: {
-						palette,
-						// The existing validator supplies a checked working-space tag.
-						space: input.space < 0 ? undefined : (spaces[input.space] as WorkingSpace)
-					},
-					onProgress: input.onProgress
-				} as const;
+				const fallbackRequest = capturedEffects(input, source);
 				const result = masked
 					? cpu.effectMask({ ...fallbackRequest, mask: JSON.parse(input.mask) as MaskCurve[] })
 					: cpu.applyEffects(fallbackRequest);

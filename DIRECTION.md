@@ -77,13 +77,16 @@ Keep that workflow clear and fast, including large images.
   scan order, palette indices, alpha coverage and the frozen CPU fallback.
   Keep both backends in the package. Clients choose CPU/GPU, fallback and tiling
   independently; the website consumes that public policy rather than owning a fork.
+  Use one public `createDitherette({ engine: 'cpu' | 'gpu', tiling: true | false })`
+  factory with common operations; backend-specific factories are compatibility entry points.
   The package candidate now includes all three artifacts, CPU row-band controls,
   strict GPU-only rejection and all GPU resize filters with halo-aware image tiles.
   Yliluoma now searches its palette-only mixture index on GPU at every matrix size
   and matching policy, including Adaptive placement. Every diffusion kernel now
   has an explicit GPU path: wavefronts for ordinary scans and continuous cooperative
-  serpentine. CPU diffusion remains the default because faithful serpentine is
-  substantially slower on the tested GPU. Mixed and masked effects now execute on GPU,
+  serpentine. The compatibility factory keeps CPU diffusion as its default because
+  faithful serpentine is slower on the tested GPU. The unified GPU engine explicitly defaults
+  to GPU diffusion; clients can select the CPU recurrence. Mixed and masked effects now execute on GPU,
   including all colour-curve models and explicit palette recipes, with client-selected
   image tiling. Automatic recipe analysis stays on CPU. The combined GPU `process`
   now composes effects, recipe-v2 coverage resize and indexed stages through the same

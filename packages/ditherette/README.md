@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor with scalar execution and optional threaded acceleration.
+An MIT-licensed browser ESM image processor with CPU, threaded CPU and WebGPU execution.
 The `0.x` version signals beta status. Ordinary releases use versions such as `0.1.0`. Explicit release candidates use `-rc.N` and the npm `rc` tag, leaving `latest` unchanged.
 
 The first candidate is `0.1.0-rc.0`. Install it with `npm install ditherette@rc`. Scalar processing is the default. Optional threads remain experimental, including the retained WebKit threaded-cleanup limitation. RC acceptance does not clear the recorded stable-release holds.
@@ -10,7 +10,7 @@ Ordinary publication remains held while the recorded release gates await accepta
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
 
-const processor = await createDitherette();
+const processor = await createDitherette({ engine: 'cpu', tiling: true });
 try {
 	const image = processor.resize({
 		version: 1,
@@ -31,7 +31,17 @@ try {
 ```
 
 Imports perform no initialization, network requests, or worker creation. Each `createDitherette()` loads a fresh isolated instance.
-Calls are synchronous. Hosts can run them in their own worker to keep the main thread responsive.
+CPU calls are synchronous. GPU calls are asynchronous; awaiting the operation works with either engine:
+
+```ts
+const processor = await createDitherette({ engine: 'gpu', tiling: false });
+const image = await processor.resize(request);
+processor.dispose();
+```
+
+Both engines expose the same processing operations. `engine` defaults to `'cpu'`.
+`tiling: true` uses automatic image tiling; `false` selects whole-image execution.
+Hosts can run CPU processing in their own worker to keep the main thread responsive.
 
 Inputs are already-cropped, packed RGBA8 `Uint8Array` views. Offset views work; detached or incorrectly sized views fail.
 For `ImageData`, create a `Uint8Array` view over its `Uint8ClampedArray` buffer without copying its bytes.
@@ -229,13 +239,12 @@ The package leaves display to you: upload `indices` and `results` as textures to
 
 ### Optional async GPU effects
 
-`createGpuEffects` runs resolved pointwise chains on GPU, including masks, all curve
+`createDitherette({ engine: 'gpu' })` runs resolved pointwise chains on GPU, including masks, all curve
 models and grids, hue/saturation, explicit recolour and palette-fit recipes.
 Whole unmasked per-channel chains retain the production CPU's exact `ChannelTables` bytes.
 Mixed chains keep continuous float colour between effects and preserve every alpha byte.
 GPU transcendental rounding can differ from CPU; the current native/browser fixtures
-observe at most one RGB byte of difference. CPU remains available through `createDitherette`.
-`createDitherette` and its synchronous operations keep their CPU behavior.
+observe at most one RGB byte of difference. Select `engine: 'cpu'` for the existing synchronous operations.
 
 The ordinary package build includes scalar, threaded and GPU artifacts:
 
@@ -249,11 +258,12 @@ Serve `dist/wasm/gpu/` alongside the package modules, including generated snippe
 The optional module loads by URL relative to `gpu-effects.js`, so bundling hosts must preserve that asset location.
 
 ```ts
-import { createGpuEffects } from 'ditherette';
+import { createDitherette } from 'ditherette';
 
-const effectsProcessor = await createGpuEffects({
+const effectsProcessor = await createDitherette({
+	engine: 'gpu',
 	memoryLimitBytes: 512 * 1024 ** 2,
-	tiling: { height: 128 }, // 'auto' (default), 'disabled', or explicit rows
+	tiling: true,
 	fallback: 'error'
 });
 const image = await effectsProcessor.applyEffects({ version: 1, source, effects });
@@ -261,11 +271,11 @@ console.log(effectsProcessor.execution); // Last successful call's backend, adap
 effectsProcessor.dispose();
 ```
 
-`wasm` supplies an alternate scalar artifact; `gpuWasm` supplies an alternate GPU artifact.
-Set `fallback: 'error'` on either GPU facade to require GPU execution. Unavailable
+`wasm` supplies an alternate CPU artifact matching the chosen thread policy; `gpuWasm` supplies an alternate GPU artifact.
+Set `fallback: 'error'` to require GPU execution. Unavailable
 hardware, missing assets, unsupported stages and memory rejection then throw a
-structured error rather than allocating a CPU processor. GPU-only dithering also
-rejects the current hybrid CPU diffusion path. The default remains `fallback: 'cpu'`.
+structured error rather than allocating a CPU processor. Strict GPU calls also
+reject an explicitly chosen CPU diffusion path. The default remains `fallback: 'cpu'`.
 Neither setting changes the other artifact. Missing WebGPU, optional assets, failed startup verification,
 automatic recipe analysis, insufficient GPU capacity, device limits, and device failure use the existing scalar effects operation.
 For GPU application, derive recipes with the CPU analysis methods and pass the explicit
@@ -286,7 +296,7 @@ Every enabled call first admits the source snapshot plus `512 KiB + 324 * canoni
 This conservative reserve precedes both GPU and scalar string ABIs, including missing assets, no capability,
 unsupported chains, and calls after retirement. It uses numeric metadata in the package and needs no GPU factory.
 Over-budget decoding reports `memory-limit` before either decoder allocates; it cannot safely fall back to the same decoder.
-The synchronous `createDitherette` contract is unchanged. Disabled/empty chains bypass this reserve and return the source.
+CPU-engine calls retain their synchronous contract. Disabled/empty chains bypass this reserve and return the source.
 
 The decoder reserve follows the locked Wasm allocation structures, rather than measured page growth:
 
@@ -329,18 +339,17 @@ admission, tiling and explicit fallback policy.
 
 ## Optional GPU processing
 
-`createGpuDither(options)` uses the same optional artifact and scalar fallback inputs as
-`createGpuEffects`. Its asynchronous `ditherAndQuantize(request, signal?)` accepts the
+`createDitherette({ engine: 'gpu', tiling: true })` shares one device across effects,
+resizing and dithering. Its asynchronous `ditherAndQuantize(request, signal?)` accepts the
 ordinary request and returns owned indices with the exact supplied palette. All 15 matching
 metrics, Bayer/rectangular/blue-noise/random fields, Yliluoma at every matrix size,
 and complete `smooth-area-v1` analysis
-run on GPU. Error diffusion defaults to GPU coverage with the unchanged CPU feedback and scan.
-Set `diffusionBackend: 'gpu'` to execute every diffusion kernel and both feedback
-modes on GPU. Non-serpentine scans use dependency-ordered wavefronts; serpentine
+run on GPU. The GPU engine also executes every diffusion kernel and both feedback
+modes on GPU by default. Non-serpentine scans use dependency-ordered wavefronts; serpentine
 uses a continuous three-row ring with cooperative matching. Neither restarts at
 dispatch boundaries. Faithful serpentine is substantially slower on the tested
-GPU, so CPU diffusion remains the default. `fallback: 'error'` also requires the
-GPU diffusion choice when a request uses diffusion.
+GPU. Set `diffusionBackend: 'cpu'` to keep the ordinary CPU recurrence with GPU
+preparation; this reports `hybrid` and requires CPU fallback permission.
 GPU arithmetic may select a different palette entry at numerical boundaries.
 Yliluoma prepares its palette-only mixture tree on CPU, then searches image pixels
 and selects global Bayer indices on GPU. The transient tree, texture atlas and
@@ -348,8 +357,8 @@ bounded upload staging are admitted before allocation and released after each ca
 
 `quantize(request, signal?)` exposes GPU matching directly. `resize(request, signal?)`
 supports nearest, area, bilinear, trilinear, bicubic, Lanczos2 and Lanczos3, with
-every anchor and fixed/scale-aware support. Set `tiling: 'auto'` (default),
-`'disabled'`, or `{ height }` when constructing the facade to select bounded
+every anchor and fixed/scale-aware support. Set `tiling: true` (default),
+`false`, or `{ height }` when constructing the processor to select bounded
 image tiles or whole-image resize. Tiled filters retain their source halos and
 global coordinates; trilinear retains its area mip reductions and per-level rounding.
 Standalone resize preserves hidden RGB; recipe-v2 coverage handling stays separate.
@@ -369,18 +378,21 @@ Both CPU and GPU implementations ship in the package. Backend, CPU threading and
 image tiling are independent choices:
 
 ```ts
-const cpu = await createDitherette({ threads: 'disabled', tiling: 'disabled' });
-const gpu = await createGpuDither({
+const cpu = await createDitherette({ engine: 'cpu', threads: 'disabled', tiling: false });
+const gpu = await createDitherette({
+	engine: 'gpu',
 	fallback: 'error',
-	diffusionBackend: 'gpu',
-	tiling: 'disabled'
+	tiling: false
 });
-const tiledGpu = await createGpuDither({ fallback: 'cpu', tiling: { height: 64 } });
+const tiledGpu = await createDitherette({ engine: 'gpu', tiling: true });
 ```
 
-Use `createGpuEffects` for GPU effects and mask previews. CPU recipe analysis and
-measurements remain available through `createDitherette`; GPU application accepts
-the resulting explicit recipes. No factory replaces or removes the CPU methods.
+Both engines provide `applyEffects`, `effectMask`, `resize`, `perturb`, `quantize`,
+`ditherAndQuantize`, `process`, `analyzeRecolour`, `analyzePaletteFit` and `measurePaletteFit`.
+Recipe analysis and measurements use CPU fallback on the GPU engine; strict GPU
+policy rejects them. Pass their explicit recipes for GPU application.
+`createGpuEffects` and `createGpuDither` remain compatibility entry points;
+the latter retains its older CPU-diffusion default.
 
 `process(request, signal?)` composes resolved GPU effects, every resize filter and
 GPU indexed processing. It preserves the CPU's RGBA8 boundary after effects and
@@ -560,19 +572,22 @@ When `resize()` receives unchanged width and height, it validates the request an
 No pixels are copied and no resize kernel runs. The returned bytes alias the caller's input.
 Other resize calls return independent images. Identity calls still enforce disposal, reentrancy and callback errors.
 
-`createDitherette({ memoryLimitBytes, threads, tiling, wasm })` accepts optional initialization settings.
+`createDitherette({ engine, tiling, memoryLimitBytes, threads, wasm })` accepts optional initialization settings.
 
+- `engine` selects `'cpu'` (default, synchronous calls) or `'gpu'` (asynchronous calls).
+  GPU options also accept `gpuWasm`, `fallback` and `diffusionBackend` as described above.
 - `memoryLimitBytes` defaults to 1.5 GiB and accepts integers from 1 byte through 2 GiB. Insufficient capacity fails with `memory-limit`.
-- `threads` defaults to `disabled`, which loads only scalar assets. `preferred` tries threads when capable and falls back after failed initialization cleanup.
+- `threads` selects the CPU engine or GPU fallback variant. It defaults to `disabled` for scalar execution. `preferred` tries threads when capable and falls back after failed initialization cleanup.
   `required` reports `capability` at `threads` when shared memory, workers, or blocking waits are unavailable, or `initialization` when startup fails.
 - `wasm` accepts bytes, an offset byte view, a URL/string, a Request, a Response, or a compiled `WebAssembly.Module`.
   Caller Response/Request bodies are cloned before initialization. Default assets resolve relative to the package.
   Custom inputs must match the selected variant. Preferred fallback retries the supplied input with scalar bindings; incompatible bytes remain an initialization error.
-- `tiling` independently selects `'auto'` (default), `'disabled'` for whole-image
+- `tiling` independently selects `true` (default, automatic), `false` for whole-image
   execution, or `{ height, workers? }` for explicit row bands in resize, indexed
   matching/fields and Yliluoma. Heights are 1–32768 rows; workers are 1–8 and
   clamp to the initialized pool. Scalar instances execute bands sequentially.
   All choices retain global coordinates and the continuous diffusion scan.
+  The older `'auto'` and `'disabled'` spellings remain accepted.
 
 Threads require cross-origin isolation, shared Wasm memory, module workers, and a caller context that permits blocking waits.
 Synchronous threaded methods run in a processing worker. Browser main JS supports scalar execution;

@@ -61,7 +61,13 @@ test('explicit row bands and whole-image processing preserve resize and indexed 
 			},
 			onProgress() {}
 		};
-		for (const tiling of ['auto', { height: 1, workers: 1 }, { height: 7, workers: 8 }]) {
+		for (const tiling of [
+			true,
+			false,
+			'auto',
+			{ height: 1, workers: 1 },
+			{ height: 7, workers: 8 }
+		]) {
 			const tiled = await createDitherette({ wasm: module, tiling });
 			try {
 				assert.deepEqual(tiled.resize(resized), cpu.resize(resized));
@@ -80,7 +86,7 @@ test('explicit row bands and whole-image processing preserve resize and indexed 
 	}
 	for (const tiling of [
 		null,
-		false,
+		0,
 		{ height: 0 },
 		{ height: 32769 },
 		{ height: 4, workers: 9 },

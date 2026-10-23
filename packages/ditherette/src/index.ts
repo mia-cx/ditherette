@@ -1,7 +1,9 @@
 import { DitheretteError } from './errors.js';
-import { createScalar } from './scalar.js';
-import { validateOptions } from './validation.js';
-import type { Ditherette, InitOptions } from './types.js';
+import { createCpu } from './cpu.js';
+import { field, object, validateOptions } from './validation.js';
+import type { Ditherette, InitOptions, CpuInitOptions, GpuInitOptions } from './types.js';
+import type { GpuDither, GpuDitherOptions } from './gpu-dither.js';
+import { fallbackPolicy } from './gpu-effects.js';
 
 export { DitheretteError } from './errors.js';
 export { createGpuEffects } from './gpu-effects.js';
@@ -69,6 +71,8 @@ export type {
 	Ditherette,
 	InitInput,
 	InitOptions,
+	CpuInitOptions,
+	GpuInitOptions,
 	TilingPolicy,
 	Progress,
 	ResizeAnchor,
@@ -79,56 +83,60 @@ export type {
 	TwoInputMaskCurve
 } from './types.js';
 
-/** Initialize one isolated browser processor. Importing the package itself loads no Wasm or workers. */
-export async function createDitherette(options?: InitOptions): Promise<Ditherette> {
-	const normalized = validateOptions(options);
-	if (typeof WebAssembly === 'undefined' || typeof WebAssembly.instantiate !== 'function') {
-		throw new DitheretteError('capability', 'wasm', 'WebAssembly is unavailable.');
-	}
-	if (normalized.threads !== 'disabled') {
-		let capable =
-			globalThis.crossOriginIsolated === true &&
-			typeof Worker === 'function' &&
-			typeof SharedArrayBuffer === 'function' &&
-			typeof Atomics === 'object' &&
-			typeof Atomics.wait === 'function';
-		if (capable) {
-			try {
-				// Rayon joins synchronously. Main JS cannot wait, even with shared memory.
-				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);
-			} catch {
-				capable = false;
-			}
-		}
-		if (capable) {
-			try {
-				const { createThreaded } = await import('./threads.js');
-				return await createThreaded(normalized);
-			} catch (error) {
-				if (error instanceof DitheretteError && error.code === 'memory-limit') throw error;
-				if (normalized.threads === 'required') {
-					if (error instanceof DitheretteError && error.code === 'wasm-memory-unavailable')
-						throw error;
-					if (error instanceof RangeError)
-						throw new DitheretteError(
-							'wasm-memory-unavailable',
-							'wasm',
-							'The browser could not allocate or copy processing memory.'
-						);
-					throw new DitheretteError(
-						'initialization',
-						'threads',
-						'Required threaded initialization is unavailable.'
-					);
-				}
-			}
-		} else if (normalized.threads === 'required') {
-			throw new DitheretteError(
-				'capability',
+/** Select one isolated CPU or GPU processor. Importing the package loads no Wasm or workers. */
+export function createDitherette(options: GpuInitOptions): Promise<GpuDither>;
+export function createDitherette(options?: CpuInitOptions): Promise<Ditherette>;
+export function createDitherette(options?: InitOptions): Promise<Ditherette | GpuDither>;
+export async function createDitherette(options?: InitOptions): Promise<Ditherette | GpuDither> {
+	try {
+		const input = object(
+			options === undefined ? {} : options,
+			[
+				'engine',
 				'threads',
-				'Required threaded initialization is unavailable.'
+				'tiling',
+				'memoryLimitBytes',
+				'wasm',
+				'gpuWasm',
+				'fallback',
+				'diffusionBackend'
+			],
+			'invalid-settings',
+			''
+		);
+		const selected = field(input, 'engine');
+		const engine = selected === undefined ? 'cpu' : selected;
+		if (engine !== 'cpu' && engine !== 'gpu')
+			throw new DitheretteError('invalid-settings', 'engine', 'Expected cpu or gpu.');
+		const normalized = validateOptions({
+			threads: field(input, 'threads'),
+			tiling: field(input, 'tiling'),
+			memoryLimitBytes: field(input, 'memoryLimitBytes'),
+			wasm: field(input, 'wasm')
+		});
+		if (engine === 'cpu') {
+			object(
+				input,
+				['engine', 'threads', 'tiling', 'memoryLimitBytes', 'wasm'],
+				'invalid-settings',
+				''
 			);
+			return createCpu(normalized);
 		}
+		const selectedDiffusion = field(input, 'diffusionBackend');
+		const diffusionBackend = selectedDiffusion === undefined ? 'gpu' : selectedDiffusion;
+		if (diffusionBackend !== 'cpu' && diffusionBackend !== 'gpu')
+			throw new DitheretteError('invalid-settings', 'diffusionBackend', 'Expected cpu or gpu.');
+		const gpuOptions: GpuDitherOptions = {
+			...normalized,
+			gpuWasm: validateOptions({ wasm: field(input, 'gpuWasm') }).wasm,
+			fallback: fallbackPolicy(field(input, 'fallback')),
+			diffusionBackend
+		};
+		const { createGpuDither } = await import('./gpu-dither.js');
+		return createGpuDither(gpuOptions);
+	} catch (error) {
+		if (error instanceof DitheretteError) throw error;
+		throw new DitheretteError('invalid-settings', '', 'Initialization options could not be read.');
 	}
-	return createScalar(normalized);
 }

@@ -14,6 +14,128 @@ const wasm = await WebAssembly.compile(
 );
 const options = { wasm, memoryLimitBytes: 32 * 1024 ** 2 };
 
+test('larger CPU analysis releases retained fallback capacity before capturing its source', async () => {
+	// Proves rejected analysis cannot overlap its snapshot with the previous CPU allocation.
+	const instantiate = WebAssembly.instantiate;
+	const set = Uint8Array.prototype.set;
+	let previous;
+	let statusAtCopy;
+	const larger = new Uint8Array(3072 * 2048 * 4);
+	WebAssembly.instantiate = async (...args) => {
+		const result = await instantiate(...args);
+		if (args[0] === wasm) previous = result.exports;
+		return result;
+	};
+	const processor = initializeGpuDither(undefined, options);
+	try {
+		const palette = [
+			{ kind: 'color', rgb: [0, 0, 0] },
+			{ kind: 'color', rgb: [255, 255, 255] }
+		];
+		await processor.quantize({
+			version: 1,
+			source: { width: 2048, height: 1536, data: new Uint8Array(2048 * 1536 * 4) },
+			palette,
+			alpha: { mode: 'preserve', threshold: 127 },
+			matching: 'oklab-euclidean'
+		});
+		assert.equal(previous.privateConfigureTiling(0, 0, 1, 8), 0);
+		Uint8Array.prototype.set = function (source, offset) {
+			if (source.buffer === larger.buffer)
+				statusAtCopy = previous.privateConfigureTiling(0, 0, 1, 8);
+			return set.call(this, source, offset);
+		};
+		await assert.rejects(
+			processor.analyzeRecolour({
+				version: 1,
+				source: { width: 3072, height: 2048, data: larger },
+				effects: [],
+				context: { palette, space: 'oklab' }
+			}),
+			{ code: 'memory-limit' }
+		);
+		assert.notEqual(statusAtCopy, undefined, 'observed source capture');
+		assert.notEqual(statusAtCopy, 0, 'previous processor disposed before capture');
+	} finally {
+		Uint8Array.prototype.set = set;
+		WebAssembly.instantiate = instantiate;
+		processor.dispose();
+	}
+});
+
+test('one factory selects either engine with boolean tiling and a common operation surface', async () => {
+	// Proves changing engine and tiling needs no factory or request-shape change.
+	for (const tiling of [true, false]) {
+		const cpu = await createDitherette({ ...options, engine: 'cpu', tiling });
+		const gpu = await createDitherette({ ...options, engine: 'gpu', tiling });
+		const input = request();
+		const effects = {
+			version: 1,
+			source: input.source,
+			effects: [{ effect: 'exposure', enabled: true, stops: 0.33 }]
+		};
+		const analysis = { ...effects, context: { palette: input.palette, space: 'oklab' } };
+		const fit = { ...analysis, look: 'natural', space: 'oklab' };
+		const process = {
+			source: input.source,
+			palette: input.palette,
+			recipe: {
+				version: 1,
+				output: { width: 19, height: 13, resize: { algorithm: 'area' } },
+				alpha: input.alpha,
+				match: input.matching,
+				dither: input.dither
+			}
+		};
+		try {
+			for (const [method, value] of [
+				[
+					'quantize',
+					{
+						version: 1,
+						source: input.source,
+						palette: input.palette,
+						alpha: input.alpha,
+						matching: input.matching
+					}
+				],
+				['resize', { version: 1, source: input.source, output: process.recipe.output }],
+				['perturb', { version: 1, source: input.source, perturb: input.dither.perturb }],
+				['ditherAndQuantize', input],
+				['process', process],
+				['applyEffects', effects],
+				['effectMask', { ...effects, mask: [] }],
+				['analyzeRecolour', analysis],
+				['analyzePaletteFit', fit],
+				['measurePaletteFit', fit]
+			])
+				assert.deepEqual(await gpu[method](value), await cpu[method](value), method);
+			assert.equal(gpu.execution.backend, 'cpu');
+		} finally {
+			gpu.dispose();
+			cpu.dispose();
+		}
+	}
+	for (const value of [null, false, 'automatic', 'threads'])
+		await assert.rejects(
+			createDitherette({ engine: value }),
+			(error) => error.code === 'invalid-settings'
+		);
+	const required = await createDitherette({
+		...options,
+		engine: 'gpu',
+		fallback: 'error',
+		tiling: false
+	});
+	try {
+		const input = request();
+		delete input.dither;
+		await assert.rejects(required.quantize(input), { code: 'capability' });
+	} finally {
+		required.dispose();
+	}
+});
+
 test('request getters cannot dispose an entered GPU call and validation failures recover', async () => {
 	// Proves normalisation holds the public active-call guard.
 	const gpu = await createGpuDither(options);

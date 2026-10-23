@@ -338,3 +338,41 @@ test(
 	'combined process retires the artifact and prepared result before scalar fallback',
 	combinedProcessRetirement
 );
+
+test('unified effects release the borrowed artifact before either CPU fallback route', async () => {
+	// Proves the shared effects bridge never keeps its owner's Wasm alive across
+	// effects failure or explicit CPU recipe analysis. Only transport is synthetic.
+	const cpu = await createDitherette({ wasm: scalar });
+	const wanted = cpu.applyEffects(request);
+	const mixed = cpu.applyEffects(unsupported);
+	const analysis = { ...request, context: { ...unsupported.context, space: 'oklab' } };
+	const recipe = cpu.analyzeRecolour(analysis);
+	cpu.dispose();
+	for (const reason of ['effects', 'analysis']) {
+		const processor = await (async () => {
+			const artifact = createScalarBindings();
+			await artifact.default({ module_or_path: gpu });
+			return initializeGpuDither(
+				{ ...artifact, privateGpuDitherDetect: (limit) => artifact.privateGpuEffectsDetect(limit) },
+				options
+			);
+		})();
+		const devices = observations.devices;
+		try {
+			for (let i = 0; i < 4; i++) {
+				assert.deepEqual(await processor.applyEffects(request), wanted);
+				assert.equal(processor.execution.backend, 'gpu');
+			}
+			assert.equal(observations.devices, devices + 1);
+			retiredMemory = gpuMemories.at(-1);
+			if (reason === 'effects') assert.deepEqual(await processor.applyEffects(unsupported), mixed);
+			else assert.deepEqual(await processor.analyzeRecolour(analysis), recipe);
+			assert.equal(processor.execution.backend, 'cpu');
+			assert.deepEqual(await processor.applyEffects(request), wanted);
+			assert.equal(processor.execution.backend, 'cpu');
+			assert.equal(observations.devices, devices + 1, 'retirement applies across methods');
+		} finally {
+			processor.dispose();
+		}
+	}
+});

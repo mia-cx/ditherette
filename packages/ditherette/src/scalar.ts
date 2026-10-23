@@ -201,15 +201,15 @@ export function initializeProcessor(
 		);
 	}
 	if (status !== 0) throw failure(bindings, status);
-	if (tiling !== 'auto') {
+	if (tiling !== 'auto' && tiling !== true) {
 		try {
 			if (!bindings.privateConfigureTiling)
 				throw new DitheretteError('capability', 'tiling', 'This artifact has no tiling controls.');
 			for (let stage = 0; stage < 3; stage++) {
 				const status = bindings.privateConfigureTiling(
 					stage,
-					tiling === 'disabled' ? 0 : tiling.height,
-					tiling === 'disabled' ? 1 : (tiling.workers ?? 8),
+					tiling === 'disabled' || tiling === false ? 0 : tiling.height,
+					tiling === 'disabled' || tiling === false ? 1 : (tiling.workers ?? 8),
 					8
 				);
 				if (status !== 0) throw failure(bindings, status);
