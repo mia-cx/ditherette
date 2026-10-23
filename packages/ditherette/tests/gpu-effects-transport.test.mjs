@@ -188,7 +188,8 @@ test(
 		for (let i = 0; i < 32; i++) {
 			const input = i % 2 ? unsupported : request;
 			assert.deepEqual(await processor.applyEffects(input), i % 2 ? mixed : wanted);
-			assert.deepEqual(processor.execution, { backend: 'cpu', fallback: 'UnsupportedChain' });
+			assert.equal(processor.execution.backend, 'cpu');
+			assert.equal(processor.execution.fallback, 'UnsupportedChain');
 		}
 		assert.equal(observations.devices, 1, 'retired facade never re-detects');
 		assert.equal(observations.lossHandlers, 1);

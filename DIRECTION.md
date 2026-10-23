@@ -124,6 +124,10 @@ analytics while the pull requests complete their merge gates.
 
 ## Priorities
 
+Mia's 2026-10-23 priority is to merge the completed stack and release v1.0.0.
+Resolve CI, review and release-qualification blockers first; further profiling
+and optimization follow the release.
+
 1. Make direct production delivery reliable and keep dependencies secure.
    Use the completed profile to prioritize exact Adaptive selector/reconstruction
    work, then matching/diffusion, while preserving accepted output and storage bounds.
