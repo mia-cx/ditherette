@@ -16,7 +16,11 @@ test('crate synchronization changes only the named local package entry', () => {
 	assert.match(result, /name = "other"\nversion = "0.1.0"/);
 	assert.match(result, /name = "ditherette-wasm"\nversion = "0.1.1"/);
 	assert.throws(() => replaceCrateVersion('', '0.1.1', true));
-	assert.throws(() => replaceCrateVersion(source, '1.0.0', true));
+	assert.match(
+		replaceCrateVersion(source, '1.0.0', true),
+		/name = "ditherette-wasm"\nversion = "1.0.0"/
+	);
+	assert.throws(() => replaceCrateVersion(source, '01.0.0', true));
 });
 
 for (const target of ['ditherette-web', 'ditherette']) {
