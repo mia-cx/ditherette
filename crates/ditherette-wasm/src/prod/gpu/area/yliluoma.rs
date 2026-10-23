@@ -140,6 +140,7 @@ impl super::super::Backend {
                         Parameters::new(dimensions, 4, 0.0),
                         tiling,
                         WORDS_PER_DISPATCH,
+                        4,
                     );
                     let mut indices = job.execute_read_checked(&job.work, bytes, check).await?;
                     indices.truncate(dimensions.pixel_count().expect("validated dimensions"));

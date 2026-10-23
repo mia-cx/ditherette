@@ -206,7 +206,7 @@ impl super::super::Backend {
                             job.dispatches.clear();
                         }
                     }
-                    job.indexed_dispatches(SHADER, "indexed", parameters, tiling, u32::MAX);
+                    job.indexed_dispatches(SHADER, "indexed", parameters, tiling, u32::MAX, 4);
                     let mut bytes = job
                         .execute_read_checked(&job.work, memory.index_bytes, check)
                         .await?;

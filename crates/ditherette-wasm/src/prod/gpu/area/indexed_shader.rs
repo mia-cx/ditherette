@@ -174,10 +174,7 @@ fn field(x: u32,y: u32,i: u32) -> f32 {
     }
     return 0.0;
 }
-fn palette_index(i: u32) -> u32 {
-    let packed=source[i];
-    let alpha=packed>>24u;
-    if settings[7] == 0u || (settings[9] == 0u && alpha<=settings[10]) { return settings[8]; }
+fn perturbed_color(i: u32) -> vec3<f32> {
     var color=rgb(i);
     let x=i%p.width;
     let y=i/p.width;
@@ -194,6 +191,13 @@ fn palette_index(i: u32) -> u32 {
         let range=vec3(bitcast<f32>(settings[12]),bitcast<f32>(settings[13]),bitcast<f32>(settings[14]));
         color=reconstruct(coordinates(color,space)+amount*range,space);
     }
+    return color;
+}
+fn palette_index(i: u32) -> u32 {
+    let packed=source[i];
+    let alpha=packed>>24u;
+    if settings[7] == 0u || (settings[9] == 0u && alpha<=settings[10]) { return settings[8]; }
+    var color=perturbed_color(i);
     // The CPU perturbs RGBA first, then applies indexed alpha policy.
     if settings[9] != 0u {
         var bytes=vec3<u32>(floor(color*255.0+0.5))*alpha;
@@ -239,5 +243,16 @@ fn indexed(@builtin(global_invocation_id) id: vec3<u32>) {
         if i<count() { packed|=palette_index(i)<<(byte*8u); }
     }
     work[word]=packed;
+}
+"#;
+
+pub(super) const PERTURB: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<u32>;
+@compute @workgroup_size(64)
+fn perturb(@builtin(global_invocation_id) id:vec3<u32>) {
+    if id.x>=p.minimum {return;}
+    let i=p.diagonal+id.x;
+    if i>=count() {return;}
+    let c=vec3<u32>(floor(clamp(perturbed_color(i),vec3(0.0),vec3(1.0))*255.0+0.5));
+    work[i]=c.r|(c.g<<8u)|(c.b<<16u)|(source[i]&0xff000000u);
 }
 "#;

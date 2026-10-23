@@ -19,9 +19,11 @@ use pack::WGSL as PACK;
 use sweeps::WGSL as SWEEPS;
 mod diffusion;
 mod indexed;
+mod perturb;
 mod yliluoma;
 pub use diffusion::DiffusionMemory;
 pub use indexed::IndexedMemory;
+pub use perturb::PerturbMemory;
 pub use yliluoma::MixMemory;
 
 /// Source snapshots/wire copies, GPU source, three packed triplet work planes,
@@ -230,6 +232,7 @@ impl<'a> AreaJob<'a> {
         parameters: Parameters,
         tiling: super::GpuTiling,
         word_limit: u32,
+        packing: u32,
     ) {
         let rows = match tiling {
             super::GpuTiling::Auto => 256,
@@ -245,7 +248,7 @@ impl<'a> AreaJob<'a> {
         );
         let mut first = 0;
         for y in (0..parameters.height).step_by(rows as usize) {
-            let end = (parameters.width * (y + rows).min(parameters.height)).div_ceil(4);
+            let end = (parameters.width * (y + rows).min(parameters.height)).div_ceil(packing);
             while first < end {
                 let mut p = parameters;
                 p.diagonal = first;
@@ -308,6 +311,16 @@ impl<'a> AreaJob<'a> {
         source: &[u8],
         analysis: bool,
     ) -> Result<Self, Fallback> {
+        Self::new_with_output(gpu, dimensions, source, analysis, false)
+    }
+
+    fn new_with_output(
+        gpu: &'a Gpu,
+        dimensions: ImageDimensions,
+        source: &[u8],
+        analysis: bool,
+        rgba: bool,
+    ) -> Result<Self, Fallback> {
         gpu.check()?;
         let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
         let limits = gpu.device.limits();
@@ -344,6 +357,8 @@ impl<'a> AreaJob<'a> {
             work: gpu.buffer(
                 if analysis {
                     pixels * 12
+                } else if rgba {
+                    pixels * 4
                 } else {
                     pixels.div_ceil(4) * 4
                 },
@@ -547,6 +562,7 @@ impl<'a> AreaJob<'a> {
                             dispatch.shader,
                             if [
                                 "indexed",
+                                "perturb",
                                 "yliluoma",
                                 "prepare_row",
                                 "diffuse",
@@ -568,6 +584,7 @@ impl<'a> AreaJob<'a> {
                             },
                             if dispatch.shader == PACK
                                 || dispatch.entry == "indexed"
+                                || dispatch.entry == "perturb"
                                 || dispatch.entry == "yliluoma"
                                 || dispatch.entry == "prepare_row"
                                 || dispatch.entry == "diffuse"

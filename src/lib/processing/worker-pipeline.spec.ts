@@ -136,6 +136,7 @@ describe('ProcessorWorkerPipeline', () => {
 			execution: undefined,
 			resize: unexpectedGpuStage,
 			quantize: unexpectedGpuStage,
+			perturb: unexpectedGpuStage,
 			process: async (_request, signal) =>
 				new Promise((_resolve, reject) => {
 					if (!signal) throw new Error('Worker must provide cancellation');
@@ -165,6 +166,7 @@ describe('ProcessorWorkerPipeline', () => {
 				execution: undefined,
 				resize: unexpectedGpuStage,
 				quantize: unexpectedGpuStage,
+				perturb: unexpectedGpuStage,
 				process: async () => {
 					throw error;
 				},
@@ -177,6 +179,7 @@ describe('ProcessorWorkerPipeline', () => {
 				execution: undefined,
 				resize: unexpectedGpuStage,
 				quantize: unexpectedGpuStage,
+				perturb: unexpectedGpuStage,
 				process: async (request) => processorMock().process(request),
 				ditherAndQuantize: async () => {
 					throw new Error('Expected complete processing');

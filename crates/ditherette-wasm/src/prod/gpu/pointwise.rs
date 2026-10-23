@@ -26,6 +26,7 @@ pub struct Pointwise {
     words: Vec<u32>,
     steps: Vec<EffectStep>,
     space: Option<WorkingSpace>,
+    mask: Option<Vec<MaskCurve>>,
 }
 
 impl Pointwise {
@@ -42,7 +43,9 @@ impl Pointwise {
     /// retained decoded recipe. No additional full-image carrier is allocated.
     pub fn memory(dimensions: ImageDimensions, json_bytes: u64) -> LookupMemory {
         let mut memory = LookupMemory::new(dimensions);
-        memory.required_bytes += (LookupMemory::DECODER_BYTES_PER_JSON_BYTE + 32) * json_bytes;
+        // Leading float channel tables exist even for an empty effect prefix.
+        memory.required_bytes +=
+            32 * 1024 + (LookupMemory::DECODER_BYTES_PER_JSON_BYTE + 32) * json_bytes;
         memory
     }
 
@@ -106,7 +109,42 @@ impl Pointwise {
             words: code.0,
             steps,
             space,
+            mask: None,
         })
+    }
+
+    /// Evaluate a following step's mask from the continuous carrier, before the
+    /// effect-chain byte boundary. Empty masks produce white, preserving alpha.
+    pub fn with_mask(mut self, mask: Vec<MaskCurve>) -> Result<Self, Fallback> {
+        crate::prod::effects::mask::validate(&mask, "")
+            .map_err(|e| Fallback::Failed(e.to_string()))?;
+        let extra = 9 + mask
+            .iter()
+            .map(|m| match m {
+                MaskCurve::OneInput(c) => 16 + 2 * c.points.len(),
+                MaskCurve::TwoInput(c) => {
+                    16 + c.grid.columns.len()
+                        + c.grid.rows.len()
+                        + c.grid.values.iter().map(Vec::len).sum::<usize>()
+                }
+            })
+            .sum::<usize>();
+        let mut code = Code(std::mem::take(&mut self.words));
+        code.0
+            .try_reserve_exact(extra)
+            .map_err(|_| Fallback::MemoryLimit)?;
+        let mut previous = 1;
+        while code.0[previous] != 0 {
+            previous = code.0[previous] as usize;
+        }
+        let (count, masks) = code.masks(&mask);
+        let record = code.0.len() as u32;
+        code.0.extend([0, 8, 0, count, masks]);
+        code.0[previous] = record;
+        code.0[0] += 1;
+        self.words = code.0;
+        self.mask = Some(mask);
+        Ok(self)
     }
 }
 
@@ -152,6 +190,21 @@ impl Stage for Pointwise {
     }
     fn cpu(&self, rgba: &mut [u8]) {
         let dimensions = ImageDimensions::new((rgba.len() / 4) as u32, 1).unwrap();
+        if let Some(mask) = &self.mask {
+            crate::prod::effects::write_mask(
+                &rgba.to_vec(),
+                dimensions,
+                &self.steps,
+                mask,
+                &EffectContext {
+                    space: self.space,
+                    ..Default::default()
+                },
+                rgba,
+            )
+            .unwrap();
+            return;
+        }
         apply_in_place(
             rgba,
             dimensions,
@@ -186,7 +239,21 @@ impl Pointwise {
                     })
                     .sum::<usize>()
         }
-        (self.steps.capacity() * std::mem::size_of::<EffectStep>()
+        (self
+            .mask
+            .as_ref()
+            .map(|mask| {
+                mask.capacity() * std::mem::size_of::<MaskCurve>()
+                    + mask
+                        .iter()
+                        .map(|m| match m {
+                            MaskCurve::OneInput(c) => c.points.capacity() * 8,
+                            MaskCurve::TwoInput(c) => grid(&c.grid),
+                        })
+                        .sum::<usize>()
+            })
+            .unwrap_or(0)
+            + self.steps.capacity() * std::mem::size_of::<EffectStep>()
             + self
                 .steps
                 .iter()
@@ -662,5 +729,68 @@ mod tests {
             block_on(backend.pointwise(&stage, dimensions, &[93, 93, 93, 0], required)).unwrap(),
             [93, 93, 93, 0]
         );
+    }
+
+    /// Proves mask preview reads the unrounded effect carrier, including an
+    /// empty prefix/full mask, hue-keyed grids and unchanged hidden alpha.
+    #[test]
+    fn mask_preview_uses_continuous_carrier() {
+        let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+            return;
+        };
+        let dimensions = ImageDimensions::new(37, 19).unwrap();
+        let source: Vec<_> = (0..37 * 19)
+            .flat_map(|i| {
+                [
+                    (i * 71) as u8,
+                    (i * 31) as u8,
+                    (i * 23) as u8,
+                    (i * 97) as u8,
+                ]
+            })
+            .collect();
+        let masks:Vec<Vec<MaskCurve>>=serde_json::from_value(json!([
+            [],[{"x":{"model":"srgb","channel":"red"},"points":[[0,0],[0.4,0.1],[1,1]]}],
+            [{"x":{"model":"hsl","channel":"hue"},"x2":{"model":"cielch","channel":"chroma"},
+                "grid":{"columns":[0.1,0.4,0.8],"rows":[0,0.3,1],"values":[[0.2,0.4,0.6],[0.7,0.4,0.2],[0.6,0.6,0.8]]}}]
+        ])).unwrap();
+        let prefixes:Vec<Vec<EffectStep>>=serde_json::from_value(json!([
+            [],[{"effect":"exposure","enabled":true,"stops":0.33}],
+            [{"effect":"exposure","enabled":true,"stops":3},
+                {"effect":"hue-saturation","enabled":true,"hue":-50,"saturation":0.5,"lightness":0.1},
+                {"effect":"brightness-contrast","enabled":true,"brightness":-0.4,"contrast":0.3}]
+        ])).unwrap();
+        for prefix in prefixes {
+            for mask in &masks {
+                let text = serde_json::to_string(&prefix).unwrap().len()
+                    + serde_json::to_string(mask).unwrap().len();
+                let stage = Pointwise::new(prefix.clone(), None)
+                    .unwrap()
+                    .with_mask(mask.clone())
+                    .unwrap();
+                let mut expected = source.clone();
+                stage.cpu(&mut expected);
+                let memory = Pointwise::memory(dimensions, text as u64).required_bytes
+                    + 8 * source.len() as u64;
+                let actual = block_on(backend.pointwise_tiled(
+                    &stage,
+                    dimensions,
+                    &source,
+                    GpuTiling::Rows(3),
+                    memory,
+                ))
+                .unwrap();
+                let parity = super::super::Parity::between(&expected, &actual);
+                assert!(parity.max_byte_difference <= 1, "{parity:?}");
+                for (a, b) in actual.chunks_exact(4).zip(source.chunks_exact(4)) {
+                    assert_eq!(a[0], a[1]);
+                    assert_eq!(a[1], a[2]);
+                    assert_eq!(a[3], b[3]);
+                    if mask.is_empty() {
+                        assert_eq!(&a[..3], &[255; 3]);
+                    }
+                }
+            }
+        }
     }
 }
