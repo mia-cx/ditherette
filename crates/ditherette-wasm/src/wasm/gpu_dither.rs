@@ -177,7 +177,11 @@ pub async fn private_gpu_dither_and_quantize(
     retain: bool,
     memory_limit: f64,
     sink: JsValue,
+    rows: u32,
 ) -> Result<String, JsError> {
+    if rows != u32::MAX && rows > 32768 {
+        return Err(JsError::new("invalid tile height"));
+    }
     let required = private_gpu_dither_plan(width, height)?;
     if required > memory_limit {
         return Ok("MemoryLimit".into());
@@ -275,11 +279,12 @@ pub async fn private_gpu_dither_and_quantize(
                     .await
             } else {
                 backend
-                    .dither_prepared_checked(
+                    .dither_tiled_checked(
                         request,
                         memory_limit as u64,
                         coverage,
                         retain,
+                        super::gpu_resize::tiling(rows),
                         &mut check,
                     )
                     .await

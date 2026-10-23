@@ -42,7 +42,7 @@ import type {
 
 /** Optional GPU artifact and ordinary scalar fallback, with one combined memory limit. */
 export interface GpuDitherOptions extends GpuEffectsOptions {
-	/** Image tiling for resize; workers applies to scalar fallback. Hardware workgroups stay internal. */
+	/** Row bands for independent stages; workers applies to CPU fallback. Diffusion stays continuous. */
 	readonly tiling?: TilingPolicy;
 	/** Keep CPU recurrence (default), or execute continuous diffusion on the GPU. */
 	readonly diffusionBackend?: 'cpu' | 'gpu';
@@ -124,7 +124,8 @@ export interface GpuDitherBindings extends Omit<GpuEffectsBindings, 'privateGpuE
 		coverage: Uint8Array | undefined,
 		retain: boolean,
 		memoryLimit: number,
-		sink: { value?: IndexedImage; coverage?: Uint8Array; check(completed?: number): boolean }
+		sink: { value?: IndexedImage; coverage?: Uint8Array; check(completed?: number): boolean },
+		rows: number
 	): Promise<string>;
 }
 
@@ -408,7 +409,7 @@ export function initializeGpuDither(
 				: 0;
 			const gpuLimit = options.memoryLimitBytes - preparationBytes;
 			const unsupported =
-				typeof options.tiling === 'object' ||
+				(typeof options.tiling === 'object' && d.family === 2) ||
 				(d.family === 2 && options.diffusionBackend !== 'gpu' && options.fallback === 'error') ||
 				d.placement === 1 ||
 				(d.placement === 2 && d.radius > 100) ||
@@ -673,7 +674,8 @@ export function initializeGpuDither(
 								retained,
 								retain,
 								gpuLimit,
-								sink
+								sink,
+								rows
 							);
 						value = sink.value;
 						coverage = sink.coverage;

@@ -39,11 +39,16 @@ impl AreaMemory {
     pub fn new(dimensions: ImageDimensions) -> Self {
         let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
         let coverage_bytes = pixels.div_ceil(32) * 4;
-        let dispatches = ((dimensions.width() + dimensions.height() - 1).div_ceil(16)
+        let analysis_dispatches = ((dimensions.width() + dimensions.height() - 1).div_ceil(16)
             + dimensions.height().div_ceil(16)
             - 1) as u64
             * 8
             + 16;
+        // Without retained coverage, analysis and indexed dispatches coexist.
+        // Rows(1) needs at most two Yliluoma batches per row at MAX_OUTPUT_SIDE;
+        // fields and RGBA outputs need no more. Include both Vec capacity and
+        // uniform copies before allocating any job metadata.
+        let dispatches = analysis_dispatches + 2 * u64::from(dimensions.height());
         // Two immutable uniform copies plus bounded Vec dispatch metadata.
         let fixed =
             Self::FIXED_BYTES + dispatches * (512 + 2 * std::mem::size_of::<Dispatch>() as u64);
@@ -216,6 +221,45 @@ impl Drop for AreaJob<'_> {
 }
 
 impl<'a> AreaJob<'a> {
+    /// Packed-word halos keep odd widths exact. Each word is written once, even
+    /// when a row-band boundary falls inside it; field coordinates stay global.
+    fn indexed_dispatches(
+        &mut self,
+        shader: &'static str,
+        entry: &'static str,
+        parameters: Parameters,
+        tiling: super::GpuTiling,
+        word_limit: u32,
+    ) {
+        let rows = match tiling {
+            super::GpuTiling::Auto => 256,
+            super::GpuTiling::Disabled => parameters.height,
+            super::GpuTiling::Rows(rows) => rows.max(1),
+        };
+        let capacity = word_limit.min(
+            self.gpu
+                .device
+                .limits()
+                .max_compute_workgroups_per_dimension
+                * 64,
+        );
+        let mut first = 0;
+        for y in (0..parameters.height).step_by(rows as usize) {
+            let end = (parameters.width * (y + rows).min(parameters.height)).div_ceil(4);
+            while first < end {
+                let mut p = parameters;
+                p.diagonal = first;
+                p.minimum = (end - first).min(capacity);
+                self.dispatches.push(Dispatch {
+                    shader,
+                    entry,
+                    parameters: p,
+                    groups: [p.minimum.div_ceil(64), 1],
+                });
+                first += p.minimum;
+            }
+        }
+    }
     fn analysis(&mut self, parameters: Parameters) {
         for entry in [
             "colors",

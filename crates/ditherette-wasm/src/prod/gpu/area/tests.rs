@@ -6,6 +6,158 @@ use crate::prod::contract::request::*;
 use crate::{image::ImageView, prod::dither::smooth_area_v1};
 
 struct CpuInput<'a>(&'a [u8]);
+
+/// Proves admission covers simultaneous analysis and one-row field metadata,
+/// including moving Vec capacity and both 256-byte-aligned uniform copies.
+#[test]
+fn adaptive_row_tile_admission_covers_all_live_dispatch_metadata() {
+    let Some((_serial, super::super::Backend::Gpu(gpu))) = super::super::tests::any_gpu() else {
+        return;
+    };
+    let dimensions = ImageDimensions::new(4, 32768).unwrap();
+    let source = vec![0; 4 * 32768 * 4];
+    let mut job = AreaJob::new(&gpu, dimensions, &source).unwrap();
+    let parameters = Parameters::new(dimensions, 4, 0.12);
+    job.analysis(parameters);
+    job.indexed_dispatches(
+        super::indexed_shader::INDEXED,
+        "indexed",
+        parameters,
+        super::super::GpuTiling::Rows(1),
+        u32::MAX,
+    );
+    let metadata = (job.dispatches.capacity() * std::mem::size_of::<Dispatch>()) as u64
+        + 2 * 256 * job.dispatches.len() as u64;
+    let images = 52 * 4 * 32768;
+    let admitted = IndexedMemory::new(dimensions).required_bytes;
+    assert!(
+        admitted >= metadata + images,
+        "plan={admitted}, metadata={metadata}, images={images}"
+    );
+}
+
+/// Proves row bands preserve global field/mixture phase, odd packed words and
+/// Adaptive coverage. The thin long image also forces cancellation checkpoints
+/// between real tiled submissions rather than accepting an ignored policy.
+#[test]
+fn indexed_row_tiles_preserve_pixels_and_bound_cancellation() {
+    let Some((_serial, mut backend)) = super::super::tests::any_gpu() else {
+        return;
+    };
+    let palette = [
+        PaletteEntry::Color { rgb: [0, 0, 0] },
+        PaletteEntry::Color {
+            rgb: [255, 255, 255],
+        },
+        PaletteEntry::Color {
+            rgb: [90, 120, 100],
+        },
+        PaletteEntry::Transparent {},
+    ];
+    for (width, height) in [(37, 19), (1, 67), (67, 1), (3, 521)] {
+        let source: Vec<_> = (0..width * height)
+            .flat_map(|i| {
+                [
+                    (i * 71) as u8,
+                    (i * 31) as u8,
+                    (i * 23) as u8,
+                    (i * 97) as u8,
+                ]
+            })
+            .collect();
+        let quantize = QuantizeRequest {
+            version: 1,
+            source: Source {
+                width,
+                height,
+                data: &source,
+            },
+            palette: &palette,
+            alpha: AlphaPolicy::Preserve { threshold: 127.9 },
+            matching: MatchPolicy::OklchHueArc,
+        };
+        for placement in [
+            Placement::Everywhere {},
+            Placement::SmoothAreaV1 {
+                sample_size: 20,
+                contrast_threshold: 0.12,
+            },
+        ] {
+            let mut dithers = vec![
+                DitherPolicy::None {},
+                DitherPolicy::Yliluoma {
+                    size: BayerSize::Four,
+                    placement,
+                },
+            ];
+            for field in [
+                Field::Bayer {
+                    size: BayerSize::Sixteen,
+                },
+                Field::Random { seed: 0xfffffff1 },
+                Field::BlueNoise {},
+                Field::Ordered {
+                    tile: OrderedTile::FiveByThree,
+                },
+            ] {
+                dithers.push(DitherPolicy::Separable {
+                    perturb: PerturbPolicy {
+                        field,
+                        space: WorkingSpace::Oklab,
+                        strength: 0.3,
+                        placement,
+                    },
+                });
+            }
+            for dither in dithers {
+                let request = DitherQuantizeRequest { quantize, dither };
+                let mut whole_checks = 0;
+                let (expected, _) = block_on(backend.dither_tiled_checked(
+                    request,
+                    u64::MAX,
+                    None,
+                    false,
+                    super::super::GpuTiling::Disabled,
+                    &mut || {
+                        whole_checks += 1;
+                        Ok(())
+                    },
+                ))
+                .unwrap();
+                for tiling in [
+                    super::super::GpuTiling::Auto,
+                    super::super::GpuTiling::Rows(1),
+                    super::super::GpuTiling::Rows(3),
+                ] {
+                    let mut checks = 0;
+                    let (actual, _) = block_on(backend.dither_tiled_checked(
+                        request,
+                        u64::MAX,
+                        None,
+                        false,
+                        tiling,
+                        &mut || {
+                            checks += 1;
+                            Ok(())
+                        },
+                    ))
+                    .unwrap();
+                    assert_eq!(actual, expected, "{width}x{height}, {tiling:?}, {dither:?}");
+                    if width == 3
+                        && height == 521
+                        && matches!(dither, DitherPolicy::None {})
+                        && matches!(tiling, super::super::GpuTiling::Rows(1))
+                    {
+                        assert!(
+                            checks > whole_checks,
+                            "row bands must create real bounded submissions"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
 impl crate::prod::pipeline::processor::InputBoundary for CpuInput<'_> {
     fn input_len(&mut self) -> Result<usize, crate::prod::contract::failure::Failure> {
         Ok(self.0.len())

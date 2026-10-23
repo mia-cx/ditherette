@@ -70,6 +70,42 @@ impl super::super::Backend {
         retain: bool,
         check: &mut dyn JobControl,
     ) -> Result<(IndexedImage, Option<Vec<u8>>), Fallback> {
+        self.dither_tiled_checked(
+            request,
+            memory_limit,
+            coverage,
+            retain,
+            super::super::GpuTiling::Auto,
+            check,
+        )
+        .await
+    }
+
+    /// Changes independent image row bands while preserving global field phase.
+    /// Diffusion has a continuous scan and uses its separate scheduling path.
+    pub async fn dither_and_quantize_tiled(
+        &mut self,
+        request: DitherQuantizeRequest<'_>,
+        tiling: super::super::GpuTiling,
+        memory_limit: u64,
+    ) -> Result<IndexedImage, Fallback> {
+        self.dither_tiled_checked(request, memory_limit, None, false, tiling, &mut || Ok(()))
+            .await
+            .map(|(image, _)| image)
+    }
+
+    pub(crate) async fn dither_tiled_checked(
+        &mut self,
+        request: DitherQuantizeRequest<'_>,
+        memory_limit: u64,
+        coverage: Option<Vec<u8>>,
+        retain: bool,
+        tiling: super::super::GpuTiling,
+        check: &mut dyn JobControl,
+    ) -> Result<(IndexedImage, Option<Vec<u8>>), Fallback> {
+        if matches!(tiling, super::super::GpuTiling::Rows(0 | 32769..)) {
+            return Err(Fallback::Failed("tile height must be 1–32768".into()));
+        }
         check.check()?;
         let layout = Request::DitherAndQuantize(request)
             .validate()
@@ -83,6 +119,7 @@ impl super::super::Backend {
                     memory_limit,
                     coverage,
                     retain,
+                    tiling,
                     check,
                 )
                 .await;
@@ -92,6 +129,9 @@ impl super::super::Backend {
             return Err(Fallback::MemoryLimit);
         }
         if let DitherPolicy::Diffusion { placement, .. } = request.dither {
+            if matches!(tiling, super::super::GpuTiling::Rows(_)) {
+                return Err(Fallback::UnsupportedStage);
+            }
             return self
                 .diffusion(request, placement, memory_limit, coverage, retain, check)
                 .await;
@@ -166,12 +206,7 @@ impl super::super::Backend {
                             job.dispatches.clear();
                         }
                     }
-                    job.dispatches.push(Dispatch {
-                        shader: SHADER,
-                        entry: "indexed",
-                        parameters,
-                        groups: [(memory.index_bytes / 4).div_ceil(64) as u32, 1],
-                    });
+                    job.indexed_dispatches(SHADER, "indexed", parameters, tiling, u32::MAX);
                     let mut bytes = job
                         .execute_read_checked(&job.work, memory.index_bytes, check)
                         .await?;

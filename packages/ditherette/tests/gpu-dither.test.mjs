@@ -305,7 +305,7 @@ test('aborted GPU jobs publish no result and the next job reuses the verified de
 			privateGpuEffectsAdapter: () => 'test adapter',
 			privateGpuEffectsDispose() {},
 			async privateGpuDitherAndQuantize(...args) {
-				const sink = args.at(-1);
+				const sink = args.at(-2);
 				if (first) {
 					first = false;
 					await new Promise((resolve) => {
@@ -343,9 +343,9 @@ test('coverage reuse verifies source bytes and controls and publishes only after
 			privateGpuEffectsAdapter: () => 'test adapter',
 			privateGpuEffectsDispose() {},
 			async privateGpuDitherAndQuantize(...args) {
-				const coverage = args.at(-4);
-				const retain = args.at(-3);
-				const sink = args.at(-1);
+				const coverage = args.at(-5);
+				const retain = args.at(-4);
+				const sink = args.at(-2);
 				passed.push(Boolean(coverage));
 				if (!coverage && retain)
 					sink.coverage = new Uint8Array(
