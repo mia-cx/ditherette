@@ -28,6 +28,8 @@ Keep that workflow clear and fast, including large images.
   The development preview compares fine and coarse perceptual contrast, then dithers
   whole qualifying areas while preserving each algorithm's normal texture. Sample size
   controls spatial scale; contrast tolerance controls the accepted colour jump.
+  The editor limits sample size to 100 working pixels; Mia's useful range is
+  20–60 pixels. The package API retains its wider range.
   Edge/ramp detection is visually accepted. The development preview reconstructs rounded
   regions along source-colour boundaries and feathers dither density to reduce hard cutoffs,
   isolated patches and undithered fringes. The result is visually accepted at

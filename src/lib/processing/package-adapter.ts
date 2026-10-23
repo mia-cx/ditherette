@@ -23,6 +23,7 @@ import type {
 	ResizeId,
 	Rgb
 } from './types';
+import { MAX_ADAPTIVE_SAMPLE_SIZE } from './types';
 
 const MATCHING = {
 	srgb: 'srgb-euclidean',
@@ -161,7 +162,10 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 			? { mode: 'everywhere' }
 			: {
 					mode: 'smooth-area-v1',
-					sampleSize: Math.min(32768, Math.max(4, Math.round(dither.placementSampleSize))),
+					sampleSize: Math.min(
+						MAX_ADAPTIVE_SAMPLE_SIZE,
+						Math.max(4, Math.round(dither.placementSampleSize))
+					),
 					contrastThreshold: Math.min(1, Math.max(0, dither.placementContrastThreshold / 100))
 				};
 	// Yliluoma places whole palette colors, so it has no strength to turn down.

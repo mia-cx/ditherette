@@ -81,6 +81,17 @@ const ditherFixture: DitherSettings = {
 };
 
 describe('normalizeDitherSettings', () => {
+	// Proves saved values use the editor's practical range while preserving useful choices.
+	it.each([
+		[20, 20],
+		[60, 60],
+		[100, 100],
+		[512, 100]
+	])('loads saved sample size %s as %s pixels', (placementSampleSize, expected) => {
+		expect(
+			normalizeDitherSettings({ ...ditherFixture, placementSampleSize }).placementSampleSize
+		).toBe(expected);
+	});
 	it('rewrites legacy adaptive settings and changes their processing identity', () => {
 		const legacy = {
 			algorithm: 'bayer-16',
