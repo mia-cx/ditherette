@@ -8,12 +8,14 @@
 //!
 //! Results come back only through mapped buffers, never a canvas, because
 //! privacy features such as Helium's add noise to canvas readback.
-//! The GPU never decides palette indices yet: palette output stays exact.
+//! Indexed jobs return palette indices; palette colours stay exact.
 //!
 //! The opt-in package effects processor uses [`ChannelLookup::from_effects`]
 //! and [`Backend::lookup`] for complete enabled per-channel chains. Other
-//! stages still run on CPU and are qualified separately with [`Gpu::parity`].
+//! [`Backend::dither_and_quantize`] runs independent fields, matching and complete
+//! Adaptive selection. Scan-sensitive diffusion remains on CPU.
 
+mod area;
 mod device;
 mod lookup;
 mod memory;
@@ -22,11 +24,25 @@ mod stage;
 #[cfg(test)]
 mod tests;
 
+pub use area::{AreaMemory, IndexedMemory};
 pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
 pub use memory::LookupMemory;
 pub use parity::Parity;
 pub use stage::Stage;
+
+/// Cancellation is checked between GPU batches and ordinary CPU diffusion rows.
+pub(crate) trait JobControl {
+    fn check(&mut self) -> Result<(), Fallback>;
+    fn row(&mut self, _completed: u32) -> Result<(), Fallback> {
+        self.check()
+    }
+}
+impl<F: FnMut() -> Result<(), Fallback>> JobControl for F {
+    fn check(&mut self) -> Result<(), Fallback> {
+        self()
+    }
+}
 
 use crate::image::ImageDimensions;
 
@@ -49,6 +65,12 @@ pub enum Fallback {
     TooLarge,
     /// Planned owned capacity exceeds the caller's memory limit. The GPU stays usable.
     MemoryLimit,
+    /// This dither family or placement is retained on the CPU.
+    UnsupportedStage,
+    /// The host cancelled this job; no result may be published.
+    Cancelled,
+    /// A caller progress/control callback threw. This is not a GPU failure.
+    Callback,
 }
 
 /// Where stages run. Starts from [`Backend::detect`]; a failed GPU call demotes it to the CPU.
@@ -79,7 +101,13 @@ impl Backend {
     /// Releases a failed device, keeping request-specific size/budget rejections recoverable.
     pub(crate) fn retire_failure<T>(&mut self, result: &Result<T, Fallback>) {
         if let Err(reason) = result {
-            if !matches!(reason, Fallback::TooLarge | Fallback::MemoryLimit) {
+            if !matches!(
+                reason,
+                Fallback::TooLarge
+                    | Fallback::MemoryLimit
+                    | Fallback::Cancelled
+                    | Fallback::Callback
+            ) {
                 *self = Self::Cpu(reason.clone());
             }
         }

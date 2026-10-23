@@ -119,6 +119,38 @@ kernels on CPU; declare their backend explicitly in evidence.
 
 ## 5. Admit memory and qualify the complete call
 
+The in-progress implementation is `prod/gpu/area.rs`. Its skew coordinates
+`u=x+y` turn each sweep's predecessors into `(-1,0), (-2,-1), (-1,-1), (0,-1)`.
+Dispatches advance tile diagonals; barriers advance diagonals within a tile.
+Atomic union/find retains complete eight-connected regions without iterative
+one-pixel label propagation. These schedules pass native cross-tile/diagonal/thin-path
+checks against the unchanged CPU algorithms.
+
+| Lifetime                      | Owned storage                                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------------------------- |
+| Source capture through upload | Host snapshot, Wasm copy, GPU packed RGBA                                                       |
+| Complete analysis             | Packed f32 triplet cells and one triplet work plane                                             |
+| Region retention              | Work plane reused for integer parents and component counts                                      |
+| Reconstruction                | Cells plus source; work plane becomes available for output                                      |
+| Final readback                | Work plane reused for packed coverage or indices; mapped staging and independently owned result |
+| Dispatch setup                | Immutable aligned uniforms on host and GPU, dispatch metadata and bounded palette/settings      |
+
+`AreaMemory` and `IndexedMemory` admit these lifetimes before workspace creation.
+Native full Celeste coverage at 20/64/100 px differs by 1/1/0 pixels respectively.
+Real Chromium workers pass 363 field/matching/alpha/diffusion cases with no index
+differences. The 32 full-size Celeste cases compare 346,777,600 indices, with 406
+disagreements (four in Sierra results) and maximum reconstructed RGBA byte difference 81. Every output still uses exact palette entries. Three benchmark photos also run
+matching, Adaptive Bayer and hybrid Sierra; their per-photo differences and maximum
+byte errors are retained separately. Physical qualification currently covers NVIDIA
+Ampere only, without a qualified latency claim.
+
+The asynchronous package facade reuses one source snapshot and word-packed coverage,
+bounded by the existing 256 MiB / quarter-budget rule. Every source byte is verified
+before reuse. A cold retained analysis additionally reads its packed bits; warm fields
+upload those bits instead of allocating float planes, and warm diffusion consumes them
+directly. Pending bits publish only after successful result copy and completion callbacks.
+The full 1× browser matrix exercises eight analyses and 24 reuses across 32 jobs.
+
 Create a resource-lifetime table before allocation: source snapshots, Wasm wire copies,
 GPU source, coordinate/contrast/distance planes, component labels/counts, staging and
 readback. Reuse dead workspaces, honor actual device binding/texture/dispatch limits,

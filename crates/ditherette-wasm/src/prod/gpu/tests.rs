@@ -10,7 +10,7 @@ use super::*;
 static SERIAL: Mutex<()> = Mutex::new(());
 
 /// The adapter-backed backend, or `None` on a host without one. Hold the guard for the whole test.
-fn any_gpu() -> Option<(MutexGuard<'static, ()>, Backend)> {
+pub(super) fn any_gpu() -> Option<(MutexGuard<'static, ()>, Backend)> {
     let serial = SERIAL.lock().unwrap_or_else(PoisonError::into_inner);
     match block_on(Backend::detect_on(&Gpu::instance(), Adapters::Any)) {
         Backend::Cpu(Fallback::NoAdapter) => {

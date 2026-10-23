@@ -17,7 +17,7 @@ use crate::{
 use super::processor::copy_input;
 
 thread_local! {
-    static BACKEND: RefCell<Option<Backend>> = const { RefCell::new(None) };
+    pub(super) static BACKEND: RefCell<Option<Backend>> = const { RefCell::new(None) };
     // Locked wgpu forgets its JS error/loss closures. A factory gets one device
     // attempt; the host must retire the artifact after releasing that device.
     static DETECTION_ATTEMPTED: Cell<bool> = const { Cell::new(false) };

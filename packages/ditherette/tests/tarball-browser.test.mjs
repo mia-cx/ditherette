@@ -185,6 +185,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					'compileEffectMask',
 					'compileEffects',
 					'createDitherette',
+					'createGpuDither',
 					'createGpuEffects',
 					'indexColours',
 					'isEffect'

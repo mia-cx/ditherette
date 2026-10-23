@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createScalarBindings } from '../dist/wasm/gpu/ditherette_wasm.factory.js';
 import { gpuEffectsDecoderBytes, initializeGpuEffects } from '../dist/gpu-effects.js';
 import { createDitherette } from '../dist/index.js';
+import { initializeGpuDither } from '../dist/gpu-dither.js';
 
 const scalar = await WebAssembly.compile(
 	await readFile(new URL('../dist/wasm/scalar/ditherette_wasm_bg.wasm', import.meta.url))
@@ -66,6 +67,37 @@ test('real Wasm memory plan routes a package operation to CPU before GPU detecti
 	const cpu = await createDitherette({ wasm: scalar });
 	try {
 		assert.deepEqual(await processor.applyEffects(request), cpu.applyEffects(request));
+		assert.equal(processor.execution.fallback, 'MemoryLimit');
+	} finally {
+		processor.dispose();
+		cpu.dispose();
+	}
+});
+
+test('indexed GPU admission falls back before device detection using the actual numeric ABI', async () => {
+	const source = { width: 512, height: 512, data: new Uint8Array(512 * 512 * 4).fill(127) };
+	const request = {
+		version: 1,
+		source,
+		palette: [
+			{ kind: 'color', rgb: [0, 0, 0] },
+			{ kind: 'color', rgb: [255, 255, 255] }
+		],
+		alpha: { mode: 'preserve', threshold: 0 },
+		matching: 'oklab-euclidean',
+		dither: { family: 'none' }
+	};
+	const limit = bindings.privateGpuDitherPlan(source.width, source.height) - 1;
+	const processor = initializeGpuDither(
+		{
+			...bindings,
+			privateGpuDitherDetect: () => assert.fail('numeric admission must precede device detection')
+		},
+		{ wasm: scalar, memoryLimitBytes: limit }
+	);
+	const cpu = await createDitherette({ wasm: scalar });
+	try {
+		assert.deepEqual(await processor.ditherAndQuantize(request), cpu.ditherAndQuantize(request));
 		assert.equal(processor.execution.fallback, 'MemoryLimit');
 	} finally {
 		processor.dispose();
