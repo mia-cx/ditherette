@@ -13,7 +13,7 @@
 		"tag": "latest",
 		"provenance": true
 	},
-	"description": "Browser image processing with scalar and optional threaded WebAssembly.",
+	"description": "Browser image processing with CPU WebAssembly and optional WebGPU execution.",
 	"license": "MIT",
 	"type": "module",
 	"sideEffects": false,

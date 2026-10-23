@@ -1,4 +1,4 @@
-//! Request-specific scheduling with separate, development-only stage overrides.
+//! Request-specific scheduling with independent package row-band overrides.
 
 use crate::prod::tiling::WorkerBudget;
 
@@ -38,7 +38,6 @@ impl ExecutionPolicy {
         }
     }
 
-    #[cfg(any(test, feature = "bench-subjects"))]
     pub(super) fn set_stage(&mut self, stage: ExecutionStage, policy: Option<RowBandPolicy>) {
         match stage {
             ExecutionStage::Resize => self.resize = policy,
@@ -82,7 +81,7 @@ pub(super) fn resolve(
     {
         let _ = measured;
         // Native developer fixtures still exercise sequential row-band execution.
-        // Normal scalar builds have no setter and never select automatic bands.
+        // Scalar builds run explicit bands sequentially and keep auto whole-image.
         explicit.flatten()
     }
 }

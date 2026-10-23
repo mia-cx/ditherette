@@ -121,6 +121,10 @@ function loadedPipeline() {
 	return pipeline;
 }
 
+async function unexpectedGpuStage(): Promise<never> {
+	throw new Error('Expected complete processing');
+}
+
 describe('ProcessorWorkerPipeline', () => {
 	it('aborts an active GPU job and suppresses its stale response', async () => {
 		vi.stubGlobal('navigator', { gpu: {} });
@@ -130,6 +134,8 @@ describe('ProcessorWorkerPipeline', () => {
 		});
 		vi.mocked(createGpuDither).mockResolvedValue({
 			execution: undefined,
+			resize: unexpectedGpuStage,
+			quantize: unexpectedGpuStage,
 			process: async (_request, signal) =>
 				new Promise((_resolve, reject) => {
 					if (!signal) throw new Error('Worker must provide cancellation');
@@ -157,6 +163,8 @@ describe('ProcessorWorkerPipeline', () => {
 		vi.mocked(createGpuDither)
 			.mockResolvedValueOnce({
 				execution: undefined,
+				resize: unexpectedGpuStage,
+				quantize: unexpectedGpuStage,
 				process: async () => {
 					throw error;
 				},
@@ -167,6 +175,8 @@ describe('ProcessorWorkerPipeline', () => {
 			})
 			.mockResolvedValue({
 				execution: undefined,
+				resize: unexpectedGpuStage,
+				quantize: unexpectedGpuStage,
 				process: async (request) => processorMock().process(request),
 				ditherAndQuantize: async () => {
 					throw new Error('Expected complete processing');

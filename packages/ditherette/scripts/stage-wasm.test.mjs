@@ -70,6 +70,17 @@ export function greet(name: string): string { return createScalarBindings().hell
 	assert.equal(built.greet('typed factory'), 'typed factory');
 
 	await mkdir(new URL('dist/threads/snippets/', crate), { recursive: true });
+	await mkdir(new URL('dist/gpu/', crate), { recursive: true });
+	for (const variant of ['threads', 'gpu'])
+		for (const name of [
+			'ditherette_wasm.factory.js',
+			'ditherette_wasm.factory.d.ts',
+			'ditherette_wasm_bg.wasm'
+		])
+			await writeFile(
+				new URL(`dist/${variant}/${name}`, crate),
+				await readFile(new URL(`dist/scalar/${name}`, crate))
+			);
 	await mkdir(new URL('dist/wasm/gpu/', packageDirectory), { recursive: true });
 	await writeFile(
 		new URL('dist/wasm/gpu/stale.wasm', packageDirectory),
@@ -80,6 +91,10 @@ export function greet(name: string): string { return createScalarBindings().hell
 	await assert.rejects(readFile(new URL('dist/wasm/gpu/stale.wasm', packageDirectory)), {
 		code: 'ENOENT'
 	});
+	assert.deepEqual(
+		await readFile(new URL('dist/wasm/gpu/ditherette_wasm_bg.wasm', packageDirectory)),
+		await readFile(new URL('dist/gpu/ditherette_wasm_bg.wasm', crate))
+	);
 	assert.equal(
 		await readFile(new URL('dist/wasm/threads/snippets/worker.js', packageDirectory), 'utf8'),
 		'// threaded worker fixture'
@@ -97,7 +112,7 @@ test('staging rejects stale scalar output without factory declarations', async (
 	);
 });
 
-test('optional GPU staging is explicit and does not require or change CPU artifacts', async (t) => {
+test('GPU-only staging does not require or change CPU artifacts', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-staging-gpu-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	const root = pathToFileURL(directory + '/');

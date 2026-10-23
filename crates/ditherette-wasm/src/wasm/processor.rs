@@ -98,11 +98,10 @@ pub fn private_error_path() -> u32 {
     ERROR_PATH.with(|path| path.get() as u32)
 }
 
-/// Forced complete-call candidate for internal browser benchmarks only.
-/// The benchmark host initializes its blocking-capable worker pool before selecting bands.
-#[cfg(feature = "bench-subjects")]
-#[wasm_bindgen(js_name = privateExecutionPolicy)]
-pub fn private_execution_policy(
+/// Explicit package row-band selection. Resolution clamps worker requests to
+/// the initialized pool; scalar artifacts execute the same bands sequentially.
+#[wasm_bindgen(js_name = privateConfigureTiling)]
+pub fn private_configure_tiling(
     stage: u32,
     height: u32,
     active_workers: u32,
@@ -129,6 +128,18 @@ pub fn private_execution_policy(
     };
     restore_ready(processor);
     result.map_or_else(status, |()| 0)
+}
+
+/// The developer export remains a build-mode marker for benchmark provenance.
+#[cfg(feature = "bench-subjects")]
+#[wasm_bindgen(js_name = privateExecutionPolicy)]
+pub fn private_execution_policy(
+    stage: u32,
+    height: u32,
+    active_workers: u32,
+    pool_size: u32,
+) -> u32 {
+    private_configure_tiling(stage, height, active_workers, pool_size)
 }
 
 /// Validates and preflights before priming boundary handles.

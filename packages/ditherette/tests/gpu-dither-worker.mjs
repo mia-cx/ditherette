@@ -24,6 +24,132 @@ self.onmessage = async (event) => {
 			{ kind: 'color', rgb: [90, 120, 100] },
 			{ kind: 'transparent' }
 		];
+		if (event.data.tiling) {
+			// Proves explicit schedules reach both real scalar and shared-memory artifacts.
+			const input = {
+				version: 1,
+				source,
+				palette,
+				matching: 'oklab-euclidean',
+				alpha: { mode: 'preserve', threshold: 128 },
+				onProgress() {}
+			};
+			const calls = [
+				(cpu) =>
+					cpu.resize({
+						version: 1,
+						source,
+						output: {
+							width: 31,
+							height: 23,
+							resize: { algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' }
+						},
+						onProgress() {}
+					}).data,
+				(cpu) =>
+					cpu.ditherAndQuantize({
+						...input,
+						dither: {
+							family: 'separable',
+							perturb: {
+								field: { algorithm: 'bayer', size: '16' },
+								space: 'oklab',
+								strength: 0.3,
+								placement: { mode: 'everywhere' }
+							}
+						}
+					}).indices,
+				(cpu) =>
+					cpu.ditherAndQuantize({
+						...input,
+						dither: { family: 'yliluoma', size: '4', placement: { mode: 'everywhere' } }
+					}).indices
+			];
+			const baseline = await createDitherette({ tiling: 'disabled' });
+			let expected;
+			try {
+				expected = calls.map((call) => call(baseline).join(','));
+			} finally {
+				baseline.dispose();
+			}
+			let count = 0;
+			for (const threads of ['disabled', 'required'])
+				for (const tiling of ['auto', 'disabled', { height: 3, workers: 2 }]) {
+					const cpu = await createDitherette({ threads, tiling });
+					try {
+						for (const [i, call] of calls.entries()) {
+							if (call(cpu).join(',') !== expected[i])
+								throw Error(`Schedule changed output: ${threads}/${JSON.stringify(tiling)}/${i}`);
+							count++;
+						}
+					} finally {
+						cpu.dispose();
+					}
+				}
+			self.postMessage({ calls: count });
+			return;
+		}
+		if (event.data.resize) {
+			const whole = await createGpuDither({ fallback: 'error', tiling: 'disabled' });
+			const tiled = await createGpuDither({ fallback: 'error', tiling: { height: 3 } });
+			const cpu = await createDitherette();
+			let calls = 0,
+				maximumByteDifference = 0;
+			try {
+				for (const anchor of ['top-left', 'center', 'bottom-right']) {
+					const filters = [
+						{ algorithm: 'nearest', anchor },
+						{ algorithm: 'area' },
+						{ algorithm: 'bilinear', anchor },
+						{ algorithm: 'trilinear', anchor },
+						...['bicubic', 'lanczos2', 'lanczos3'].flatMap((algorithm) =>
+							['fixed', 'scale-aware'].map((support) => ({ algorithm, anchor, support }))
+						)
+					];
+					for (const resize of filters) {
+						const input = { version: 1, source, output: { width: 29, height: 23, resize } };
+						const reference = cpu.resize(input);
+						const a = await whole.resize(input);
+						const b = await tiled.resize(input);
+						if (whole.execution.backend !== 'gpu' || tiled.execution.backend !== 'gpu')
+							throw Error('GPU resize required');
+						for (let i = 0; i < a.data.length; i++) {
+							if (a.data[i] !== b.data[i]) throw Error(`Tile seam at byte ${i}`);
+							maximumByteDifference = Math.max(
+								maximumByteDifference,
+								Math.abs(a.data[i] - reference.data[i])
+							);
+						}
+						calls += 2;
+					}
+				}
+				let callbackRejected = false;
+				const input = {
+					version: 1,
+					source,
+					output: { width: 29, height: 23, resize: { algorithm: 'trilinear', anchor: 'center' } }
+				};
+				try {
+					await tiled.resize({
+						...input,
+						onProgress({ stage }) {
+							if (stage === 'resize') throw Error('callback failure');
+						}
+					});
+				} catch (error) {
+					callbackRejected = error.code === 'callback';
+				}
+				if (!callbackRejected) throw Error('callback failure was ignored');
+				await tiled.resize(input);
+				if (tiled.execution.backend !== 'gpu') throw Error('callback retired the device');
+				self.postMessage({ calls, maximumByteDifference, callbackRecovered: true });
+			} finally {
+				whole.dispose();
+				tiled.dispose();
+				cpu.dispose();
+			}
+			return;
+		}
 		const matching = [
 			'srgb-euclidean',
 			'srgb-compuphase',
@@ -168,7 +294,11 @@ self.onmessage = async (event) => {
 		let analyses = 0,
 			reuses = 0;
 		for (let n = 0; n < requests.length; n++) {
-			const actual = await gpu.ditherAndQuantize(requests[n]);
+			const { dither, ...quantize } = requests[n];
+			const actual =
+				dither.family === 'none'
+					? await gpu.quantize(quantize)
+					: await gpu.ditherAndQuantize(requests[n]);
 			const reference = expected[n];
 			if (
 				JSON.stringify(actual.palette) !== JSON.stringify(reference.palette) ||

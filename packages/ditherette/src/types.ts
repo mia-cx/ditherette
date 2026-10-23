@@ -1,10 +1,18 @@
 /** Browser wasm-bindgen inputs. Views retain their byte offset and length. */
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
+/** Independent row bands retain global coordinates. Diffusion keeps its continuous scan. */
+export type TilingPolicy =
+	| 'auto'
+	| 'disabled'
+	| { readonly height: number; readonly workers?: number };
+
 /** Scalar is the default. Preferred threads fall back after failed capability checks or pool initialization. */
 export interface InitOptions {
 	/** Threaded synchronous calls require a worker context permitting blocking waits. */
 	readonly threads?: 'disabled' | 'preferred' | 'required';
+	/** Automatic measured policy, whole-image execution, or explicit row bands (1–32768 rows, 1–8 workers). */
+	readonly tiling?: TilingPolicy;
 	readonly memoryLimitBytes?: number;
 	readonly wasm?: InitInput;
 }
