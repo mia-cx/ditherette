@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import type { Curve, Effect, EffectContext, MaskCurve } from 'ditherette';
+import type { Curve, Effect, EffectContext, EffectsExecution, MaskCurve } from 'ditherette';
 import { colorSpace, outputSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
 import { activeEffectSteps, effectLayers, type EffectLayer } from '$lib/stores/effects';
 import { packageEffectContext } from './package-adapter';
@@ -16,12 +16,22 @@ type Compile = {
 };
 export type LiveEffectsRequest =
 	| { type: 'source'; sourceId: number; source: ImageData }
+	| { type: 'cancel'; id: number }
+	| { type: 'dispose' }
 	| ({ type: 'compile' } & Compile)
 	/** `effects` are the steps before the masked one; each colour's result is its mask as grey. */
 	| ({ type: 'mask'; mask: MaskCurve[] } & Compile)
 	/** Measure every palette-fit step's internals for the export event. */
 	| ({ type: 'measure' } & Compile);
 export type LiveEffectsResponse =
+	| { type: 'disposed' }
+	| {
+			type: 'cancelled';
+			id: number;
+			sourceId: number;
+			key: string;
+			operation: 'compile' | 'mask' | 'measure';
+	  }
 	| {
 			type: 'indexed';
 			sourceId: number;
@@ -43,6 +53,8 @@ export type LiveEffectsResponse =
 			sourceId: number;
 			key: string;
 			results: Uint32Array;
+			/** Package backend evidence for the compile. Mask previews always use CPU. */
+			execution?: EffectsExecution;
 			/** Each palette-fit step's resolved curves, by index into `effects`. Only `compiled`. */
 			fits?: readonly { readonly index: number; readonly curves: readonly Curve[] }[];
 	  }
@@ -177,6 +189,28 @@ type Waiter = {
 	reject: (error: Error) => void;
 };
 const waiters = new Set<Waiter>();
+const RETIRE_TIMEOUT_MS = 1000;
+let retiring: Worker | undefined;
+let retirement: ReturnType<typeof setTimeout> | undefined;
+
+/** Allow active readback to release its device, with at most one retiring worker and a deadline. */
+function retire(worker: Worker) {
+	retiring?.terminate();
+	clearTimeout(retirement);
+	retiring = worker;
+	const finish = () => {
+		worker.terminate();
+		if (retiring !== worker) return;
+		clearTimeout(retirement);
+		retiring = undefined;
+	};
+	worker.onmessage = ({ data }: MessageEvent<LiveEffectsResponse>) => {
+		if (data.type === 'disposed') finish();
+	};
+	worker.onerror = worker.onmessageerror = finish;
+	worker.postMessage({ type: 'dispose' } satisfies LiveEffectsRequest);
+	retirement = setTimeout(finish, RETIRE_TIMEOUT_MS);
+}
 /** Compiles the current settings if nothing is compiling them; set while live effects run. */
 let requestCompile: (() => void) | undefined;
 
@@ -235,6 +269,7 @@ export function startLiveEffects() {
 	let nextSourceId = 0;
 	let loaded: ImageData | undefined;
 	let busy = false;
+	let compiling: { id: number; source: ImageData; key: string; cancelled?: boolean } | undefined;
 	let maskBusy = false;
 	/** The mask that last failed; it waits for new inputs, or for Show mask to turn off and on. */
 	let failedMask: { source: ImageData; key: string } | undefined;
@@ -261,12 +296,16 @@ export function startLiveEffects() {
 	}
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
-	function reset(reason: string) {
-		worker?.terminate();
+	function reset(reason: string, graceful = false) {
+		if (worker) {
+			if (graceful) retire(worker);
+			else worker.terminate();
+		}
 		worker = undefined;
 		invalidate();
 
 		busy = maskBusy = false;
+		compiling = undefined;
 		failedMask = undefined;
 		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
@@ -303,7 +342,7 @@ export function startLiveEffects() {
 	}
 
 	function stop() {
-		reset('The image changed.');
+		reset('The image changed.', true);
 		sources = new WeakMap();
 	}
 
@@ -321,6 +360,14 @@ export function startLiveEffects() {
 	function update() {
 		const source = sourceImageData.get();
 		if (!source) return stop();
+		if (
+			compiling &&
+			!compiling.cancelled &&
+			(compiling.source !== source || compiling.key !== currentEffectsKey())
+		) {
+			compiling.cancelled = true;
+			worker?.postMessage({ type: 'cancel', id: compiling.id } satisfies LiveEffectsRequest);
+		}
 		// The index, the results, and the canvas belong to one source, so a new source
 		// drops them even while nothing compiles.
 		if (source !== loaded) invalidate();
@@ -333,8 +380,14 @@ export function startLiveEffects() {
 			worker = new Worker(new URL('../workers/effects.worker.ts', import.meta.url), {
 				type: 'module'
 			});
-			worker.onmessage = receive;
-			worker.onerror = worker.onmessageerror = crashed;
+			const active = worker;
+			worker.onmessage = (event) => {
+				if (worker === active) receive(event);
+			};
+			const onCrash = (event: Event) => {
+				if (worker === active) crashed(event);
+			};
+			worker.onerror = worker.onmessageerror = onCrash;
 		}
 		if (!loaded) {
 			worker.postMessage({
@@ -355,9 +408,10 @@ export function startLiveEffects() {
 				publish(source, key, hit);
 			} else if (!busy) {
 				busy = true;
+				compiling = { id: ++requestId, source, key };
 				worker.postMessage({
 					type: 'compile',
-					id: ++requestId,
+					id: compiling.id,
 					sourceId: sourceId(source),
 					key,
 					effects,
@@ -385,11 +439,30 @@ export function startLiveEffects() {
 	}
 
 	function receive({ data }: MessageEvent<LiveEffectsResponse>) {
+		if (data.type === 'disposed') return;
 		const source = sourceImageData.get();
 		const current = source && sources.get(source) === data.sourceId ? source : undefined;
 		if (data.type === 'indexed') {
 			if (current) effectsIndex.set({ source: current, pixels: data.pixels, count: data.count });
 			return;
+		}
+		if (data.type === 'cancelled') {
+			if (data.operation === 'compile') {
+				if (data.id !== compiling?.id) return;
+				busy = false;
+				compiling = undefined;
+				// Returning to this source/key can add waiters for the replacement compile.
+				for (const waiter of waiters) {
+					if (waiter.source === source && waiter.key === currentEffectsKey()) continue;
+					waiters.delete(waiter);
+					waiter.reject(new Error('The effects changed.'));
+				}
+			} else if (data.operation === 'mask') maskBusy = false;
+			else {
+				measureWaiters.get(data.id)?.reject(new Error('The image changed.'));
+				measureWaiters.delete(data.id);
+			}
+			return update();
 		}
 		if (data.type === 'masked' || data.type === 'mask-failed') {
 			maskBusy = false;
@@ -417,7 +490,9 @@ export function startLiveEffects() {
 			waiter.resolve(fits);
 			return;
 		}
+		if (data.id !== compiling?.id) return;
 		busy = false;
+		compiling = undefined;
 		if (current && data.type === 'failed') {
 			// The preview is optional, so its failure stays out of the output's error; processing
 			// waiting on this key reports it instead.
@@ -427,11 +502,8 @@ export function startLiveEffects() {
 			// Same-source replies are valid results even when stale, so retain them all.
 			retain(data.key, { results: data.results, fits: data.fits });
 			const key = currentEffectsKey();
-			const shown = compiledEffects.get();
-			// An older reply stands in while the current settings compile, but never replaces
-			// them once they show.
-			if (data.key === key || shown?.source !== current || shown.key !== key)
-				publish(current, data.key, { results: data.results, fits: data.fits });
+			// Retain completed earlier keys, but a late readback never changes the shown generation.
+			if (data.key === key) publish(current, data.key, { results: data.results, fits: data.fits });
 			else settle(current, data.key, data.results);
 		}
 		// An old-source reply must not cancel processing waiting for the selected source and settings.
