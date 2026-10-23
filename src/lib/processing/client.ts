@@ -156,9 +156,19 @@ type ProcessInWorkerResult = {
 	metrics?: ProcessingMetricsSample;
 };
 
+/**
+ * Main-thread work the user waited through before processing was scheduled, such as reading a
+ * new upload. Its start becomes the sample's start, so `total` covers the whole wait.
+ */
+export type ProcessingLead = {
+	startedAt: number;
+	timings: ProcessingStageTiming[];
+};
+
 type ProcessingSchedule = {
 	scheduledAt: number;
 	scheduledDelay: number;
+	lead?: ProcessingLead;
 };
 
 function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorkerResult> {
@@ -176,8 +186,9 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 	const processStartedAt = performance.now();
 	const mainTimings: ProcessingStageTiming[] = [];
 	const scheduledAt = schedule?.scheduledAt;
-	const metricsStartedAt = scheduledAt ?? processStartedAt;
+	const metricsStartedAt = schedule?.lead?.startedAt ?? scheduledAt ?? processStartedAt;
 	const debounceMs = scheduledAt === undefined ? 0 : Math.max(0, processStartedAt - scheduledAt);
+	mainTimings.push(...(schedule?.lead?.timings ?? []));
 	mainTimings.push({ name: 'main debounce wait', ms: debounceMs });
 	mainTimings.push({ name: 'main scheduled delay', ms: schedule?.scheduledDelay ?? 0 });
 	processingProgress.set({ stage: 'Queued', progress: 0 });
@@ -365,13 +376,36 @@ export async function processCurrentImage(schedule?: ProcessingSchedule) {
 		processedImage.set(result.image);
 		processingProgress.set(undefined);
 		persistWhenSettled();
-		if (result.metrics) recordProcessingMetrics(result.metrics);
+		if (result.metrics) recordWhenPainted(result.image, result.metrics);
 	} catch (error) {
 		if (error instanceof ProcessingCanceled) return;
 		if (hash !== currentSettingsHash()) return;
 		const message = error instanceof Error ? error.message : 'Processing failed';
 		processingError.set(message);
 	}
+}
+
+/**
+ * Record a sample once its output has painted, so `total` ends where the user sees the result.
+ * The preview draws in the next animation frame; the task after that frame runs once it painted.
+ * An output replaced before then records nothing.
+ */
+function recordWhenPainted(image: ProcessedImage, metrics: ProcessingMetricsSample) {
+	requestAnimationFrame(() =>
+		setTimeout(() => {
+			if (processedImage.get() !== image) return;
+			const paintedAt = performance.now();
+			recordProcessingMetrics({
+				...metrics,
+				completedAt: paintedAt,
+				totalMs: paintedAt - metrics.startedAt,
+				timings: [
+					...metrics.timings,
+					{ name: 'main publish and paint', ms: paintedAt - metrics.completedAt }
+				]
+			});
+		})
+	);
 }
 
 function cancelPendingSave() {
@@ -407,7 +441,8 @@ function persistWhenSettled() {
 	}, PERSIST_DELAY_MS);
 }
 
-export function scheduleProcessing(delay = 0) {
+/** Process the current settings after `delay`; a `lead` carries the wait that led here. */
+export function scheduleProcessing(delay = 0, lead?: ProcessingLead) {
 	cancelPendingSave();
 	if (!sourceImageData.get()) return;
 	const hash = currentSettingsHash();
@@ -423,7 +458,8 @@ export function scheduleProcessing(delay = 0) {
 	}
 	const schedule: ProcessingSchedule = {
 		scheduledAt: performance.now(),
-		scheduledDelay: delay
+		scheduledDelay: delay,
+		lead
 	};
 	timer = setTimeout(() => {
 		timer = undefined;

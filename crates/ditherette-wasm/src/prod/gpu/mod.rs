@@ -27,7 +27,9 @@ mod stage;
 #[cfg(test)]
 mod tests;
 
-pub use area::{AreaMemory, DiffusionMemory, IndexedMemory, MixMemory, PerturbMemory};
+pub use area::{
+    AreaMemory, DiffusionMemory, DiffusionSchedule, IndexedMemory, MixMemory, PerturbMemory,
+};
 pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
 pub use memory::LookupMemory;
@@ -39,6 +41,10 @@ pub use stage::Stage;
 /// Cancellation is checked between GPU batches and ordinary CPU diffusion rows.
 pub(crate) trait JobControl {
     fn check(&mut self) -> Result<(), Fallback>;
+    /// Optional host wall-time spans. Native callers need no clock or retained records.
+    fn timing(&mut self, _name: &'static str, _begin: bool) -> Result<(), Fallback> {
+        Ok(())
+    }
     fn row(&mut self, _completed: u32) -> Result<(), Fallback> {
         self.check()
     }

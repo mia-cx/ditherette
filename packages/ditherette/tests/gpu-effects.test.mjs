@@ -36,7 +36,9 @@ test('public async API uses real scalar fallback without WebGPU and retains inde
 	const original = input.source.data.slice();
 	const result = await processor.applyEffects(input);
 	assert.deepEqual(result, await expected(input));
-	assert.deepEqual(processor.execution, { backend: 'cpu', fallback: 'NoAdapter' });
+	assert.equal(processor.execution.backend, 'cpu');
+	assert.equal(processor.execution.fallback, 'NoAdapter');
+	assert.ok(processor.execution.timings.every(({ ms }) => Number.isFinite(ms) && ms >= 0));
 	assert.deepEqual(input.source.data, original);
 	assert.notEqual(result.data.buffer, input.source.data.buffer);
 	await processor.applyEffects(
@@ -100,7 +102,9 @@ test('known-answer rejection stays on CPU for the facade lifetime', async () => 
 	await processor.applyEffects(request());
 	await processor.applyEffects(request());
 	assert.equal(detections, 1);
-	assert.deepEqual(processor.execution, { backend: 'cpu', fallback: 'Mismatch' });
+	assert.equal(processor.execution.backend, 'cpu');
+	assert.equal(processor.execution.fallback, 'Mismatch');
+	assert.ok(processor.execution.timings.some(({ name }) => name === 'CPU effects fallback'));
 	processor.dispose();
 });
 

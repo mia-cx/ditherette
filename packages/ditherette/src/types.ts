@@ -19,13 +19,21 @@ export interface CpuInitOptions {
 	readonly wasm?: InitInput;
 }
 
+/**
+ * Where error diffusion runs. `cpu` keeps the CPU recurrence after GPU preparation.
+ * `gpu` keeps the original scan order on the GPU; serpentine scans run serially and slowly.
+ * `gpu-approximate` diffuses row segments in parallel: it looks like the original scan,
+ * with the same kernel, strength, feedback and scan direction, but selects different indices.
+ */
+export type DiffusionBackend = 'cpu' | 'gpu' | 'gpu-approximate';
+
 /** GPU calls are asynchronous; CPU fallback and image tiling remain independent. */
 export interface GpuInitOptions extends Omit<CpuInitOptions, 'engine'> {
 	readonly engine: 'gpu';
 	readonly gpuWasm?: InitInput;
 	readonly fallback?: 'cpu' | 'error';
-	/** GPU by default; cpu retains the CPU recurrence with GPU preparation. */
-	readonly diffusionBackend?: 'cpu' | 'gpu';
+	/** `gpu` by default. */
+	readonly diffusionBackend?: DiffusionBackend;
 }
 
 export type InitOptions = CpuInitOptions | GpuInitOptions;

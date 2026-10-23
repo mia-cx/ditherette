@@ -160,6 +160,7 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(signal.aborted).toBe(true);
 		expect(await pending).toBeUndefined();
 		expect(createDitherette).not.toHaveBeenCalled();
+		expect(createGpuDither).toHaveBeenCalledWith({ diffusionBackend: 'gpu-approximate' });
 	});
 
 	it('restarts lazy GPU fallback initialization without retaining the failed facade', async () => {
@@ -294,6 +295,47 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(
 			transferablesForWorkerResponse({ id: 1, type: 'source-loaded', sourceId: 'source-1' })
 		).toEqual([]);
+	});
+
+	it('splits package start-up by its downloads, once per processor', async () => {
+		let begun = 0;
+		vi.mocked(createDitherette).mockImplementation(async () => {
+			begun = performance.now();
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			return processorMock();
+		});
+		const resources = vi.spyOn(performance, 'getEntriesByType').mockImplementation(
+			() =>
+				[
+					{
+						name: 'https://ditherette.test/wasm/gpu/factory.js',
+						startTime: begun,
+						responseEnd: begun + 1
+					},
+					{
+						name: 'https://ditherette.test/wasm/gpu/bg.wasm',
+						startTime: begun + 1,
+						responseEnd: begun + 3
+					}
+				] as unknown as PerformanceEntryList
+		);
+		try {
+			const pipeline = loadedPipeline();
+			const cold = await pipeline.handleAsync(processRequest(), () => undefined);
+			const warm = await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined);
+			const timings = (response: typeof cold) =>
+				response?.type === 'complete' ? (response.metrics?.timings ?? []) : [];
+			expect(timings(cold)).toEqual(
+				expect.arrayContaining([
+					{ name: 'module download', ms: expect.closeTo(1, 6) },
+					{ name: 'Wasm download', ms: expect.closeTo(2, 6) },
+					{ name: 'Wasm compile + instantiate', ms: expect.any(Number) }
+				])
+			);
+			expect(timings(warm).map(({ name }) => name)).not.toContain('Wasm download');
+		} finally {
+			resources.mockRestore();
+		}
 	});
 
 	it('maps the source through forwarded compiled effects, until their key changes', async () => {

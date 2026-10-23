@@ -234,3 +234,16 @@ ordinary non-serpentine Sierra near 0.7 seconds and faithful serpentine near
 34 seconds, against about 1.4 seconds on CPU. These are not qualified medians
 or speedup claims. CPU diffusion remains the default; `diffusionBackend: 'gpu'`
 exposes the device implementation for clients that choose it.
+
+Mia accepted visually similar GPU diffusion on 2026-10-21. `diffusionBackend: 'gpu-approximate'`
+runs bands of eight rows in order; each band reads the exact errors of the previous band's
+last two rows. Inside a band, 16-pixel row segments run in parallel, each warmed over a
+4-pixel halo whose indices it discards, and a hashed shift moves segment edges every band.
+One workgroup per segment gathers a row's vertical errors in parallel before one lane scans
+it; byte feedback matches through a 16 MiB nearest-slot table built on GPU. Independent
+overlapping tiles, with or without minimum-disagreement stitching, left visible seams on
+Celeste's sky because their rows never saw the actual row above. Full Celeste with the
+Wplace palette differs from CPU at 44–56% of indices, as faithful GPU recurrence already
+does; mean 8×8 tone differs by under one byte. Busy-host browser diagnostics put a complete
+call near 0.16 s against about 1 s for scalar CPU and 51 s for faithful serpentine.
+Matching feedback still searches the palette serially and gains little.

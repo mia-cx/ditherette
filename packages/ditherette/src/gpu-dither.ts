@@ -1,4 +1,5 @@
 import { DitheretteError } from './errors.js';
+import { executionTimings, type ExecutionTiming } from './timings.js';
 import { normalizeWasmInput } from './scalar.js';
 import { createCpu } from './cpu.js';
 import {
@@ -25,6 +26,7 @@ import {
 } from './validation-fields.js';
 import { validateProcess } from './validation-process.js';
 import {
+	diffusionBackend,
 	fallbackPolicy,
 	gpuFallbackError,
 	gpuEffectsDecoderBytes,
@@ -38,6 +40,7 @@ import type {
 	ApplyEffectsRequest,
 	EffectMaskRequest,
 	CpuInitOptions,
+	DiffusionBackend,
 	AnalyzeRecolourRequest,
 	AnalyzePaletteFitRequest,
 	FitLook,
@@ -66,8 +69,8 @@ import type {
 export interface GpuDitherOptions extends GpuEffectsOptions {
 	/** Row bands for independent stages; workers applies to CPU fallback. Diffusion stays continuous. */
 	readonly tiling?: TilingPolicy;
-	/** Keep CPU recurrence (default), or execute continuous diffusion on the GPU. */
-	readonly diffusionBackend?: 'cpu' | 'gpu';
+	/** `cpu` by default; see `DiffusionBackend`. */
+	readonly diffusionBackend?: DiffusionBackend;
 }
 
 /** Hybrid combines GPU preparation/Adaptive analysis with the CPU diffusion recurrence. */
@@ -77,6 +80,8 @@ export interface DitherExecution {
 	readonly fallback?: string;
 	/** True when byte-verified source coverage bypassed the complete GPU selector. */
 	readonly analysisReused?: boolean;
+	/** Host wall times; nested GPU spans overlap and include synchronization. */
+	readonly timings?: readonly ExecutionTiming[];
 }
 
 /** Keep the CPU operation surface available on the asynchronous engine. */
@@ -143,7 +148,7 @@ export interface GpuDitherBindings extends Omit<GpuEffectsBindings, 'privateGpuE
 	privateGpuDitherPlan(width: number, height: number): number;
 	privateGpuPerturbPlan(width: number, height: number): number;
 	privateGpuYliluomaPlan(width: number, height: number, entries: number, size: number): number;
-	privateGpuDiffusionPlan(width: number, height: number): number;
+	privateGpuDiffusionPlan(width: number, height: number, approximate: boolean): number;
 	privateGpuDitherDetect(memoryLimit: number): Promise<string>;
 	privateGpuEffectsAdapter(): string;
 	privateGpuEffectsDispose(): void;
@@ -166,7 +171,8 @@ export interface GpuDitherBindings extends Omit<GpuEffectsBindings, 'privateGpuE
 		threshold: number,
 		softness: number,
 		rgbaOutput: boolean,
-		gpuDiffusion: boolean,
+		/** 0 keeps CPU diffusion, 1 the original GPU scan, 2 parallel approximate. */
+		diffusion: number,
 		coverage: Uint8Array | undefined,
 		retain: boolean,
 		memoryLimit: number,
@@ -335,9 +341,7 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 	});
 	const gpu = validateOptions({ wasm: field(input, 'gpuWasm') });
 	const fallbackMode = fallbackPolicy(field(input, 'fallback'));
-	const diffusionBackend = field(input, 'diffusionBackend') ?? 'cpu';
-	if (diffusionBackend !== 'cpu' && diffusionBackend !== 'gpu')
-		throw new DitheretteError('invalid-settings', 'diffusionBackend', 'Expected cpu or gpu.');
+	const diffusion = diffusionBackend(field(input, 'diffusionBackend') ?? 'cpu');
 	let bindings: GpuDitherBindings | undefined;
 	let fallback = 'NoAdapter';
 	if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
@@ -357,7 +361,7 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 	}
 	return initializeGpuDither(
 		bindings,
-		{ ...normalized, fallback: fallbackMode, diffusionBackend },
+		{ ...normalized, fallback: fallbackMode, diffusionBackend: diffusion },
 		fallback
 	);
 }
@@ -371,10 +375,11 @@ export function initializeGpuDither(
 		memoryLimitBytes: number;
 		fallback?: 'cpu' | 'error';
 		tiling?: TilingPolicy;
-		diffusionBackend?: 'cpu' | 'gpu';
+		diffusionBackend?: DiffusionBackend;
 	},
 	initialFallback = 'NoAdapter'
 ): GpuDither {
+	const diffusion = { cpu: 0, gpu: 1, 'gpu-approximate': 2 }[options.diffusionBackend ?? 'cpu'];
 	let active = false;
 	let disposed = false;
 	let detected = false;
@@ -433,6 +438,8 @@ export function initializeGpuDither(
 	): Promise<IndexedImage | Rgba8Image> {
 		requireIdle();
 		active = true;
+		const measured = executionTimings();
+		measured.mark('request preparation', true);
 		try {
 			signal?.throwIfAborted();
 			let reason = unavailable;
@@ -474,7 +481,7 @@ export function initializeGpuDither(
 				: 0;
 			const gpuLimit = options.memoryLimitBytes - preparationBytes;
 			const unsupported =
-				(d.family === 2 && options.diffusionBackend !== 'gpu' && options.fallback === 'error') ||
+				(d.family === 2 && diffusion === 0 && options.fallback === 'error') ||
 				d.placement === 1 ||
 				(d.placement === 2 && d.radius > 100) ||
 				(d.family === 1 && d.strength > 4);
@@ -493,8 +500,8 @@ export function initializeGpuDither(
 											Math.min(256, input.palette.length),
 											d.parameter
 										)
-									: d.family === 2 && options.diffusionBackend === 'gpu'
-										? bindings.privateGpuDiffusionPlan(width, height)
+									: d.family === 2 && diffusion !== 0
+										? bindings.privateGpuDiffusionPlan(width, height, diffusion === 2)
 										: bindings.privateGpuDitherPlan(width, height)) > gpuLimit
 						)
 							reason = 'MemoryLimit';
@@ -616,8 +623,11 @@ export function initializeGpuDither(
 			const stage = rgba ? 'perturb' : 'dither-and-quantize';
 			if (bindings) {
 				try {
+					measured.mark('request preparation', false);
 					if (!detected) {
+						measured.mark('GPU device initialization', true);
 						reason = await bindings.privateGpuDitherDetect(gpuLimit);
+						measured.mark('GPU device initialization', false);
 						detected = !reason;
 					}
 					signal?.throwIfAborted();
@@ -625,6 +635,7 @@ export function initializeGpuDither(
 						adapter = bindings.privateGpuEffectsAdapter();
 						report({ stage: 'prepare', completed: 0, total: 1 });
 						if (process?.effects?.enabled) {
+							measured.mark('GPU effects', true);
 							const sink: { value?: Rgba8Image } = {};
 							reason = await bindings.privateGpuApplyEffects(
 								snapshot,
@@ -637,6 +648,7 @@ export function initializeGpuDither(
 								rows
 							);
 							effected = sink.value;
+							measured.mark('GPU effects', false);
 							sink.value = undefined;
 							if (!reason && !effected) reason = 'Failed';
 							if (effected) prepared = effected;
@@ -649,6 +661,7 @@ export function initializeGpuDither(
 							signal?.throwIfAborted();
 						}
 						if (!reason && resizing && process) {
+							measured.mark('GPU resize', true);
 							let progress = 0,
 								lastResize = 0;
 							const sink = {
@@ -682,6 +695,7 @@ export function initializeGpuDither(
 								sink
 							);
 							resized = sink.value;
+							measured.mark('GPU resize', false);
 							sink.value = undefined;
 							if (!reason && !resized) reason = 'Failed';
 							if (resized) prepared = resized;
@@ -703,6 +717,7 @@ export function initializeGpuDither(
 									: undefined;
 						}
 						const sink = {
+							timing: measured.mark,
 							value: undefined as IndexedImage | Rgba8Image | undefined,
 							coverage: undefined as Uint8Array | undefined,
 							check: (completed = 0) => {
@@ -738,7 +753,7 @@ export function initializeGpuDither(
 								d.threshold,
 								d.softness,
 								rgba,
-								options.diffusionBackend === 'gpu',
+								diffusion,
 								retained,
 								retain,
 								gpuLimit,
@@ -770,12 +785,13 @@ export function initializeGpuDither(
 				signal?.throwIfAborted();
 				execution = {
 					backend:
-						d.family === 2 && options.diffusionBackend !== 'gpu'
+						d.family === 2 && diffusion === 0
 							? d.placement === 2 || preparing
 								? 'hybrid'
 								: 'cpu'
 							: 'gpu',
 					adapter,
+					timings: measured.finish(),
 					...(d.placement === 2 ? { analysisReused: Boolean(retained) } : {})
 				};
 				if (coverage && retain)
@@ -791,6 +807,9 @@ export function initializeGpuDither(
 			}
 			retire(reason || 'Failed');
 			if (options.fallback === 'error') throw gpuFallbackError(reason || 'Failed');
+			measured.mark('request preparation', false);
+			measured.finish();
+			measured.mark('CPU fallback', true);
 			retained = undefined;
 			coverage = undefined;
 			prepared = request.source;
@@ -815,7 +834,13 @@ export function initializeGpuDither(
 						})
 					: cpu.ditherAndQuantize(request);
 			signal?.throwIfAborted();
-			execution = { backend: 'cpu', fallback: reason || 'Failed', ...(adapter ? { adapter } : {}) };
+			measured.mark('CPU fallback', false);
+			execution = {
+				backend: 'cpu',
+				fallback: reason || 'Failed',
+				timings: measured.finish(),
+				...(adapter ? { adapter } : {})
+			};
 			return result;
 		} finally {
 			active = false;

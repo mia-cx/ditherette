@@ -21,7 +21,7 @@ mod diffusion;
 mod indexed;
 mod perturb;
 mod yliluoma;
-pub use diffusion::DiffusionMemory;
+pub use diffusion::{DiffusionMemory, DiffusionSchedule};
 pub use indexed::IndexedMemory;
 pub use perturb::PerturbMemory;
 pub use yliluoma::MixMemory;
@@ -96,6 +96,7 @@ impl super::Backend {
         memory_limit: u64,
         check: &mut dyn JobControl,
     ) -> Result<Vec<u8>, Fallback> {
+        check.timing("GPU Adaptive analysis", true)?;
         check.check()?;
         let memory = AreaMemory::new(dimensions);
         if memory.required_bytes > memory_limit {
@@ -111,7 +112,9 @@ impl super::Backend {
             Self::Cpu(reason) => Err(reason.clone()),
             Self::Gpu(gpu) => {
                 gpu.scoped(async {
+                    check.timing("GPU upload setup", true)?;
                     let mut job = AreaJob::new(gpu, dimensions, rgba)?;
+                    check.timing("GPU upload setup", false)?;
                     let parameters = Parameters::new(dimensions, sample_size, contrast_threshold);
                     job.analysis(parameters);
                     job.dispatches.push(Dispatch {
@@ -127,6 +130,7 @@ impl super::Backend {
             }
         };
         self.retire_failure(&result);
+        check.timing("GPU Adaptive analysis", false)?;
         result
     }
 }
@@ -210,6 +214,7 @@ struct AreaJob<'a> {
     settings: Vec<u8>,
     coverage: Vec<u8>,
     mixes: Option<wgpu::Texture>,
+    lookup: Option<wgpu::Buffer>,
 }
 
 impl Drop for AreaJob<'_> {
@@ -220,6 +225,9 @@ impl Drop for AreaJob<'_> {
         self.work.destroy();
         if let Some(mixes) = &self.mixes {
             mixes.destroy();
+        }
+        if let Some(lookup) = &self.lookup {
+            lookup.destroy();
         }
     }
 }
@@ -370,6 +378,7 @@ impl<'a> AreaJob<'a> {
             settings: vec![0; 4],
             coverage: vec![0; 4],
             mixes: None,
+            lookup: None,
         })
     }
 
@@ -393,10 +402,21 @@ impl<'a> AreaJob<'a> {
         parameters.reverse_x = reverse_x as u32;
         parameters.reverse_y = reverse_y as u32;
         let tiles_y = parameters.height.div_ceil(16);
+        // Tile (tu, ty) holds x = 16(tu-ty) + [-15, 15], so it reaches the
+        // image only when 0 <= tu-ty <= (width+14)/16. Skipped skew-grid tiles
+        // would have no valid pixel and write nothing.
+        let reach = (parameters.width + 14) / 16;
         for diagonal in 0..parameters.tiles_u + tiles_y - 1 {
             parameters.diagonal = diagonal;
-            let first_y = diagonal.saturating_sub(parameters.tiles_u - 1);
-            let last_y = diagonal.min(tiles_y - 1);
+            let first_y = diagonal
+                .saturating_sub(parameters.tiles_u - 1)
+                .max(diagonal.saturating_sub(reach).div_ceil(2));
+            let last_y = (diagonal / 2).min(tiles_y - 1);
+            if first_y > last_y {
+                continue;
+            }
+            // The sweep shader reads its first tile row from this spare word.
+            parameters.minimum = first_y;
             self.dispatches.push(Dispatch {
                 shader: SWEEPS,
                 entry: "sweep",
@@ -433,6 +453,7 @@ impl<'a> AreaJob<'a> {
         check: &mut dyn JobControl,
         batch_size: usize,
     ) -> Result<Vec<u8>, Fallback> {
+        check.timing("GPU pipeline setup", true)?;
         let device = &self.gpu.device;
         let limit = device.limits().max_compute_workgroups_per_dimension;
         if self
@@ -506,6 +527,18 @@ impl<'a> AreaJob<'a> {
                 count: None,
             });
         }
+        if self.lookup.is_some() {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 8,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        }
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Adaptive storage"),
             entries: &entries,
@@ -559,6 +592,12 @@ impl<'a> AreaJob<'a> {
                 resource: wgpu::BindingResource::TextureView(view),
             });
         }
+        if let Some(lookup) = &self.lookup {
+            resources.push(wgpu::BindGroupEntry {
+                binding: 8,
+                resource: lookup.as_entire_binding(),
+            });
+        }
         let bindings = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &layout,
@@ -567,43 +606,22 @@ impl<'a> AreaJob<'a> {
         let mut pipelines = HashMap::new();
         for dispatch in &self.dispatches {
             pipelines.entry(dispatch.entry).or_insert_with(|| {
+                let diffusing = diffusion::ENTRIES.contains(&dispatch.entry);
+                let indexed =
+                    diffusing || ["indexed", "perturb", "yliluoma"].contains(&dispatch.entry);
                 let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some(dispatch.entry),
                     source: wgpu::ShaderSource::Wgsl(
                         format!(
                             "{COMMON}\n{}\n{}\n{}\n{}",
                             dispatch.shader,
-                            if [
-                                "indexed",
-                                "perturb",
-                                "yliluoma",
-                                "prepare_row",
-                                "diffuse",
-                                "wavefront",
-                                "cooperative"
-                            ]
-                            .contains(&dispatch.entry)
-                            {
-                                indexed_shader::WGSL
-                            } else {
-                                ""
-                            },
-                            if ["prepare_row", "diffuse", "wavefront", "cooperative"]
-                                .contains(&dispatch.entry)
-                            {
+                            if indexed { indexed_shader::WGSL } else { "" },
+                            if diffusing {
                                 diffusion::shader::COMMON
                             } else {
                                 ""
                             },
-                            if dispatch.shader == PACK
-                                || dispatch.entry == "indexed"
-                                || dispatch.entry == "perturb"
-                                || dispatch.entry == "yliluoma"
-                                || dispatch.entry == "prepare_row"
-                                || dispatch.entry == "diffuse"
-                                || dispatch.entry == "wavefront"
-                                || dispatch.entry == "cooperative"
-                            {
+                            if dispatch.shader == PACK || indexed {
                                 noise_table()
                             } else {
                                 String::new()
@@ -633,12 +651,14 @@ impl<'a> AreaJob<'a> {
         let memory = memory.pop();
         let validation = validation.pop();
         let mut readback_mapped = false;
+        check.timing("GPU pipeline setup", false)?;
         let result = async {
             if let Some(error) = validation.await.or(memory.await) {
                 return Err(Fallback::Failed(error.to_string()));
             }
             // A bounded batch completes before the host checks cancellation.
             // No workgroup spins on work owned by an unscheduled workgroup.
+            check.timing("GPU dispatch + sync", true)?;
             for (batch, dispatches) in self.dispatches.chunks(batch_size).enumerate() {
                 check.check()?;
                 let mut encoder = device.create_command_encoder(&Default::default());
@@ -666,6 +686,8 @@ impl<'a> AreaJob<'a> {
                 self.gpu.check()?;
                 check.check()?;
             }
+            check.timing("GPU dispatch + sync", false)?;
+            check.timing("GPU readback", true)?;
             let mut encoder = device.create_command_encoder(&Default::default());
             encoder.copy_buffer_to_buffer(output, 0, &readback, 0, output_bytes);
             self.gpu.queue.submit([encoder.finish()]);
@@ -679,6 +701,7 @@ impl<'a> AreaJob<'a> {
             let mapped = super::device::unwound(|| readback.slice(..).get_mapped_range().to_vec())?;
             self.gpu.check()?;
             check.check()?;
+            check.timing("GPU readback", false)?;
             Ok(mapped)
         }
         .await;

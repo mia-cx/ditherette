@@ -37,10 +37,18 @@ Keep that workflow clear and fast, including large images.
   distance work and is deployed there with exact scalar/threaded output checks.
   Qualified latency measurements remain pending because shared-host browser activity
   prevented a quiet benchmark window. Further performance work must preserve the accepted output.
-- The GPU preview integrates exact channel-lookup effects with bounded CPU fallback.
-  Full-resolution Celeste profiling covers all 27 modes, 15 matching spaces, both
+- The GPU preview deploys the complete processing stack with Perf at `b470df6a` (2026-10-21).
+  Adaptive analysis runs on GPU and is reused across dither settings; the editor
+  keeps CPU diffusion recurrence. Full-size Celeste Bayer/Sierra checks and live
+  artifact hashes verify the deployment. Per-kernel timing sweeps remain held.
+  Perf exposes GPU/CPU stage wall times, effects compilation and analysis reuse.
+  Its total includes source preparation and output presentation; startup separates
+  downloads from remaining Wasm initialisation. Fine-stepped sliders avoid per-step layout reads.
+  Adaptive sweeps prune empty tiles and prepare source gates before serial steps;
+  full-size browser Bayer/Sierra outputs match. Speed gains remain unmeasured.
+  Profiling of the earlier effects-only build covers all 27 modes, 15 matching spaces, both
   placements and three effects profiles: 2,610 terminal cases, including 177 timeouts.
-  Effects execute on GPU; dithering, matching and Adaptive selection remain scalar CPU.
+  In that earlier build, effects ran on GPU while dithering, matching and Adaptive selection ran on CPU.
   Adaptive selection dominates common calls; matching and diffusion dominate ordinary
   Sierra, with expensive matching behind most timeouts. Optimize the exact selector
   and reconstruction first, then matching/diffusion; investigate Yliluoma separately.
@@ -87,6 +95,8 @@ Keep that workflow clear and fast, including large images.
   serpentine. The compatibility factory keeps CPU diffusion as its default because
   faithful serpentine is slower on the tested GPU. The unified GPU engine explicitly defaults
   to GPU diffusion; clients can select the CPU recurrence. Mixed and masked effects now execute on GPU,
+  Mia accepts visually similar GPU diffusion rather than identical recurrence (2026-10-21).
+  Prioritize parallel GPU scheduling with seam/texture comparisons; retain faithful CPU diffusion.
   including all colour-curve models and explicit palette recipes, with client-selected
   image tiling. Automatic recipe analysis stays on CPU. The combined GPU `process`
   now composes effects, recipe-v2 coverage resize and indexed stages through the same
@@ -114,6 +124,10 @@ analytics while the pull requests complete their merge gates.
 
 ## Priorities
 
+Mia's 2026-10-23 priority is to merge the completed stack and release v1.0.0.
+Resolve CI, review and release-qualification blockers first; further profiling
+and optimization follow the release.
+
 1. Make direct production delivery reliable and keep dependencies secure.
    Use the completed profile to prioritize exact Adaptive selector/reconstruction
    work, then matching/diffusion, while preserving accepted output and storage bounds.
@@ -131,7 +145,8 @@ Size/performance exceptions and cache-policy changes require their recorded appr
 
 ## Delegation
 
-Use T3-owned delegates with separate worktrees. User-facing changes, including
-new UI, go to Devin Fusion Opus + SWE. Technical work goes to Codex gpt-6.1-sol.
+Use T3-owned delegates with separate worktrees. Claude Opus 5.5 defaults to
+implementation, UI and public API design. Codex handles mechanical work and
+independent technical review; GPT-6-class models may write copy.
 The lead reviews and integrates results, owns this file, and controls deployment.
 Serialize heavy local builds and follow the shared exclusive benchmark lease.

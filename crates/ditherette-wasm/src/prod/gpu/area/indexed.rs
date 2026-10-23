@@ -178,12 +178,14 @@ impl super::super::Backend {
             Self::Cpu(reason) => Err(reason.clone()),
             Self::Gpu(gpu) => {
                 gpu.scoped(async {
+                    check.timing("GPU upload setup", true)?;
                     let mut job = AreaJob::new_with_analysis(
                         gpu,
                         layout.output,
                         request.quantize.source.data,
                         adaptive && coverage.is_none(),
                     )?;
+                    check.timing("GPU upload setup", false)?;
                     job.settings = settings;
                     let incoming = adaptive && coverage.is_some();
                     if let Some(bits) = coverage {
@@ -192,6 +194,9 @@ impl super::super::Backend {
                     let parameters = Parameters::new(layout.output, sample_size, tolerance);
                     let mut retained = None;
                     if adaptive && !incoming {
+                        if retain {
+                            check.timing("GPU Adaptive analysis", true)?;
+                        }
                         job.analysis(parameters);
                         if retain {
                             let bytes = AreaMemory::new(layout.output).coverage_bytes;
@@ -204,12 +209,20 @@ impl super::super::Backend {
                             retained =
                                 Some(job.execute_read_checked(&job.work, bytes, check).await?);
                             job.dispatches.clear();
+                            check.timing("GPU Adaptive analysis", false)?;
                         }
                     }
+                    let stage = if adaptive && !incoming && !retain {
+                        "GPU analysis + dither"
+                    } else {
+                        "GPU dither + quantise"
+                    };
+                    check.timing(stage, true)?;
                     job.indexed_dispatches(SHADER, "indexed", parameters, tiling, u32::MAX, 4);
                     let mut bytes = job
                         .execute_read_checked(&job.work, memory.index_bytes, check)
                         .await?;
+                    check.timing(stage, false)?;
                     bytes.truncate(layout.output.pixel_count().expect("validated dimensions"));
                     let indices = ImageBuf::from_vec_packed(bytes, layout.output)
                         .map_err(|error| Fallback::Failed(error.to_string()))?;
@@ -264,6 +277,7 @@ impl super::super::Backend {
             }
             _ => return Err(Fallback::UnsupportedStage),
         };
+        check.timing("CPU diffusion", true)?;
         // All transient GPU planes have been released before CPU rows and
         // indices are allocated. The retained device is part of the fixed reserve.
         let count = dimensions.pixel_count().expect("validated dimensions");
@@ -314,6 +328,7 @@ impl super::super::Backend {
         } else {
             None
         };
+        check.timing("CPU diffusion", false)?;
         Ok((
             prepared.into_indexed(
                 ImageBuf::from_vec_packed(indices, dimensions).expect("validated indices"),

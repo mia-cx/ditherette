@@ -55,10 +55,21 @@ export type ProcessingMetricsSample = {
 	settingsHash: string;
 	sourceId: string;
 	scopeKey: string;
+	/**
+	 * Recorded samples run from the user's action (an upload or restore starting, or the latest
+	 * settings change scheduling) until the output painted. A worker response covers only its own
+	 * work until the page replaces both.
+	 */
 	startedAt: number;
 	completedAt: number;
 	totalMs: number;
 	timings: ProcessingStageTiming[];
+	execution?: {
+		backend: 'gpu' | 'hybrid' | 'cpu';
+		adapter?: string;
+		fallback?: string;
+		analysisReused?: boolean;
+	};
 	cache?: ProcessingCacheMetrics;
 	memory?: ProcessingMemoryShape;
 	outputPixels: number;
@@ -71,7 +82,7 @@ export type ProcessingMetricsSample = {
 export type TimingSummary = {
 	name: string;
 	count: number;
-	latest: number;
+	latest: number | undefined;
 	average: number;
 	p95: number;
 	p98: number;
@@ -87,6 +98,7 @@ export function appendMetricsSample(
 	return [...scopedHistory, sample].slice(-limit);
 }
 
+/** Summaries start with `total`, then follow first-emitted order so nested spans stay together. */
 export function summarizeTimingHistory(
 	samples: readonly ProcessingMetricsSample[]
 ): TimingSummary[] {
@@ -95,11 +107,13 @@ export function summarizeTimingHistory(
 		pushTiming(valuesByName, 'total', sample.totalMs);
 		for (const timing of sample.timings) pushTiming(valuesByName, timing.name, timing.ms);
 	}
-	return [...valuesByName.entries()]
-		.map(([name, values]) => summarizeValues(name, values))
-		.sort((left, right) =>
-			left.name === 'total' ? -1 : right.name === 'total' ? 1 : left.name.localeCompare(right.name)
-		);
+	return [...valuesByName.entries()].map(([name, values]) => ({
+		...summarizeValues(name, values),
+		latest:
+			name === 'total'
+				? samples.at(-1)?.totalMs
+				: samples.at(-1)?.timings.find((timing) => timing.name === name)?.ms
+	}));
 }
 
 function pushTiming(valuesByName: Map<string, number[]>, name: string, value: number) {

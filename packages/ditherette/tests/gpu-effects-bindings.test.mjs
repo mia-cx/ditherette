@@ -113,7 +113,7 @@ test('indexed GPU admission falls back before device detection using the actual 
 						Number(dither.size)
 					)
 				: dither.family === 'diffusion'
-					? bindings.privateGpuDiffusionPlan(source.width, source.height)
+					? bindings.privateGpuDiffusionPlan(source.width, source.height, false)
 					: bindings.privateGpuDitherPlan(source.width, source.height)) - 1;
 		const processor = initializeGpuDither(
 			{

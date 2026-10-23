@@ -893,3 +893,75 @@ test(
 		t.diagnostic(JSON.stringify({ reports, system }));
 	}
 );
+
+async function approximateDiffusion(tab, message, transfer) {
+	return tab.evaluate(
+		async ({ message, transfer }) => {
+			if (transfer)
+				message.source.data = new Uint8Array(
+					await (await fetch('/__private_gpu_fixture.rgba')).arrayBuffer()
+				);
+			const worker = new Worker('/packages/ditherette/tests/gpu-dither-worker.mjs', {
+				type: 'module'
+			});
+			try {
+				return await new Promise((resolve, reject) => {
+					worker.onmessage = (event) => {
+						if (event.currentTarget === worker) resolve(event.data);
+					};
+					worker.onerror = (event) => reject(Error(event.message));
+					worker.postMessage(message);
+				});
+			} finally {
+				worker.terminate();
+			}
+		},
+		{ message, transfer }
+	);
+}
+
+test(
+	'approximate diffusion runs every kernel on the real GPU worker without fallback',
+	{ timeout: 180_000 },
+	async (t) => {
+		const origin = await startServer(t);
+		const { tab, errors, system } = await browser(t, origin, false);
+		const result = await approximateDiffusion(tab, { approximate: true });
+		assert.equal(result.error, undefined, result.error);
+		assert.deepEqual(errors, []);
+		assert.equal(result.records.length, 48);
+		assert.ok(result.worstTone < 8, `worst mean 8x8 tone difference ${result.worstTone}`);
+		t.diagnostic(JSON.stringify({ ...result, system }));
+	}
+);
+
+test(
+	'full 1x Celeste approximate diffusion through the real GPU worker',
+	{ timeout: 900_000, skip: !process.env.DITHERETTE_GPU_RGBA },
+	async (t) => {
+		const origin = await startServer(t);
+		const { tab, errors, system } = await browser(t, origin, false);
+		const text = await readFile(new URL('src/lib/palette/wplace.ts', root), 'utf8');
+		const palette = [...text.matchAll(/\['(?!#)[^']+', '(#[0-9A-F]{6})'\]/g)].map(([, hex]) => ({
+			kind: 'color',
+			rgb: [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16))
+		}));
+		palette.push({ kind: 'transparent' });
+		const result = await approximateDiffusion(
+			tab,
+			{
+				approximate: true,
+				faithful: Boolean(process.env.DITHERETTE_GPU_FAITHFUL),
+				kernels: ['sierra', 'floyd-steinberg', 'atkinson', 'jarvis-judice-ninke'],
+				feedback: ['srgb-bytes'],
+				source: { width: 2600, height: 4168 },
+				palette
+			},
+			true
+		);
+		assert.equal(result.error, undefined, result.error);
+		assert.deepEqual(errors, []);
+		assert.equal(result.records.length, 8);
+		t.diagnostic(JSON.stringify({ ...result, system }));
+	}
+);

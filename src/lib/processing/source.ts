@@ -19,7 +19,12 @@ import {
 	sourceMetaFromRecord
 } from './db';
 import { decodeBlob, type DecodedImage } from './image-decode';
-import { cancelProcessing, currentSettingsHash, scheduleProcessing } from './client';
+import {
+	cancelProcessing,
+	currentSettingsHash,
+	scheduleProcessing,
+	type ProcessingLead
+} from './client';
 import { clampOutputScale, fitOutputSizeToBounds } from './types';
 import { validateSourceBlob } from './image-metadata';
 import type { SourceImageRecord } from './types';
@@ -53,12 +58,27 @@ async function throwIfSourceSuperseded(generation: number, record?: SourceImageR
 	throw new SourceSuperseded();
 }
 
+/** Times consecutive source steps as the lead of the processing they schedule. */
+function processingLead() {
+	const lead: ProcessingLead = { startedAt: performance.now(), timings: [] };
+	let stepStartedAt = lead.startedAt;
+	const step = (name: string) => {
+		const now = performance.now();
+		lead.timings.push({ name, ms: now - stepStartedAt });
+		stepStartedAt = now;
+	};
+	return { lead, step };
+}
+
 export async function setSourceFile(file: File) {
 	const generation = ++sourceGeneration;
+	const { lead, step } = processingLead();
 	cancelProcessing();
 	await validateSourceBlob(file);
+	step('main source validation');
 	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	const decoded = await decodeBlob(file, { validate: false });
+	step('main source decode');
 	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	const record: SourceImageRecord = {
 		blob: file,
@@ -69,6 +89,7 @@ export async function setSourceFile(file: File) {
 		updatedAt: nextSourceTimestamp()
 	};
 	await saveSourceImageAndClearProcessed(record);
+	step('main source save');
 	await throwIfSourceSuperseded(generation, record);
 	setSourceMetadata(record);
 	const settings = outputSettings.get();
@@ -87,7 +108,8 @@ export async function setSourceFile(file: File) {
 	});
 	processedImage.set(undefined);
 	publishSourceImageData(decoded);
-	scheduleProcessing(0);
+	step('main source publish');
+	scheduleProcessing(0, lead);
 }
 
 function setSourceMetadata(record: SourceImageRecord) {
@@ -104,10 +126,12 @@ function publishSourceImageData({ imageData, warning }: DecodedImage) {
 
 export async function restorePersistedImages() {
 	const generation = ++sourceGeneration;
+	const { lead, step } = processingLead();
 	cancelProcessing();
 	let source: SourceImageRecord | undefined;
 	try {
 		source = await loadSourceImage();
+		step('main source read');
 	} catch (error) {
 		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		const restoreError = new Error(
@@ -130,6 +154,7 @@ export async function restorePersistedImages() {
 	let decoded: DecodedImage;
 	try {
 		decoded = await decodeBlob(source.blob);
+		step('main source decode');
 	} catch (error) {
 		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		const restoreError = new Error(
@@ -152,6 +177,7 @@ export async function restorePersistedImages() {
 
 	try {
 		const processed = await loadProcessedImage();
+		step('main output read');
 		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		if (processed?.settingsHash === currentSettingsHash()) {
 			processedImage.set(processed);
@@ -175,7 +201,8 @@ export async function restorePersistedImages() {
 
 	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	publishSourceImageData(decoded);
-	scheduleProcessing(0);
+	step('main source publish');
+	scheduleProcessing(0, lead);
 }
 
 export async function clearAllImageData() {
