@@ -1,7 +1,6 @@
 //! Embedded WGSL keeps GPU programs within the audited source tree.
 
-pub(super) const WGSL: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<u32>;
-@group(0) @binding(4) var<storage, read> settings: array<u32>;
+pub(super) const WGSL: &str = r#"@group(0) @binding(4) var<storage, read> settings: array<u32>;
 @group(0) @binding(5) var<storage, read> coverage: array<u32>;
 const PI: f32 = 3.141592653589793;
 const TAU: f32 = 6.283185307179586;
@@ -226,6 +225,9 @@ fn palette_index(i: u32) -> u32 {
     }
     return best;
 }
+"#;
+
+pub(super) const INDEXED: &str = r#"@group(0) @binding(2) var<storage, read_write> work: array<u32>;
 @compute @workgroup_size(64)
 fn indexed(@builtin(global_invocation_id) id: vec3<u32>) {
     let word=id.x;

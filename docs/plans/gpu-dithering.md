@@ -204,3 +204,21 @@ Chromium 120-case fixtures have zero index differences. Four full-size Celeste
 cases have 4,424 disagreements across 43,347,200 indices, with largest RGBA byte
 difference 238. These are measured disagreements; the GPU result is not byte-exact.
 Palette entries and warnings match exactly.
+
+All twelve diffusion kernels now have an opt-in package GPU path. Non-serpentine
+scans gather in original raster contribution order through skewed wavefront tiles.
+Serpentine keeps a continuous three-row ring while 32 lanes share matching and
+disjoint tap/channel updates. Both preserve alpha exclusion, feedback, strength
+and output-only Adaptive coverage. A status word rejects non-finite arithmetic
+without publishing partial indices. Native cross-tile checks compare the parallel
+schedules against an independent serial GPU reference exactly.
+
+Full Celeste GPU/CPU diffusion differs at 3.79–5.94 million of 10.84 million
+indices per case as recurrent arithmetic differences propagate through the
+texture. Largest per-pixel RGBA differences reach 216; the largest channel-mean
+difference in a 32-pixel square is 4.34 bytes. Exact GPU output hashes survived
+the cooperative scheduling optimizations. Busy-host single-call diagnostics without progress callbacks put
+ordinary non-serpentine Sierra near 0.7 seconds and faithful serpentine near
+34 seconds, against about 1.4 seconds on CPU. These are not qualified medians
+or speedup claims. CPU diffusion remains the default; `diffusionBackend: 'gpu'`
+exposes the device implementation for clients that choose it.

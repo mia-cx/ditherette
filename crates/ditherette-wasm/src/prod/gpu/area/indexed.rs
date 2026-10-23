@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-use super::indexed_shader::WGSL as SHADER;
+use super::indexed_shader::INDEXED as SHADER;
 
 /// Includes source snapshots and wire storage, all three GPU work planes, immutable
 /// dispatch uniforms, packed index staging and independent host/JS output.

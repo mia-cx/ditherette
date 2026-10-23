@@ -75,7 +75,7 @@ async function startServer(t, missingGpu = false, isolated = false) {
 	return `http://127.0.0.1:${server.address().port}`;
 }
 
-for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma'])
+for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma', 'diffusion'])
 	test(
 		`real indexed dither worker through Chromium CDP (${mode})`,
 		{ timeout: 180_000 },
@@ -93,8 +93,9 @@ for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma'])
 						};
 						worker.onerror = (event) => reject(Error(event.message));
 						worker.postMessage({
-							fallback: mode !== 'gpu' && mode !== 'yliluoma',
-							yliluoma: mode === 'yliluoma'
+							fallback: !['gpu', 'yliluoma', 'diffusion'].includes(mode),
+							yliluoma: mode === 'yliluoma',
+							gpuDiffusion: mode === 'diffusion'
 						});
 					});
 				} finally {
@@ -115,6 +116,10 @@ for (const mode of ['gpu', 'disabled', 'missing', 'yliluoma'])
 			} else if (mode === 'yliluoma') {
 				assert.equal(result.cases, 121);
 				assert.equal(result.backends.gpu, 121);
+				assert.equal(result.webgpu.isFallbackAdapter, false);
+			} else if (mode === 'diffusion') {
+				assert.equal(result.cases, 48);
+				assert.equal(result.backends.gpu, 48);
 				assert.equal(result.webgpu.isFallbackAdapter, false);
 			} else assert.equal(result.backends.cpu, 3);
 			t.diagnostic(JSON.stringify({ mode, ...result, system }));

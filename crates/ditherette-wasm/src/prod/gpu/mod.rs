@@ -13,7 +13,8 @@
 //! The opt-in package effects processor uses [`ChannelLookup::from_effects`]
 //! and [`Backend::lookup`] for complete enabled per-channel chains. Other
 //! [`Backend::dither_and_quantize`] runs independent fields, matching and complete
-//! Adaptive selection. Scan-sensitive diffusion remains on CPU.
+//! Adaptive selection. Continuous GPU diffusion is separately selectable; the
+//! package keeps its CPU recurrence as the default for scan-sensitive work.
 
 mod area;
 mod device;
@@ -25,7 +26,7 @@ mod stage;
 #[cfg(test)]
 mod tests;
 
-pub use area::{AreaMemory, IndexedMemory, MixMemory};
+pub use area::{AreaMemory, DiffusionMemory, IndexedMemory, MixMemory};
 pub use device::{Adapters, Gpu};
 pub use lookup::ChannelLookup;
 pub use memory::LookupMemory;

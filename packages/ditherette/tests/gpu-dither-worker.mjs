@@ -270,24 +270,26 @@ self.onmessage = async (event) => {
 							['srgb-euclidean', 'oklab-euclidean'].includes(item.matching) &&
 							item.dither.size === '16'
 					)
-				: event.data.yliluoma
-					? mixtures
-					: event.data.full
-						? full
-						: event.data.photo
-							? [
-									cases[0],
-									cases.find(
-										(item) =>
-											item.matching === 'oklab-euclidean' &&
-											item.dither.perturb?.field.size === '16' &&
-											item.dither.perturb.placement.mode === 'smooth-area-v1'
-									),
-									cases.find((item) => item.dither.kernel === 'sierra')
-								]
-							: event.data.fallback
-								? [cases[0], cases[8], cases.at(-1)]
-								: cases;
+				: event.data.gpuDiffusion
+					? cases.filter((item) => item.dither.family === 'diffusion')
+					: event.data.yliluoma
+						? mixtures
+						: event.data.full
+							? full
+							: event.data.photo
+								? [
+										cases[0],
+										cases.find(
+											(item) =>
+												item.matching === 'oklab-euclidean' &&
+												item.dither.perturb?.field.size === '16' &&
+												item.dither.perturb.placement.mode === 'smooth-area-v1'
+										),
+										cases.find((item) => item.dither.kernel === 'sierra')
+									]
+								: event.data.fallback
+									? [cases[0], cases[8], cases.at(-1)]
+									: cases;
 		const requests = selected.map((item, index) => ({
 			...item,
 			version: 1,
@@ -313,7 +315,9 @@ self.onmessage = async (event) => {
 		const expected = requests.map((request) => cpu.ditherAndQuantize(request));
 		cpu.dispose();
 		cpu = undefined;
-		const gpu = await createGpuDither();
+		const gpu = await createGpuDither(
+			event.data.gpuDiffusion ? { diffusionBackend: 'gpu', fallback: 'error' } : undefined
+		);
 		let differences = 0;
 		let maximumByteDifference = 0;
 		const backends = {};
@@ -353,14 +357,21 @@ self.onmessage = async (event) => {
 			if (event.data.full) records.push({ dither: requests[n].dither, differences: changed });
 			backends[gpu.execution.backend] = (backends[gpu.execution.backend] ?? 0) + 1;
 			if (!event.data.fallback) {
-				const backend = requests[n].dither.family === 'diffusion' ? 'hybrid' : 'gpu';
+				const backend =
+					requests[n].dither.family === 'diffusion' && !event.data.gpuDiffusion ? 'hybrid' : 'gpu';
 				if (gpu.execution.backend !== backend)
 					throw Error(`Expected ${backend}, got ${JSON.stringify(gpu.execution)}`);
 			}
 		}
 		let cancelled = false;
 		let callbackRecovered = false;
-		if (!event.data.fallback && !event.data.full && !event.data.photo && !event.data.yliluoma) {
+		if (
+			!event.data.fallback &&
+			!event.data.full &&
+			!event.data.photo &&
+			!event.data.yliluoma &&
+			!event.data.gpuDiffusion
+		) {
 			const diffusion = requests.find((request) => request.dither.family === 'diffusion');
 			try {
 				await gpu.ditherAndQuantize({

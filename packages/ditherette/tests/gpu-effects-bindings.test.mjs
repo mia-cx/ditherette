@@ -89,7 +89,15 @@ test('indexed GPU admission falls back before device detection using the actual 
 	};
 	for (const dither of [
 		{ family: 'none' },
-		{ family: 'yliluoma', size: '16', placement: { mode: 'everywhere' } }
+		{ family: 'yliluoma', size: '16', placement: { mode: 'everywhere' } },
+		{
+			family: 'diffusion',
+			kernel: 'sierra',
+			feedback: 'matching',
+			serpentine: true,
+			strength: 1,
+			placement: { mode: 'everywhere' }
+		}
 	]) {
 		request.dither = dither;
 		if (dither.family === 'yliluoma') {
@@ -105,13 +113,15 @@ test('indexed GPU admission falls back before device detection using the actual 
 						request.palette.length,
 						Number(dither.size)
 					)
-				: bindings.privateGpuDitherPlan(source.width, source.height)) - 1;
+				: dither.family === 'diffusion'
+					? bindings.privateGpuDiffusionPlan(source.width, source.height)
+					: bindings.privateGpuDitherPlan(source.width, source.height)) - 1;
 		const processor = initializeGpuDither(
 			{
 				...bindings,
 				privateGpuDitherDetect: () => assert.fail('numeric admission must precede device detection')
 			},
-			{ wasm: scalar, memoryLimitBytes: limit }
+			{ wasm: scalar, memoryLimitBytes: limit, diffusionBackend: 'gpu' }
 		);
 		const cpu = await createDitherette({ wasm: scalar });
 		try {
