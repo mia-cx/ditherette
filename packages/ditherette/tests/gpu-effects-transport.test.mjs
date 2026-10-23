@@ -79,9 +79,22 @@ const effects = [{ effect: 'exposure', enabled: true, stops: 0.5 }];
 const request = { version: 1, source, effects };
 const unsupported = {
 	...request,
+	context: {
+		palette: [
+			{ kind: 'color', rgb: [0, 0, 0] },
+			{ kind: 'color', rgb: [255, 255, 255] }
+		]
+	},
 	effects: [
 		...effects,
-		{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: 0.2, lightness: 0 }
+		{
+			effect: 'palette-fit',
+			enabled: true,
+			look: 'natural',
+			space: 'oklab',
+			strength: 1,
+			curves: null
+		}
 	]
 };
 
@@ -244,7 +257,7 @@ test(
 		retiredMemory = memory;
 		const output = await processor.applyEffects(fallback);
 		assert.equal(processor.execution.backend, 'cpu');
-		assert.equal(processor.execution.fallback, 'UnsupportedChain');
+		assert.equal(processor.execution.fallback, 'MemoryLimit');
 		const cpu = await createDitherette({ wasm: scalar });
 		assert.deepEqual(output, cpu.applyEffects(fallback));
 		cpu.dispose();

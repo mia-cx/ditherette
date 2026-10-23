@@ -12,7 +12,7 @@ use crate::image::ImageDimensions;
 
 use super::{
     stage::{PRELUDE, WORKGROUP},
-    Fallback, Parity, Stage,
+    Fallback, GpuTiling, Parity, Stage,
 };
 
 /// Which adapters [`Gpu::request`] accepts.
@@ -42,6 +42,55 @@ impl Drop for Gpu {
 }
 
 impl Gpu {
+    /// Pointwise tiles have no halo or coordinate dependence. Keep one bounded
+    /// transport tile alive and scatter mapped bytes into the owned result.
+    pub(super) async fn process_tiled<S: Stage>(
+        &self,
+        stage: &S,
+        dimensions: ImageDimensions,
+        rgba: &[u8],
+        tiling: GpuTiling,
+    ) -> Result<Vec<u8>, Fallback> {
+        let (width, height) = tiling.tile(dimensions);
+        if width == dimensions.width() && height == dimensions.height() {
+            return self.process(stage, dimensions, rgba).await;
+        }
+        if rgba.len() as u64 != u64::from(dimensions.width()) * u64::from(dimensions.height()) * 4 {
+            return Err(Fallback::Failed(
+                "source length does not match dimensions".into(),
+            ));
+        }
+        let mut output = Vec::new();
+        output
+            .try_reserve_exact(rgba.len())
+            .map_err(|_| Fallback::MemoryLimit)?;
+        output.resize(rgba.len(), 0);
+        let mut tile = Vec::new();
+        tile.try_reserve_exact(width as usize * height as usize * 4)
+            .map_err(|_| Fallback::MemoryLimit)?;
+        for y in (0..dimensions.height()).step_by(height as usize) {
+            let h = height.min(dimensions.height() - y);
+            for x in (0..dimensions.width()).step_by(width as usize) {
+                let w = width.min(dimensions.width() - x);
+                tile.clear();
+                for row in y..y + h {
+                    let offset = (row as usize * dimensions.width() as usize + x as usize) * 4;
+                    tile.extend_from_slice(&rgba[offset..offset + w as usize * 4]);
+                }
+                let result = self
+                    .process(stage, ImageDimensions::new(w, h).unwrap(), &tile)
+                    .await?;
+                for row in 0..h {
+                    let offset =
+                        ((y + row) as usize * dimensions.width() as usize + x as usize) * 4;
+                    let from = row as usize * w as usize * 4;
+                    output[offset..offset + w as usize * 4]
+                        .copy_from_slice(&result[from..from + w as usize * 4]);
+                }
+            }
+        }
+        Ok(output)
+    }
     /// Captures validation/allocation failures from the whole multi-pass job,
     /// including source and workspace creation before its first dispatch.
     pub(super) async fn scoped<T>(

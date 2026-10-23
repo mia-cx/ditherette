@@ -83,7 +83,9 @@ Keep that workflow clear and fast, including large images.
   and matching policy, including Adaptive placement. Every diffusion kernel now
   has an explicit GPU path: wavefronts for ordinary scans and continuous cooperative
   serpentine. CPU diffusion remains the default because faithful serpentine is
-  substantially slower on the tested GPU. Combined processing and wider effects remain in progress.
+  substantially slower on the tested GPU. Mixed and masked effects now execute on GPU,
+  including all colour-curve models and explicit palette recipes, with client-selected
+  image tiling. Automatic recipe analysis stays on CPU. Combined processing remains in progress.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
 

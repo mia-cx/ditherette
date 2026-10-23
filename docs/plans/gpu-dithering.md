@@ -205,6 +205,14 @@ cases have 4,424 disagreements across 43,347,200 indices, with largest RGBA byte
 difference 238. These are measured disagreements; the GPU result is not byte-exact.
 Palette entries and warnings match exactly.
 
+Resolved effects now use a single retained pointwise shader with bounded control
+data, avoiding pipeline recompilation when sliders or curve points change. It
+evaluates continuous RGB between steps, all nine curve models, periodic splines,
+two-input grids, masks and explicit recolour/palette-fit recipes. Whole unmasked
+channel chains retain exact byte tables. Automatic image analysis remains the
+separate CPU operation described in issue 253; strict GPU calls require its
+explicit recipe. Image tiling is independently selectable for effects and resize.
+
 All twelve diffusion kernels now have an opt-in package GPU path. Non-serpentine
 scans gather in original raster contribution order through skewed wavefront tiles.
 Serpentine keeps a continuous three-row ring while 32 lanes share matching and

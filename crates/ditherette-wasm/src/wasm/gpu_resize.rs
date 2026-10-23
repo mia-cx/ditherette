@@ -23,7 +23,7 @@ extern "C" {
     fn check_job(sink: &JsValue, completed: u32) -> Result<bool, JsValue>;
 }
 
-fn tiling(rows: u32) -> GpuTiling {
+pub(super) fn tiling(rows: u32) -> GpuTiling {
     match rows {
         0 => GpuTiling::Auto,
         u32::MAX => GpuTiling::Disabled,

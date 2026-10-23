@@ -264,70 +264,77 @@ describe.skipIf(!gpuWasm)('shared Source and processing effects', () => {
 		expect(transport.observations.destroyed).toBe(1);
 	});
 
-	it.each(['mixed', 'masked', 'no-webgpu', 'no-adapter', 'device-failure', 'device-loss'])(
-		'preserves CPU output after %s and never recreates retired bindings',
-		async (route) => {
-			const image = source();
-			await pipeline.handle({ type: 'source', sourceId: 1, source: image });
-			if (route === 'no-webgpu') vi.stubGlobal('navigator', {});
-			if (route === 'no-adapter')
-				Object.defineProperty(navigator, 'gpu', { value: { requestAdapter: async () => null } });
-			if (route === 'device-failure') {
-				const adapter = await (
-					navigator as Navigator & {
-						gpu: { requestAdapter(): Promise<{ requestDevice(): Promise<unknown> }> };
-					}
-				).gpu.requestAdapter();
-				Object.getPrototypeOf(adapter).requestDevice = async () => {
-					throw Error('Injected device failure');
-				};
-			}
-			if (route === 'device-loss') {
-				await pipeline.handle(compile());
-				transport.devices[0]!.destroy();
-				await new Promise((resolve) => setTimeout(resolve, 0));
-			}
-			const effects =
-				route === 'mixed'
-					? [...tone, mixed]
-					: route === 'masked'
-						? [
-								{
-									...tone[0]!,
-									mask: [
-										{
-											x: { model: 'srgb' as const, channel: 'red' as const },
-											points: [
-												[0, 0],
-												[1, 1]
-											] as const
-										}
-									]
-								}
-							]
-						: tone;
-			await pipeline.handle(compile(2, effects));
-			const result = replies.at(-1)!;
-			expect(result.type).toBe('compiled');
-			if (result.type !== 'compiled') throw Error('Compile failed');
-			const cpu = await actual.createDitherette({ wasm });
-			try {
-				const input = { ...image, data: new Uint8Array(image.data.buffer) };
-				const index = indexColours(input);
-				expect(applyCompiledEffects(input, index.indices, result.results).data).toEqual(
-					cpu.applyEffects({ version: 1, source: input, effects }).data
-				);
-			} finally {
-				cpu.dispose();
-			}
-			expect(facades[0]!.execution?.backend).toBe('cpu');
-			const deviceCount = transport.observations.devices;
-			await pipeline.handle(compile(3));
-			expect(facades[0]!.execution?.backend).toBe('cpu');
-			expect(transport.observations.devices).toBe(deviceCount);
-			expect(transport.resources.size).toBe(0);
+	it.each([
+		'mixed-device-loss',
+		'masked-device-loss',
+		'no-webgpu',
+		'no-adapter',
+		'device-failure',
+		'device-loss'
+	])('preserves CPU output after %s and never recreates retired bindings', async (route) => {
+		const image = source();
+		await pipeline.handle({ type: 'source', sourceId: 1, source: image });
+		if (route === 'no-webgpu') vi.stubGlobal('navigator', {});
+		if (route === 'no-adapter')
+			Object.defineProperty(navigator, 'gpu', { value: { requestAdapter: async () => null } });
+		if (route === 'device-failure') {
+			const adapter = await (
+				navigator as Navigator & {
+					gpu: { requestAdapter(): Promise<{ requestDevice(): Promise<unknown> }> };
+				}
+			).gpu.requestAdapter();
+			Object.getPrototypeOf(adapter).requestDevice = async () => {
+				throw Error('Injected device failure');
+			};
 		}
-	);
+		// Mixed and masked chains are GPU-eligible; force loss to test their CPU fallback.
+		if (route.endsWith('device-loss')) {
+			await pipeline.handle(compile());
+			expect(facades[0]!.execution?.backend).toBe('gpu');
+			transport.devices[0]!.destroy();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+		const effects =
+			route === 'mixed-device-loss'
+				? [...tone, mixed]
+				: route === 'masked-device-loss'
+					? [
+							{
+								...tone[0]!,
+								mask: [
+									{
+										x: { model: 'srgb' as const, channel: 'red' as const },
+										points: [
+											[0, 0],
+											[1, 1]
+										] as const
+									}
+								]
+							}
+						]
+					: tone;
+		await pipeline.handle(compile(2, effects));
+		const result = replies.at(-1)!;
+		expect(result.type).toBe('compiled');
+		if (result.type !== 'compiled') throw Error('Compile failed');
+		const cpu = await actual.createDitherette({ wasm });
+		try {
+			const input = { ...image, data: new Uint8Array(image.data.buffer) };
+			const index = indexColours(input);
+			expect(applyCompiledEffects(input, index.indices, result.results).data).toEqual(
+				cpu.applyEffects({ version: 1, source: input, effects }).data
+			);
+		} finally {
+			cpu.dispose();
+		}
+		expect(facades[0]!.execution?.backend).toBe('cpu');
+		if (route.endsWith('device-loss')) expect(facades[0]!.execution?.fallback).toMatch(/^Lost\(/);
+		const deviceCount = transport.observations.devices;
+		await pipeline.handle(compile(3));
+		expect(facades[0]!.execution?.backend).toBe('cpu');
+		expect(transport.observations.devices).toBe(deviceCount);
+		expect(transport.resources.size).toBe(0);
+	});
 
 	it.each(['cancel', 'source', 'dispose'])(
 		'drops delayed readback after %s without overlapping package calls',

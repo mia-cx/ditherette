@@ -9,8 +9,8 @@ use wasm_bindgen::prelude::*;
 use crate::{
     image::ImageDimensions,
     prod::{
-        effects::decode_effects,
-        gpu::{Backend, ChannelLookup, Fallback, LookupMemory},
+        effects::{chain::validate_chain, decode_effects, EffectContext, EffectStep},
+        gpu::{Backend, ChannelLookup, Fallback, LookupMemory, Pointwise},
     },
 };
 
@@ -47,27 +47,62 @@ extern "C" {
     ) -> Result<(), JsValue>;
 }
 
+enum EffectPlan {
+    Lookup(ChannelLookup),
+    Pointwise(
+        Vec<EffectStep>,
+        Option<crate::prod::contract::request::WorkingSpace>,
+    ),
+}
+
 fn plan(
     effects: &str,
     width: u32,
     height: u32,
-) -> Result<(Option<ChannelLookup>, LookupMemory), JsError> {
+    space: f64,
+    rows: u32,
+) -> Result<(Option<EffectPlan>, LookupMemory), JsError> {
+    if rows != u32::MAX && rows > 32768 {
+        return Err(JsError::new("invalid tile height"));
+    }
     let dimensions =
         ImageDimensions::new(width, height).map_err(|error| JsError::new(&error.to_string()))?;
     let steps = decode_effects(effects).map_err(|error| JsError::new(&error.to_string()))?;
-    let stage =
+    let lookup =
         ChannelLookup::from_effects(&steps).map_err(|error| JsError::new(&error.to_string()))?;
-    let mut memory = LookupMemory::new(dimensions);
+    if lookup.is_none() && Pointwise::supported(&steps) {
+        let space = super::fields::parse_space(space);
+        validate_chain(
+            &steps,
+            &EffectContext {
+                space,
+                ..Default::default()
+            },
+        )
+        .map_err(|error| JsError::new(&error.to_string()))?;
+        let mut memory = Pointwise::memory(dimensions, effects.len() as u64);
+        memory.required_bytes +=
+            LookupMemory::with_tiling(dimensions, super::gpu_resize::tiling(rows)).required_bytes
+                - LookupMemory::new(dimensions).required_bytes;
+        return Ok((Some(EffectPlan::Pointwise(steps, space)), memory));
+    }
+    let mut memory = LookupMemory::with_tiling(dimensions, super::gpu_resize::tiling(rows));
     // Reserve the Value tree, serde buffers and decoded curves, not just text.
     memory.required_bytes += LookupMemory::DECODER_BYTES_PER_JSON_BYTE * effects.len() as u64;
-    Ok((stage, memory))
+    Ok((lookup.map(EffectPlan::Lookup), memory))
 }
 
 /// Zero means an unsupported chain; otherwise the full owned capacity required.
 /// This call precedes the host snapshot and all image allocations.
 #[wasm_bindgen(js_name = privateGpuEffectsPlan)]
-pub fn private_gpu_effects_plan(effects: &str, width: u32, height: u32) -> Result<f64, JsError> {
-    let (stage, memory) = plan(effects, width, height)?;
+pub fn private_gpu_effects_plan(
+    effects: &str,
+    width: u32,
+    height: u32,
+    space: f64,
+    rows: u32,
+) -> Result<f64, JsError> {
+    let (stage, memory) = plan(effects, width, height, space, rows)?;
     Ok(if stage.is_some() {
         memory.required_bytes as f64
     } else {
@@ -124,8 +159,10 @@ pub async fn private_gpu_apply_effects(
     effects: String,
     memory_limit: f64,
     sink: JsValue,
+    space: f64,
+    rows: u32,
 ) -> Result<String, JsError> {
-    let (stage, memory) = plan(&effects, width, height)?;
+    let (stage, memory) = plan(&effects, width, height, space, rows)?;
     let Some(stage) = stage else {
         return Ok("UnsupportedChain".into());
     };
@@ -146,11 +183,33 @@ pub async fn private_gpu_apply_effects(
             } else {
                 rgba.resize(memory.rgba_bytes as usize, 0);
                 match copy_input(&mut rgba, &input) {
-                    Ok(()) => {
-                        backend
-                            .lookup(&stage, dimensions, &rgba, memory_limit as u64)
-                            .await
-                    }
+                    Ok(()) => match stage {
+                        EffectPlan::Lookup(stage) => {
+                            backend
+                                .lookup_tiled(
+                                    &stage,
+                                    dimensions,
+                                    &rgba,
+                                    super::gpu_resize::tiling(rows),
+                                    memory_limit as u64,
+                                )
+                                .await
+                        }
+                        EffectPlan::Pointwise(steps, space) => match Pointwise::new(steps, space) {
+                            Ok(stage) => {
+                                backend
+                                    .pointwise_tiled(
+                                        &stage,
+                                        dimensions,
+                                        &rgba,
+                                        super::gpu_resize::tiling(rows),
+                                        memory_limit as u64,
+                                    )
+                                    .await
+                            }
+                            Err(reason) => Err(reason),
+                        },
+                    },
                     Err(_) => Err(Fallback::Failed("source copy failed".into())),
                 }
             }
