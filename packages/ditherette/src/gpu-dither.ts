@@ -892,6 +892,12 @@ export function initializeGpuDither(
 			if (bytes + gpuEffectsDecoderBytes(input.effects.json.length) >= options.memoryLimitBytes)
 				throw gpuFallbackError('MemoryLimit');
 			retire('UnsupportedStage');
+			const available = options.memoryLimitBytes - bytes;
+			// Release retained fallback capacity before the new source snapshot exists.
+			if (cpu && cpuAvailableBytes !== available) {
+				cpu.dispose();
+				cpu = undefined;
+			}
 			let data: Uint8Array;
 			try {
 				data = new Uint8Array(bytes);
@@ -908,11 +914,6 @@ export function initializeGpuDither(
 				height: input.sourceHeight,
 				data
 			});
-			const available = options.memoryLimitBytes - bytes;
-			if (cpu && cpuAvailableBytes !== available) {
-				cpu.dispose();
-				cpu = undefined;
-			}
 			cpu ??= await createCpu({
 				wasm: options.wasm,
 				memoryLimitBytes: available,
