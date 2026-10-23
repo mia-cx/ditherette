@@ -104,10 +104,12 @@ function publishSourceImageData({ imageData, warning }: DecodedImage) {
 
 export async function restorePersistedImages() {
 	const generation = ++sourceGeneration;
+	cancelProcessing();
 	let source: SourceImageRecord | undefined;
 	try {
 		source = await loadSourceImage();
 	} catch (error) {
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		const restoreError = new Error(
 			`Could not restore saved source image: ${errorMessage(error, 'record validation failed')}`,
 			{ cause: error }
@@ -119,14 +121,17 @@ export async function restorePersistedImages() {
 		} catch {
 			// Best effort: do not mask the original restore failure.
 		}
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		throw restoreError;
 	}
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	if (!source) return;
 
 	let decoded: DecodedImage;
 	try {
 		decoded = await decodeBlob(source.blob);
 	} catch (error) {
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		const restoreError = new Error(
 			`Could not restore saved source image: ${errorMessage(error, 'decode failed')}`,
 			{ cause: error }
@@ -138,6 +143,7 @@ export async function restorePersistedImages() {
 		} catch {
 			// Best effort: do not mask the original decode failure.
 		}
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		throw restoreError;
 	}
 
@@ -153,17 +159,21 @@ export async function restorePersistedImages() {
 			return;
 		} else if (processed) await clearPersistedProcessedImage();
 	} catch (error) {
+		// Supersession also covers a late DB failure. Never recover by clearing a newer upload.
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		processedImage.set(undefined);
 		try {
 			await clearPersistedProcessedImage();
 		} catch {
 			// Best effort: recovery should still schedule fresh processing.
 		}
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		processingError.set(
 			`Could not restore saved output; it will be regenerated. ${errorMessage(error, '')}`.trim()
 		);
 	}
 
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	publishSourceImageData(decoded);
 	scheduleProcessing(0);
 }

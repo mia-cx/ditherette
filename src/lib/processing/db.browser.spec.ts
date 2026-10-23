@@ -10,6 +10,9 @@ import {
 	saveSourceImageAndClearProcessed
 } from './db';
 import type { ProcessedImage, SourceImageRecord } from './types';
+import { encodeIndexedPng } from './png';
+import { encodeIndexedPngOffThread } from './png-worker';
+import { buildOutputPyramid, releaseLevels } from './output-preview';
 
 const nativeOpen = indexedDB.open.bind(indexedDB);
 const connections: IDBDatabase[] = [];
@@ -213,6 +216,138 @@ describe('IndexedDB connection ownership', () => {
 		await expect(loadSourceImage()).rejects.toBe(failure);
 		expect(await loadSourceImage()).toBeUndefined();
 		expect(open).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('processed persistence admission and cancellation', () => {
+	it('keeps an oversized output drawable and exportable after skipping persistence', async () => {
+		const large = {
+			...processed('large'),
+			width: 4096,
+			height: 4097,
+			indices: new Uint8Array(4096 * 4097)
+		};
+		await saveProcessedImage(large);
+		expect(await loadProcessedImage()).toBeUndefined();
+		const levels = buildOutputPyramid(large);
+		try {
+			expect([levels[0].width, levels[0].height]).toEqual([4096, 4097]);
+			const blob = await encodeIndexedPngOffThread(large);
+			const header = new DataView(await blob.slice(0, 24).arrayBuffer());
+			expect(header.getUint32(16)).toBe(4096);
+			expect(header.getUint32(20)).toBe(4097);
+			expect(large.indices.byteLength).toBe(4096 * 4097);
+			expect(large.indices.at(-1)).toBe(0);
+		} finally {
+			releaseLevels(levels);
+		}
+	});
+
+	it('skips oversized backing buffers, clears old output, and leaves export pixels intact', async () => {
+		await saveProcessedImage(processed());
+		const buffer = new Uint8Array(16 * 1024 * 1024 + 1);
+		const large = { ...processed('large'), indices: buffer.subarray(0, 1) };
+		const png = new Uint8Array(await encodeIndexedPng(large).arrayBuffer());
+		const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+		await saveProcessedImage(large);
+		expect(await loadProcessedImage()).toBeUndefined();
+		expect(put).not.toHaveBeenCalled();
+		expect(large.indices[0]).toBe(0);
+		expect(large.indices.buffer.byteLength).toBe(buffer.byteLength);
+		expect(new Uint8Array(await encodeIndexedPng(large).arrayBuffer())).toEqual(png);
+	});
+
+	it.each([-1, 0, 1])('admits processed payloads at the byte limit plus %i', async (difference) => {
+		// Fixture metadata is 294 bytes under the documented accounting policy.
+		const backing = new Uint8Array(16 * 1024 * 1024 - 294 + difference);
+		const image = { ...processed(), indices: backing.subarray(0, 1) };
+		await saveProcessedImage(image);
+		const loaded = await loadProcessedImage();
+		if (difference > 0) expect(loaded).toBeUndefined();
+		else {
+			expect(loaded?.settingsHash).toBe('current');
+			expect(loaded?.indices.buffer.byteLength).toBe(backing.byteLength);
+		}
+	});
+
+	it.each(['warnings', 'tags'])(
+		'rejects oversized %s before cloning the processed payload',
+		async (field) => {
+			const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+			const record = processed();
+			const largeText = ['x'.repeat(8 * 1024 * 1024)];
+			if (field === 'warnings') record.warnings = largeText;
+			else record.palette[0].tags = largeText;
+			await saveProcessedImage(record);
+			expect(put).not.toHaveBeenCalled();
+			expect(await loadProcessedImage()).toBeUndefined();
+		}
+	);
+
+	it('drops previously persisted oversized outputs so restore can regenerate', async () => {
+		await loadSourceImage();
+		const db = await result(nativeOpen('ditherette', 1));
+		connections.push(db);
+		const backing = new Uint8Array(16 * 1024 * 1024 + 1);
+		await result(
+			db
+				.transaction('records', 'readwrite')
+				.objectStore('records')
+				.put(
+					{
+						...processed(),
+						indices: backing.subarray(0, 1)
+					},
+					'processed'
+				)
+		);
+		expect(await loadProcessedImage()).toBeUndefined();
+		expect(
+			await result(db.transaction('records').objectStore('records').get('processed'))
+		).toBeUndefined();
+	});
+
+	it.each(['aborted', 'superseded'])(
+		'does not clone a save %s while the connection opens',
+		async (reason) => {
+			await saveProcessedImage(processed('committed'));
+			await closeDb();
+			const controller = new AbortController();
+			let current = true;
+			const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+			const record = processed();
+			if (reason === 'aborted') record.warnings = ['x'.repeat(8 * 1024 * 1024)];
+			const saving = saveProcessedImage(record, {
+				signal: controller.signal,
+				isCurrent: () => current
+			});
+			if (reason === 'aborted') controller.abort();
+			else current = false;
+			await saving;
+			expect(put).not.toHaveBeenCalled();
+			expect((await loadProcessedImage())?.settingsHash).toBe('committed');
+		}
+	);
+
+	it('aborts a superseded save after request success and preserves the last committed output', async () => {
+		await saveProcessedImage(processed('committed'));
+		const controller = new AbortController();
+		const put = IDBObjectStore.prototype.put;
+		vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+			this: IDBObjectStore,
+			...args
+		) {
+			const request = put.apply(this, args);
+			request.addEventListener('success', () => controller.abort(), { once: true });
+			return request;
+		});
+		await expect(
+			saveProcessedImage(processed('superseded'), {
+				signal: controller.signal,
+				isCurrent: () => !controller.signal.aborted
+			})
+		).rejects.toThrow('IndexedDB transaction aborted');
+		expect((await loadProcessedImage())?.settingsHash).toBe('committed');
 	});
 });
 
