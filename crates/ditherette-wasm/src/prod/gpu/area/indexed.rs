@@ -38,7 +38,7 @@ impl IndexedMemory {
 impl super::super::Backend {
     /// Runs independent fields, all matching metrics and optional complete
     /// Adaptive analysis on the verified device. Diffusion keeps its CPU recurrence
-    /// with GPU coverage. Yliluoma, legacy
+    /// with GPU coverage. Yliluoma searches its palette-mixture tree on GPU; legacy
     /// placement and samples outside 4–100 return `UnsupportedStage` for CPU fallback.
     pub async fn dither_and_quantize(
         &mut self,
@@ -74,6 +74,19 @@ impl super::super::Backend {
         let layout = Request::DitherAndQuantize(request)
             .validate()
             .map_err(|error| Fallback::Failed(error.to_string()))?;
+        if let DitherPolicy::Yliluoma { size, placement } = request.dither {
+            return self
+                .yliluoma(
+                    request,
+                    size,
+                    placement,
+                    memory_limit,
+                    coverage,
+                    retain,
+                    check,
+                )
+                .await;
+        }
         let memory = IndexedMemory::new(layout.output);
         if memory.required_bytes > memory_limit {
             return Err(Fallback::MemoryLimit);
@@ -275,7 +288,7 @@ impl super::super::Backend {
     }
 }
 
-fn size(size: BayerSize) -> u32 {
+pub(super) fn size(size: BayerSize) -> u32 {
     match size {
         BayerSize::Two => 2,
         BayerSize::Four => 4,
@@ -284,7 +297,7 @@ fn size(size: BayerSize) -> u32 {
     }
 }
 
-fn settings(
+pub(super) fn settings(
     palette: &PreparedPalette,
     matching: MatchPolicy,
     alpha: AlphaPolicy,

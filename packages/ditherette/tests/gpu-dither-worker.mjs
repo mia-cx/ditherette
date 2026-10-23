@@ -225,6 +225,14 @@ self.onmessage = async (event) => {
 				}
 		}
 		const full = [];
+		const mixtures = matching.flatMap((match) =>
+			['2', '4', '8', '16'].flatMap((size) =>
+				[{ mode: 'everywhere' }, area].map((placement) => ({
+					matching: match,
+					dither: { family: 'yliluoma', size, placement }
+				}))
+			)
+		);
 		if (event.data.full)
 			for (const sampleSize of [20, 40, 60, 100])
 				for (const contrastThreshold of [0.06, 0.12]) {
@@ -255,22 +263,31 @@ self.onmessage = async (event) => {
 						});
 					}
 				}
-		const selected = event.data.full
-			? full
-			: event.data.photo
-				? [
-						cases[0],
-						cases.find(
-							(item) =>
-								item.matching === 'oklab-euclidean' &&
-								item.dither.perturb?.field.size === '16' &&
-								item.dither.perturb.placement.mode === 'smooth-area-v1'
-						),
-						cases.find((item) => item.dither.kernel === 'sierra')
-					]
-				: event.data.fallback
-					? [cases[0], cases[8], cases.at(-1)]
-					: cases;
+		const selected =
+			event.data.full === 'yliluoma'
+				? mixtures.filter(
+						(item) =>
+							['srgb-euclidean', 'oklab-euclidean'].includes(item.matching) &&
+							item.dither.size === '16'
+					)
+				: event.data.yliluoma
+					? mixtures
+					: event.data.full
+						? full
+						: event.data.photo
+							? [
+									cases[0],
+									cases.find(
+										(item) =>
+											item.matching === 'oklab-euclidean' &&
+											item.dither.perturb?.field.size === '16' &&
+											item.dither.perturb.placement.mode === 'smooth-area-v1'
+									),
+									cases.find((item) => item.dither.kernel === 'sierra')
+								]
+							: event.data.fallback
+								? [cases[0], cases[8], cases.at(-1)]
+								: cases;
 		const requests = selected.map((item, index) => ({
 			...item,
 			version: 1,
@@ -282,6 +299,16 @@ self.onmessage = async (event) => {
 				{ mode: 'matte', rgb: [7, 200, 90] }
 			][index % 3]
 		}));
+		if (event.data.yliluoma) {
+			// Proves the truncation warning marker is not admitted as colour 257.
+			requests.push({
+				...requests[0],
+				palette: Array.from({ length: 257 }, (_, i) => ({
+					kind: 'color',
+					rgb: [i % 2 ? 255 : 0, i % 2 ? 255 : 0, i % 2 ? 255 : 0]
+				}))
+			});
+		}
 		let cpu = await createDitherette();
 		const expected = requests.map((request) => cpu.ditherAndQuantize(request));
 		cpu.dispose();
@@ -333,7 +360,7 @@ self.onmessage = async (event) => {
 		}
 		let cancelled = false;
 		let callbackRecovered = false;
-		if (!event.data.fallback && !event.data.full && !event.data.photo) {
+		if (!event.data.fallback && !event.data.full && !event.data.photo && !event.data.yliluoma) {
 			const diffusion = requests.find((request) => request.dither.family === 'diffusion');
 			try {
 				await gpu.ditherAndQuantize({

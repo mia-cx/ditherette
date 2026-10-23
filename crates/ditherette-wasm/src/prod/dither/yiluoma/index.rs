@@ -202,6 +202,45 @@ impl MixIndex {
             + (self.scoring_coordinates.capacity() * size_of::<[f32; 3]>()) as u64
     }
 
+    /// Streams the existing balanced tree to a GPU atlas without constructing a
+    /// second candidate array. Scoring coordinates and enumeration ties are the
+    /// same ones used by the CPU search; image pixels never enter this preparation.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn gpu_nodes(&self) -> impl ExactSizeIterator<Item = [u32; 16]> + '_ {
+        self.candidates
+            .iter()
+            .enumerate()
+            .map(|(position, candidate)| {
+                let coordinates = self
+                    .scoring_coordinates
+                    .get(candidate.order as usize)
+                    .copied()
+                    .unwrap_or(candidate.coordinates);
+                let bounds = self.bounds.get(position).copied().unwrap_or_default();
+                let count = (candidate.mix.high_ratio * self.levels as f32).round() as u32;
+                [
+                    coordinates[0].to_bits(),
+                    coordinates[1].to_bits(),
+                    coordinates[2].to_bits(),
+                    u32::from(candidate.mix.low_index)
+                        | u32::from(candidate.mix.high_index) << 8
+                        | count << 16,
+                    candidate.coordinates[0].to_bits(),
+                    candidate.coordinates[1].to_bits(),
+                    candidate.coordinates[2].to_bits(),
+                    candidate.order << 2 | u32::from(candidate.axis),
+                    bounds.min[0].to_bits(),
+                    bounds.min[1].to_bits(),
+                    bounds.min[2].to_bits(),
+                    bounds.max_chroma.to_bits(),
+                    bounds.max[0].to_bits(),
+                    bounds.max[1].to_bits(),
+                    bounds.max[2].to_bits(),
+                    0,
+                ]
+            })
+    }
+
     pub(crate) fn best(&self, color: [f32; 3], matcher: &PaletteMatcher) -> PaletteMix {
         if !color.iter().all(|coordinate| coordinate.is_finite())
             || !supported_target(color, self.matching)

@@ -87,21 +87,40 @@ test('indexed GPU admission falls back before device detection using the actual 
 		matching: 'oklab-euclidean',
 		dither: { family: 'none' }
 	};
-	const limit = bindings.privateGpuDitherPlan(source.width, source.height) - 1;
-	const processor = initializeGpuDither(
-		{
-			...bindings,
-			privateGpuDitherDetect: () => assert.fail('numeric admission must precede device detection')
-		},
-		{ wasm: scalar, memoryLimitBytes: limit }
-	);
-	const cpu = await createDitherette({ wasm: scalar });
-	try {
-		assert.deepEqual(await processor.ditherAndQuantize(request), cpu.ditherAndQuantize(request));
-		assert.equal(processor.execution.fallback, 'MemoryLimit');
-	} finally {
-		processor.dispose();
-		cpu.dispose();
+	for (const dither of [
+		{ family: 'none' },
+		{ family: 'yliluoma', size: '16', placement: { mode: 'everywhere' } }
+	]) {
+		request.dither = dither;
+		if (dither.family === 'yliluoma') {
+			request.palette.push(
+				...Array.from({ length: 30 }, (_, i) => ({ kind: 'color', rgb: [i * 7, i * 3, i * 5] }))
+			);
+		}
+		const limit =
+			(dither.family === 'yliluoma'
+				? bindings.privateGpuYliluomaPlan(
+						source.width,
+						source.height,
+						request.palette.length,
+						Number(dither.size)
+					)
+				: bindings.privateGpuDitherPlan(source.width, source.height)) - 1;
+		const processor = initializeGpuDither(
+			{
+				...bindings,
+				privateGpuDitherDetect: () => assert.fail('numeric admission must precede device detection')
+			},
+			{ wasm: scalar, memoryLimitBytes: limit }
+		);
+		const cpu = await createDitherette({ wasm: scalar });
+		try {
+			assert.deepEqual(await processor.ditherAndQuantize(request), cpu.ditherAndQuantize(request));
+			assert.equal(processor.execution.fallback, 'MemoryLimit');
+		} finally {
+			processor.dispose();
+			cpu.dispose();
+		}
 	}
 });
 

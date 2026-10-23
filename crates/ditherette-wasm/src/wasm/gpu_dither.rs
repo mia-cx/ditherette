@@ -33,6 +33,22 @@ pub fn private_gpu_dither_plan(width: u32, height: u32) -> Result<f64, JsError> 
     Ok(IndexedMemory::new(dimensions).required_bytes as f64)
 }
 
+/// Palette-size admission precedes the snapshot and palette-tree allocation.
+#[wasm_bindgen(js_name = privateGpuYliluomaPlan)]
+pub fn private_gpu_yliluoma_plan(
+    width: u32,
+    height: u32,
+    entries: u32,
+    size: u32,
+) -> Result<f64, JsError> {
+    if entries > 256 || ![2, 4, 8, 16].contains(&size) {
+        return Err(JsError::new("invalid mixture dimensions"));
+    }
+    let dimensions =
+        ImageDimensions::new(width, height).map_err(|error| JsError::new(&error.to_string()))?;
+    Ok(crate::prod::gpu::MixMemory::new(dimensions, entries, size).required_bytes as f64)
+}
+
 /// Verifies indexed readback and complete coverage before accepting image jobs.
 #[wasm_bindgen(js_name = privateGpuDitherDetect)]
 pub async fn private_gpu_dither_detect(memory_limit: f64) -> String {
@@ -168,6 +184,20 @@ pub async fn private_gpu_dither_and_quantize(
     let mut entries = [PaletteEntry::Transparent {}; PALETTE_SLOTS];
     let palette_len = read_palette(&palette, &mut entries)
         .map_err(|e| JsError::new(&format!("invalid palette: {e:?}")))?;
+    if let DitherPolicy::Yliluoma { size, .. } = dither {
+        let size = match size {
+            BayerSize::Two => 2,
+            BayerSize::Four => 4,
+            BayerSize::Eight => 8,
+            BayerSize::Sixteen => 16,
+        };
+        // The optional tail marks truncation; it is not a retained mixture colour.
+        if private_gpu_yliluoma_plan(width, height, palette_len.min(256) as u32, size)?
+            > memory_limit
+        {
+            return Ok("MemoryLimit".into());
+        }
+    }
     let bytes = u64::from(width) * u64::from(height) * 4;
     if bytes != u64::from(input.length()) {
         return Err(JsError::new("source dimensions no longer match"));

@@ -316,9 +316,13 @@ This API applies effects only. Resize, dithering, palette indices, and indexed P
 `createGpuDither(options)` uses the same optional artifact and scalar fallback inputs as
 `createGpuEffects`. Its asynchronous `ditherAndQuantize(request, signal?)` accepts the
 ordinary request and returns owned indices with the exact supplied palette. All 15 matching
-metrics, Bayer/rectangular/blue-noise/random fields, and complete `smooth-area-v1` analysis
+metrics, Bayer/rectangular/blue-noise/random fields, Yliluoma at every matrix size,
+and complete `smooth-area-v1` analysis
 run on GPU. Error diffusion uses GPU coverage with the unchanged CPU feedback and scan.
 GPU arithmetic may select a different palette entry at numerical boundaries.
+Yliluoma prepares its palette-only mixture tree on CPU, then searches image pixels
+and selects global Bayer indices on GPU. The transient tree, texture atlas and
+bounded upload staging are admitted before allocation and released after each call.
 
 `quantize(request, signal?)` exposes GPU matching directly. `resize(request, signal?)`
 supports nearest, area, bilinear, trilinear, bicubic, Lanczos2 and Lanczos3, with

@@ -93,6 +93,7 @@ export interface GpuDitherBindings {
 		sink: { value?: Rgba8Image; check(completed?: number): boolean }
 	): Promise<string>;
 	privateGpuDitherPlan(width: number, height: number): number;
+	privateGpuYliluomaPlan(width: number, height: number, entries: number, size: number): number;
 	privateGpuDitherDetect(memoryLimit: number): Promise<string>;
 	privateGpuEffectsAdapter(): string;
 	privateGpuEffectsDispose(): void;
@@ -358,7 +359,6 @@ export function initializeGpuDither(
 			const d = input.dither;
 			const unsupported =
 				typeof options.tiling === 'object' ||
-				d.family === 3 ||
 				(d.family === 2 && options.fallback === 'error') ||
 				d.placement === 1 ||
 				(d.placement === 2 && d.radius > 100) ||
@@ -372,7 +372,14 @@ export function initializeGpuDither(
 				if (!reason) {
 					try {
 						if (
-							bindings.privateGpuDitherPlan(input.sourceWidth, input.sourceHeight) >
+							(d.family === 3
+								? bindings.privateGpuYliluomaPlan(
+										input.sourceWidth,
+										input.sourceHeight,
+										Math.min(256, input.palette.length),
+										d.parameter
+									)
+								: bindings.privateGpuDitherPlan(input.sourceWidth, input.sourceHeight)) >
 							options.memoryLimitBytes
 						)
 							reason = 'MemoryLimit';
