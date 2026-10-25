@@ -17,6 +17,10 @@ test('release identity is unscoped browser ESM with separate ordinary and RC tag
 	validateReleaseTag('0.1.0-rc.0', 'v0.1.0-rc.0');
 	assert.equal(releaseChannel('0.1.0'), 'latest');
 	assert.equal(releaseChannel('0.1.0-rc.12'), 'rc');
+	for (const version of ['1.0.0', '2.10.3', '1.0.0-rc.0']) {
+		validateReleaseTag(version, `v${version}`);
+		assert.equal(releaseChannel(version), version.includes('-rc.') ? 'rc' : 'latest');
+	}
 	validateManifest({
 		...manifest,
 		version: '0.1.0',
@@ -27,7 +31,7 @@ test('release identity is unscoped browser ESM with separate ordinary and RC tag
 		['0.1.0-beta.1', 'v0.1.0-beta.1'],
 		['0.1.0-rc.01', 'v0.1.0-rc.01'],
 		['0.1.0-rc.0+local', 'v0.1.0-rc.0+local'],
-		['1.0.0', 'v1.0.0'],
+		['01.0.0', 'v01.0.0'],
 		['0.01.0', 'v0.01.0'],
 		['0.1.0', 'refs/tags/v0.1.0']
 	])
