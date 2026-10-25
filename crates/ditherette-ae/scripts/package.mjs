@@ -6,7 +6,7 @@
 // Run from anywhere: `node crates/ditherette-ae/scripts/package.mjs`.
 
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,23 +30,36 @@ if (process.platform === 'darwin') {
 	const contents = join(dist, `${NAME}.plugin`, 'Contents');
 	mkdirSync(join(contents, 'Resources'), { recursive: true });
 	mkdirSync(join(contents, 'MacOS'));
-	// build.rs writes the same resources for both architectures.
-	const resources = release(targets[0]);
-	copyFileSync(join(resources, `${PACKAGE}.rsrc`), join(contents, 'Resources', `${NAME}.rsrc`));
-	copyFileSync(join(resources, `${PACKAGE}_PkgInfo`), join(contents, 'PkgInfo'));
-	copyFileSync(join(resources, `${PACKAGE}_Info.plist`), join(contents, 'Info.plist'));
+	// build.rs writes the same PiPL resource for both architectures.
+	copyFileSync(
+		join(release(targets[0]), `${PACKAGE}.rsrc`),
+		join(contents, 'Resources', `${NAME}.rsrc`)
+	);
+	// An After Effects effect bundle: type 'eFKT', creator 'FXTC'.
+	writeFileSync(join(contents, 'PkgInfo'), 'eFKTFXTC');
+	writeFileSync(
+		join(contents, 'Info.plist'),
+		`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>${NAME}</string>
+	<key>CFBundleIdentifier</key>
+	<string>${BUNDLE_ID}</string>
+	<key>CFBundlePackageType</key>
+	<string>eFKT</string>
+	<key>CFBundleSignature</key>
+	<string>FXTC</string>
+</dict>
+</plist>
+`
+	);
 	run('lipo', [
 		...targets.map((target) => join(release(target), `lib${LIBRARY}.dylib`)),
 		'-create',
 		'-output',
 		join(contents, 'MacOS', NAME)
-	]);
-	run('plutil', [
-		'-replace',
-		'CFBundleIdentifier',
-		'-string',
-		BUNDLE_ID,
-		join(contents, 'Info.plist')
 	]);
 	// After Effects 25.2 and later load only signed plugins; ad-hoc signing is enough locally.
 	run('codesign', ['--force', '--options', 'runtime', '--sign', '-', join(dist, `${NAME}.plugin`)]);
