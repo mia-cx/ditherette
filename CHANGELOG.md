@@ -1,5 +1,57 @@
 # ditherette-web
 
+## 1.0.0
+
+### Major Changes
+
+- 8aa3343: Release v1.0.0 with CPU and WebGPU processing through one factory, client-selected
+  tiling and fallback, source-aware Adaptive placement, GPU effects and resize,
+  all dither families, fast approximate GPU diffusion, and detailed processing timings.
+
+### Minor Changes
+
+- 3a1e2e0: Scopes can inspect the image after effects, before palette matching, and the histogram shows pure-black and pure-white clipping for the inspected stage.
+- 943b732: Show how many pixels each palette colour uses in the palette table, and the total pixels to paint, leaving out Transparent, in the export bar.
+- 5fcb8ec: Adds guides to Wplace templates, Wplace colours, dithering and colour quantisation, with page descriptions, canonical URLs, social previews and a sitemap.
+
+### Patch Changes
+
+- 1dde608: Bound preview and saved-output memory for large images while keeping them available for display and PNG export. Release replaced preview resources and prevent superseded saves or restores from overwriting the current image.
+- 4513b33: Error diffusion dithers on the GPU when the browser has WebGPU. The result looks the same as before, though individual pixels differ, and serpentine Sierra on a 10-megapixel image no longer waits on the CPU.
+- a800b08: Update Typography's selector parser to address a security vulnerability while preserving generated prose styles.
+- e35d4bb: Update SvelteKit, Svelte and their dependencies to address security vulnerabilities in request handling and serialization.
+- b3c3328: Cap Adaptive sample size at 100 pixels so the useful range is easier to adjust.
+- a9dbe74: Processing a newly loaded image keeps waiting for its effects when a reply for the previous image arrives.
+- cd14e37: Keep indexed PNG downloads responsive by encoding in a dedicated worker. Cancel superseded exports while preserving the displayed result and exact palette transparency.
+- 0d14783: Toggling effects on the Source half no longer recompiles a chain it just showed. The last eight successful results for the image are kept, and turning every effect off keeps the Source canvas and its uploaded colour index for when they come back on.
+- f4e7b49: Reuse the saved-image database connection across reads and writes, and recover after connection closure or a failed open.
+- 98d9860: Use exact GPU channel tables for eligible image effects in Source previews and output processing. Preserve alpha, fall back to CPU for unsupported chains or GPU failures, and discard results superseded by newer edits.
+- 99aa38a: Match Wplace's Teal, #10AEA6, in the built-in Wplace palette. Saved Teal visibility and a Teal matte carry over to the corrected colour.
+- Updated dependencies [684afb0]
+- Updated dependencies [c101901]
+- Updated dependencies [8aa3343]
+- Updated dependencies [8fb1e39]
+- Updated dependencies [5677848]
+- Updated dependencies [b470df6]
+- Updated dependencies [5bf4716]
+- Updated dependencies [ff9b06d]
+- Updated dependencies [29a6ca6]
+- Updated dependencies [5671f7f]
+- Updated dependencies [0887255]
+- Updated dependencies [2de4a29]
+- Updated dependencies [e0ac855]
+- Updated dependencies [059a318]
+- Updated dependencies [e0ac855]
+- Updated dependencies [5c23184]
+- Updated dependencies [1c75fa0]
+- Updated dependencies [54f9336]
+- Updated dependencies [b680b9c]
+- Updated dependencies [a465a44]
+- Updated dependencies [a5df85d]
+- Updated dependencies [27cacac]
+- Updated dependencies [52ee928]
+  - ditherette@1.0.0
+
 ## 0.1.0
 
 ### Minor Changes
