@@ -25,7 +25,8 @@ mkdirSync(dist);
 
 if (process.platform === 'darwin') {
 	const targets = ['aarch64-apple-darwin', 'x86_64-apple-darwin'];
-	for (const target of targets) run('cargo', ['build', '--locked', '--release', '--target', target]);
+	for (const target of targets)
+		run('cargo', ['build', '--locked', '--release', '--target', target]);
 	const contents = join(dist, `${NAME}.plugin`, 'Contents');
 	mkdirSync(join(contents, 'Resources'), { recursive: true });
 	mkdirSync(join(contents, 'MacOS'));
@@ -40,7 +41,13 @@ if (process.platform === 'darwin') {
 		'-output',
 		join(contents, 'MacOS', NAME)
 	]);
-	run('plutil', ['-replace', 'CFBundleIdentifier', '-string', BUNDLE_ID, join(contents, 'Info.plist')]);
+	run('plutil', [
+		'-replace',
+		'CFBundleIdentifier',
+		'-string',
+		BUNDLE_ID,
+		join(contents, 'Info.plist')
+	]);
 	// After Effects 25.2 and later load only signed plugins; ad-hoc signing is enough locally.
 	run('codesign', ['--force', '--options', 'runtime', '--sign', '-', join(dist, `${NAME}.plugin`)]);
 } else if (process.platform === 'win32') {
