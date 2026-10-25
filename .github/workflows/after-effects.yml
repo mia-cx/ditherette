@@ -1,0 +1,61 @@
+name: After Effects plugin
+
+# Plugins build natively: their PiPL resource takes the build host's format.
+# Each run uploads the installable plugin for both platforms.
+on:
+  pull_request:
+    paths:
+      - crates/ditherette-ae/**
+      - crates/ditherette-wasm/**
+      - rust-toolchain.toml
+      - .github/workflows/after-effects.yml
+  push:
+    branches: [main]
+    paths:
+      - crates/ditherette-ae/**
+      - crates/ditherette-wasm/**
+      - rust-toolchain.toml
+      - .github/workflows/after-effects.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: after-effects-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  package:
+    name: Package (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            runner: macos-latest
+            targets: aarch64-apple-darwin x86_64-apple-darwin
+          - platform: Windows
+            runner: windows-latest
+            targets: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the Rust toolchain
+        run: |
+          rustup show
+          rustup target add ${{ matrix.targets }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates/ditherette-ae
+      - run: node crates/ditherette-ae/scripts/package.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Ditherette-${{ matrix.platform }}
+          path: crates/ditherette-ae/dist/
+          if-no-files-found: error
