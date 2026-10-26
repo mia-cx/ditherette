@@ -104,6 +104,29 @@ import(${JSON.stringify(guard)}).then(({ assertBuildEnvironment }) => {
 	});
 }
 
+test('v1 publication exception rejects other commits before artifact verification', async (t) => {
+	const { root } = await fixture(t);
+	const bin = join(root, 'temporary/bin');
+	await mkdir(bin);
+	await writeFile(join(bin, 'node'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+	const script = runStep(
+		await workflow('package-publish'),
+		'Verify source, artifact, sizes, and recorded release holds'
+	);
+	const result = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+		cwd: root,
+		encoding: 'utf8',
+		env: {
+			...process.env,
+			PATH: `${bin}:${process.env.PATH}`,
+			OVERRIDE_V1_RELEASE_HOLDS: 'true',
+			DITHERETTE_RELEASE_SHA: 'another-release',
+			GITHUB_WORKSPACE: root
+		}
+	});
+	assert.notEqual(result.status, 0, result.stdout + result.stderr);
+});
+
 test('validation fetches a squash-merged PR head and falls back when that ref is unavailable', async (t) => {
 	const { root, git } = await fixture(t);
 	const base = git('rev-parse', 'HEAD');
