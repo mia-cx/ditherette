@@ -111,7 +111,9 @@ Keep that workflow clear and fast, including large images.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
   Mia approved a one-release size-budget and WebKit qualification exception on
-  2026-10-26 for v1.0.0 at `259b6258`; later releases retain the ordinary gates.
+  2026-10-26 for v1.0.0's production source at `259b6258`; later releases retain
+  the ordinary gates. Retries build the workflow commit with unchanged production
+  source so npm provenance matches GitHub's signed source identity.
 
 ## Delivery
 

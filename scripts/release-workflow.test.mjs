@@ -111,11 +111,12 @@ test('v1 publication exception rejects other commits before artifact verificatio
 	await mkdir(join(root, 'packages/ditherette'), { recursive: true });
 	await writeFile(join(root, 'packages/ditherette/package.json'), '{"version":"1.0.0"}');
 	await writeFile(join(bin, 'node'), '#!/bin/sh\nprintf "%s\\n" "$*"\n', { mode: 0o755 });
+	await writeFile(join(bin, 'git'), '#!/bin/sh\nexit "${DIFF_STATUS:-0}"\n', { mode: 0o755 });
 	const script = runStep(
 		await workflow('package-publish'),
 		'Verify source, artifact, sizes, and recorded release holds'
 	);
-	const run = (sha) =>
+	const run = (sha, diffStatus = '0') =>
 		spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
 			cwd: root,
 			encoding: 'utf8',
@@ -123,7 +124,10 @@ test('v1 publication exception rejects other commits before artifact verificatio
 				...process.env,
 				PATH: `${bin}:${process.env.PATH}`,
 				OVERRIDE_V1_RELEASE_HOLDS: 'true',
-				DITHERETTE_RELEASE_SHA: sha,
+				RELEASE_AUTHORIZATION_SHA: sha,
+				DITHERETTE_RELEASE_SHA: 'workflow-source',
+				GITHUB_SHA: 'workflow-source',
+				DIFF_STATUS: diffStatus,
 				GITHUB_WORKSPACE: root
 			}
 		});
@@ -133,9 +137,12 @@ test('v1 publication exception rejects other commits before artifact verificatio
 	const approved = run('259b6258d5060523699d5e0b1d7bf24eb1c4e9d7');
 	assert.equal(approved.status, 0, approved.stdout + approved.stderr);
 	assert.match(approved.stdout, /release\.mjs verify/);
+	const changedSource = run('259b6258d5060523699d5e0b1d7bf24eb1c4e9d7', '1');
+	assert.notEqual(changedSource.status, 0);
+	assert.doesNotMatch(changedSource.stdout, /release\.mjs verify/);
 });
 
-test('npm provenance identifies checked-out release rather than newer dispatch commit', async (t) => {
+test('npm publication requires source and workflow identity to agree', async (t) => {
 	const { root, git } = await fixture(t);
 	const sha = git('rev-parse', 'HEAD');
 	const bin = join(root, 'temporary/bin');
@@ -145,16 +152,21 @@ test('npm provenance identifies checked-out release rather than newer dispatch c
 		await workflow('package-publish'),
 		'Publish the tested tarball through trusted publishing'
 	);
-	const result = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
-		cwd: root,
-		encoding: 'utf8',
-		env: {
-			...process.env,
-			PATH: `${bin}:${process.env.PATH}`,
-			PUBLISH_SHA: sha,
-			GITHUB_SHA: 'newer-dispatch'
-		}
-	});
+	const run = (workflowSha) =>
+		spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+			cwd: root,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				PATH: `${bin}:${process.env.PATH}`,
+				PUBLISH_SHA: sha,
+				GITHUB_SHA: workflowSha
+			}
+		});
+	const rejected = run('newer-dispatch');
+	assert.notEqual(rejected.status, 0);
+	assert.equal(rejected.stdout, '');
+	const result = run(sha);
 	assert.equal(result.status, 0, result.stdout + result.stderr);
 	assert.equal(result.stdout.trim(), sha);
 });

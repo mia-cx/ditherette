@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: false
+      release_authorization_sha:
+        description: Original merged release authorizing a source-identical retry
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -58,7 +63,7 @@ jobs:
       - name: Verify the merged release authorizes publication
         env:
           GH_TOKEN: ${{ github.token }}
-          DITHERETTE_RELEASE_SHA: ${{ inputs.sha }}
+          DITHERETTE_RELEASE_SHA: ${{ inputs.release_authorization_sha || inputs.sha }}
           DITHERETTE_RELEASE_RETRY: 'true'
         run: |
           plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$DITHERETTE_RELEASE_SHA/pulls" --paginate --slurp | node scripts/release-plan.mjs)"
@@ -76,6 +81,7 @@ jobs:
         env:
           DITHERETTE_RELEASE_SHA: ${{ inputs.sha }}
           OVERRIDE_V1_RELEASE_HOLDS: ${{ inputs.override_v1_release_holds }}
+          RELEASE_AUTHORIZATION_SHA: ${{ inputs.release_authorization_sha || inputs.sha }}
         run: |
           # Each Actions step receives the job environment again, including the cache override.
           unset CARGO_INCREMENTAL
@@ -83,12 +89,17 @@ jobs:
           if [ "${OVERRIDE_V1_RELEASE_HOLDS:-false}" = true ]; then
             # Mia explicitly approved these two publication exceptions on 2026-10-26.
             # Keep source/artifact verification and every other publication check.
-            test "$DITHERETTE_RELEASE_SHA" = 259b6258d5060523699d5e0b1d7bf24eb1c4e9d7
+            test "$RELEASE_AUTHORIZATION_SHA" = 259b6258d5060523699d5e0b1d7bf24eb1c4e9d7
+            test "$DITHERETTE_RELEASE_SHA" = "$GITHUB_SHA"
+            # Only publication automation, its tests, and direction may differ.
+            git diff --quiet "$RELEASE_AUTHORIZATION_SHA" "$DITHERETTE_RELEASE_SHA" -- . \
+              ':!.github/workflows/release.yml' ':!.github/workflows/package-publish.yml' \
+              ':!scripts/release-workflow.test.mjs' ':!DIRECTION.md'
             test "$(jq -r .version packages/ditherette/package.json)" = 1.0.0
             node packages/ditherette/scripts/release.mjs verify "$GITHUB_WORKSPACE/target/release"
             node --input-type=module <<'JS'
           import { requirePublication } from './packages/ditherette/scripts/release-contract.mjs';
-          requirePublication({ holds: [] }, [], process.env, '1.0.0', '259b6258d5060523699d5e0b1d7bf24eb1c4e9d7');
+          requirePublication({ holds: [] }, [], process.env, '1.0.0', process.env.DITHERETTE_RELEASE_SHA);
           console.log('Applying Mia-approved v1.0.0 size-budget and WebKit qualification exceptions.');
           JS
           else
@@ -103,7 +114,8 @@ jobs:
           PUBLISH_SHA: ${{ inputs.sha }}
         run: |
           test "$(git rev-parse HEAD)" = "$PUBLISH_SHA"
-          GITHUB_SHA="$PUBLISH_SHA" npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
+          test "$GITHUB_SHA" = "$PUBLISH_SHA"
+          npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
       - name: Tag and release the published version
         env:
           GH_TOKEN: ${{ github.token }}
