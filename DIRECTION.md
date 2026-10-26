@@ -108,6 +108,12 @@ Keep that workflow clear and fast, including large images.
   Complete explicit CPU/GPU tiling coverage before tuning per-kernel defaults.
   Timing sweeps wait for Mia's explicit go-ahead and a quiet host/GPU; never
   interfere with Remora's workload. Keep global analysis and diffusion state intact.
+- `crates/ditherette-ae` packages the engine as one After Effects effect with the editor's
+  resize, dither, colour-space and Adaptive controls, a pixel size, and a palette read from any
+  layer (Wplace by default). It renders on `wgpu` with CPU fallback. CI builds the macOS bundle
+  and Windows `.aex` natively; only the render core is tested on Linux. Loading in After Effects,
+  alpha convention and palette layers at reduced preview resolution await Mia's check on her Mac.
+  Separate per-stage effects and the editor's effect chain are later candidates.
 - Ordinary npm publication remains gated by package-size review and the recorded
   release-qualification hold. Passing website CI does not clear those gates.
   Mia approved a one-release size-budget and WebKit qualification exception on

@@ -1,0 +1,25 @@
+[package]
+name = "ditherette-ae"
+version = "1.0.0"
+edition = "2021"
+description = "Ditherette as an After Effects effect."
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ditherette-wasm = { path = "../ditherette-wasm", features = ["gpu"] }
+pollster = "1.0"
+
+# The bindings build only where After Effects runs. Elsewhere the render core still builds and tests.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+after-effects = "0.4"
+log = "0.4"
+
+[build-dependencies]
+pipl = "0.1"
+
+[profile.release]
+opt-level = 3
