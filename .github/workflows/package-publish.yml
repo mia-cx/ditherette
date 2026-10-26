@@ -94,7 +94,7 @@ jobs:
             # Only publication automation, its tests, and direction may differ.
             git diff --quiet "$RELEASE_AUTHORIZATION_SHA" "$DITHERETTE_RELEASE_SHA" -- . \
               ':!.github/workflows/release.yml' ':!.github/workflows/package-publish.yml' \
-              ':!scripts/release-workflow.test.mjs' ':!DIRECTION.md'
+              ':!scripts/release-plan.mjs' ':!scripts/release-workflow.test.mjs' ':!DIRECTION.md'
             test "$(jq -r .version packages/ditherette/package.json)" = 1.0.0
             node packages/ditherette/scripts/release.mjs verify "$GITHUB_WORKSPACE/target/release"
             node --input-type=module <<'JS'

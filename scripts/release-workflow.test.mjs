@@ -171,6 +171,67 @@ test('npm publication requires source and workflow identity to agree', async (t)
 	assert.equal(result.stdout.trim(), sha);
 });
 
+test('authorization accepts an original release from a detached newer workflow checkout', async (t) => {
+	const { root, git } = await fixture(t);
+	await mkdir(join(root, 'packages/ditherette'), { recursive: true });
+	for (const path of ['package.json', 'packages/ditherette/package.json']) {
+		await writeFile(join(root, path), JSON.stringify({ version: '0.1.0-rc.0' }));
+	}
+	git('add', '.');
+	git('commit', '-m', 'before release');
+	for (const path of ['package.json', 'packages/ditherette/package.json']) {
+		await writeFile(join(root, path), JSON.stringify({ version: '1.0.0' }));
+	}
+	git('add', '.');
+	git('commit', '-m', 'release');
+	const sha = git('rev-parse', 'HEAD');
+	await writeFile(join(root, 'workflow.yml'), 'publication retry\n');
+	git('add', '.');
+	git('commit', '-m', 'workflow retry');
+	const source = git('rev-parse', 'HEAD');
+	git('checkout', '--detach');
+	git('branch', '-D', 'main');
+	// Changesets is external; require the real planner to establish its checkout baseline.
+	await mkdir(join(root, 'node_modules/@changesets/cli'), { recursive: true });
+	await writeFile(
+		join(root, 'node_modules/@changesets/cli/bin.js'),
+		`
+const { execFileSync } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
+require('node:assert/strict').equal(execFileSync('git', ['rev-parse', 'main'], {encoding:'utf8'}).trim(), process.env.GITHUB_SHA);
+writeFileSync(process.argv[process.argv.indexOf('--output') + 1], JSON.stringify({releases:[]}));
+`
+	);
+	const repository = 'mia-cx/ditherette';
+	const run = spawnSync(
+		process.execPath,
+		[fileURLToPath(new URL('./release-plan.mjs', import.meta.url))],
+		{
+			cwd: root,
+			encoding: 'utf8',
+			input: JSON.stringify([
+				{
+					merged_at: '2026-10-26',
+					merge_commit_sha: sha,
+					base: { ref: 'main', repo: { full_name: repository } },
+					head: { ref: 'changeset-release/main', repo: { full_name: repository } }
+				}
+			]),
+			env: {
+				...process.env,
+				GITHUB_ACTIONS: 'true',
+				GITHUB_SHA: source,
+				GITHUB_REPOSITORY: repository,
+				DITHERETTE_RELEASE_SHA: sha,
+				DITHERETTE_RELEASE_RETRY: 'true'
+			}
+		}
+	);
+	assert.equal(run.status, 0, run.stdout + run.stderr);
+	assert.match(run.stdout, /release=true\nnpm=true\nweb=true\npending=false/);
+	assert.equal(git('rev-parse', 'HEAD'), source);
+});
+
 test('validation fetches a squash-merged PR head and falls back when that ref is unavailable', async (t) => {
 	const { root, git } = await fixture(t);
 	const base = git('rev-parse', 'HEAD');
