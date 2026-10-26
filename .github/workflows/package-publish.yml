@@ -99,7 +99,11 @@ jobs:
         run: node scripts/release-registry.mjs target/release/ditherette.tgz
       - name: Publish the tested tarball through trusted publishing
         if: steps.registry.outputs.exists != 'true'
-        run: npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
+        env:
+          PUBLISH_SHA: ${{ inputs.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$PUBLISH_SHA"
+          GITHUB_SHA="$PUBLISH_SHA" npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
       - name: Tag and release the published version
         env:
           GH_TOKEN: ${{ github.token }}

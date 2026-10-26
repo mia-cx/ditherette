@@ -108,10 +108,42 @@ test('v1 publication exception rejects other commits before artifact verificatio
 	const { root } = await fixture(t);
 	const bin = join(root, 'temporary/bin');
 	await mkdir(bin);
-	await writeFile(join(bin, 'node'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+	await mkdir(join(root, 'packages/ditherette'), { recursive: true });
+	await writeFile(join(root, 'packages/ditherette/package.json'), '{"version":"1.0.0"}');
+	await writeFile(join(bin, 'node'), '#!/bin/sh\nprintf "%s\\n" "$*"\n', { mode: 0o755 });
 	const script = runStep(
 		await workflow('package-publish'),
 		'Verify source, artifact, sizes, and recorded release holds'
+	);
+	const run = (sha) =>
+		spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+			cwd: root,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				PATH: `${bin}:${process.env.PATH}`,
+				OVERRIDE_V1_RELEASE_HOLDS: 'true',
+				DITHERETTE_RELEASE_SHA: sha,
+				GITHUB_WORKSPACE: root
+			}
+		});
+	const result = run('another-release');
+	assert.notEqual(result.status, 0, result.stdout + result.stderr);
+	assert.doesNotMatch(result.stdout, /release\.mjs verify/);
+	const approved = run('259b6258d5060523699d5e0b1d7bf24eb1c4e9d7');
+	assert.equal(approved.status, 0, approved.stdout + approved.stderr);
+	assert.match(approved.stdout, /release\.mjs verify/);
+});
+
+test('npm provenance identifies checked-out release rather than newer dispatch commit', async (t) => {
+	const { root, git } = await fixture(t);
+	const sha = git('rev-parse', 'HEAD');
+	const bin = join(root, 'temporary/bin');
+	await mkdir(bin);
+	await writeFile(join(bin, 'npm'), '#!/bin/sh\nprintf "%s\\n" "$GITHUB_SHA"\n', { mode: 0o755 });
+	const script = runStep(
+		await workflow('package-publish'),
+		'Publish the tested tarball through trusted publishing'
 	);
 	const result = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
 		cwd: root,
@@ -119,12 +151,12 @@ test('v1 publication exception rejects other commits before artifact verificatio
 		env: {
 			...process.env,
 			PATH: `${bin}:${process.env.PATH}`,
-			OVERRIDE_V1_RELEASE_HOLDS: 'true',
-			DITHERETTE_RELEASE_SHA: 'another-release',
-			GITHUB_WORKSPACE: root
+			PUBLISH_SHA: sha,
+			GITHUB_SHA: 'newer-dispatch'
 		}
 	});
-	assert.notEqual(result.status, 0, result.stdout + result.stderr);
+	assert.equal(result.status, 0, result.stdout + result.stderr);
+	assert.equal(result.stdout.trim(), sha);
 });
 
 test('validation fetches a squash-merged PR head and falls back when that ref is unavailable', async (t) => {
