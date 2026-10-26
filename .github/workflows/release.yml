@@ -127,10 +127,10 @@ jobs:
     if: >-
       needs.version.outputs.release == 'true' &&
       needs.version.outputs.npm == 'true' &&
-      (needs.version.outputs.validated != 'true' || inputs.override_v1_release_holds)
+      (needs.version.outputs.validated != 'true' || inputs.override_v1_release_holds || inputs.retry_release_commit != '')
     uses: ./.github/workflows/release-validation.yml
     with:
-      sha: ${{ inputs.override_v1_release_holds && github.sha || needs.version.outputs.sha }}
+      sha: ${{ (inputs.override_v1_release_holds || inputs.retry_release_commit != '') && github.sha || needs.version.outputs.sha }}
 
   npm:
     name: Publish ditherette
@@ -140,7 +140,7 @@ jobs:
       (needs.checks.result == 'success' || needs.checks.result == 'skipped')
     uses: ./.github/workflows/package-publish.yml
     with:
-      sha: ${{ inputs.override_v1_release_holds && github.sha || needs.version.outputs.sha }}
+      sha: ${{ (inputs.override_v1_release_holds || inputs.retry_release_commit != '') && github.sha || needs.version.outputs.sha }}
       release_authorization_sha: ${{ needs.version.outputs.sha }}
       override_v1_release_holds: ${{ github.event_name == 'workflow_dispatch' && inputs.override_v1_release_holds || false }}
     permissions:

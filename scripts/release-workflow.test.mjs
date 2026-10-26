@@ -91,6 +91,8 @@ import(${JSON.stringify(guard)}).then(({ assertBuildEnvironment }) => {
 					...process.env,
 					PATH: `${bin}:${process.env.PATH}`,
 					GITHUB_WORKSPACE: root,
+					RELEASE_AUTHORIZATION_SHA: 'release-source',
+					DITHERETTE_RELEASE_SHA: 'release-source',
 					CARGO_INCREMENTAL: '0',
 					RUSTFLAGS: flags || undefined
 				}
@@ -169,6 +171,53 @@ test('npm publication requires source and workflow identity to agree', async (t)
 	const result = run(sha);
 	assert.equal(result.status, 0, result.stdout + result.stderr);
 	assert.equal(result.stdout.trim(), sha);
+});
+
+test('ordinary retries validate and publish the workflow source only with unchanged production', async (t) => {
+	const release = await workflow('release');
+	for (const job of ['checks', 'npm']) {
+		const expression = jobSource(release, job).match(/sha: \$\{\{ (.*?) \}\}/)[1];
+		assert.equal(
+			runInNewContext(expression, {
+				inputs: { retry_release_commit: 'original', override_v1_release_holds: false },
+				github: { sha: 'workflow' },
+				needs: { version: { outputs: { sha: 'original' } } }
+			}),
+			'workflow'
+		);
+	}
+	const { root } = await fixture(t);
+	const bin = join(root, 'temporary/bin');
+	await mkdir(bin);
+	await writeFile(join(bin, 'node'), '#!/bin/sh\nprintf "%s\\n" "$*"\n', { mode: 0o755 });
+	await writeFile(join(bin, 'git'), '#!/bin/sh\nexit "${DIFF_STATUS:-0}"\n', { mode: 0o755 });
+	const script = runStep(
+		await workflow('package-publish'),
+		'Verify source, artifact, sizes, and recorded release holds'
+	);
+	for (const diffStatus of ['0', '1']) {
+		const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+			cwd: root,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				PATH: `${bin}:${process.env.PATH}`,
+				OVERRIDE_V1_RELEASE_HOLDS: 'false',
+				RELEASE_AUTHORIZATION_SHA: 'original',
+				DITHERETTE_RELEASE_SHA: 'workflow',
+				GITHUB_SHA: 'workflow',
+				DIFF_STATUS: diffStatus,
+				GITHUB_WORKSPACE: root
+			}
+		});
+		if (diffStatus === '0') {
+			assert.equal(run.status, 0, run.stdout + run.stderr);
+			assert.match(run.stdout, /release\.mjs publish-check/);
+		} else {
+			assert.notEqual(run.status, 0);
+			assert.doesNotMatch(run.stdout, /release\.mjs publish-check/);
+		}
+	}
 });
 
 test('authorization accepts an original release from a detached newer workflow checkout', async (t) => {
