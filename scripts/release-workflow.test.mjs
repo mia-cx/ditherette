@@ -91,6 +91,8 @@ import(${JSON.stringify(guard)}).then(({ assertBuildEnvironment }) => {
 					...process.env,
 					PATH: `${bin}:${process.env.PATH}`,
 					GITHUB_WORKSPACE: root,
+					RELEASE_AUTHORIZATION_SHA: 'release-source',
+					DITHERETTE_RELEASE_SHA: 'release-source',
 					CARGO_INCREMENTAL: '0',
 					RUSTFLAGS: flags || undefined
 				}
@@ -111,11 +113,12 @@ test('v1 publication exception rejects other commits before artifact verificatio
 	await mkdir(join(root, 'packages/ditherette'), { recursive: true });
 	await writeFile(join(root, 'packages/ditherette/package.json'), '{"version":"1.0.0"}');
 	await writeFile(join(bin, 'node'), '#!/bin/sh\nprintf "%s\\n" "$*"\n', { mode: 0o755 });
+	await writeFile(join(bin, 'git'), '#!/bin/sh\nexit "${DIFF_STATUS:-0}"\n', { mode: 0o755 });
 	const script = runStep(
 		await workflow('package-publish'),
 		'Verify source, artifact, sizes, and recorded release holds'
 	);
-	const run = (sha) =>
+	const run = (sha, diffStatus = '0') =>
 		spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
 			cwd: root,
 			encoding: 'utf8',
@@ -123,7 +126,10 @@ test('v1 publication exception rejects other commits before artifact verificatio
 				...process.env,
 				PATH: `${bin}:${process.env.PATH}`,
 				OVERRIDE_V1_RELEASE_HOLDS: 'true',
-				DITHERETTE_RELEASE_SHA: sha,
+				RELEASE_AUTHORIZATION_SHA: sha,
+				DITHERETTE_RELEASE_SHA: 'workflow-source',
+				GITHUB_SHA: 'workflow-source',
+				DIFF_STATUS: diffStatus,
 				GITHUB_WORKSPACE: root
 			}
 		});
@@ -133,9 +139,12 @@ test('v1 publication exception rejects other commits before artifact verificatio
 	const approved = run('259b6258d5060523699d5e0b1d7bf24eb1c4e9d7');
 	assert.equal(approved.status, 0, approved.stdout + approved.stderr);
 	assert.match(approved.stdout, /release\.mjs verify/);
+	const changedSource = run('259b6258d5060523699d5e0b1d7bf24eb1c4e9d7', '1');
+	assert.notEqual(changedSource.status, 0);
+	assert.doesNotMatch(changedSource.stdout, /release\.mjs verify/);
 });
 
-test('npm provenance identifies checked-out release rather than newer dispatch commit', async (t) => {
+test('npm publication requires source and workflow identity to agree', async (t) => {
 	const { root, git } = await fixture(t);
 	const sha = git('rev-parse', 'HEAD');
 	const bin = join(root, 'temporary/bin');
@@ -145,18 +154,131 @@ test('npm provenance identifies checked-out release rather than newer dispatch c
 		await workflow('package-publish'),
 		'Publish the tested tarball through trusted publishing'
 	);
-	const result = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
-		cwd: root,
-		encoding: 'utf8',
-		env: {
-			...process.env,
-			PATH: `${bin}:${process.env.PATH}`,
-			PUBLISH_SHA: sha,
-			GITHUB_SHA: 'newer-dispatch'
-		}
-	});
+	const run = (workflowSha) =>
+		spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+			cwd: root,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				PATH: `${bin}:${process.env.PATH}`,
+				PUBLISH_SHA: sha,
+				GITHUB_SHA: workflowSha
+			}
+		});
+	const rejected = run('newer-dispatch');
+	assert.notEqual(rejected.status, 0);
+	assert.equal(rejected.stdout, '');
+	const result = run(sha);
 	assert.equal(result.status, 0, result.stdout + result.stderr);
 	assert.equal(result.stdout.trim(), sha);
+});
+
+test('ordinary retries validate and publish the workflow source only with unchanged production', async (t) => {
+	const release = await workflow('release');
+	for (const job of ['checks', 'npm']) {
+		const expression = jobSource(release, job).match(/sha: \$\{\{ (.*?) \}\}/)[1];
+		assert.equal(
+			runInNewContext(expression, {
+				inputs: { retry_release_commit: 'original', override_v1_release_holds: false },
+				github: { sha: 'workflow' },
+				needs: { version: { outputs: { sha: 'original' } } }
+			}),
+			'workflow'
+		);
+	}
+	const { root } = await fixture(t);
+	const bin = join(root, 'temporary/bin');
+	await mkdir(bin);
+	await writeFile(join(bin, 'node'), '#!/bin/sh\nprintf "%s\\n" "$*"\n', { mode: 0o755 });
+	await writeFile(join(bin, 'git'), '#!/bin/sh\nexit "${DIFF_STATUS:-0}"\n', { mode: 0o755 });
+	const script = runStep(
+		await workflow('package-publish'),
+		'Verify source, artifact, sizes, and recorded release holds'
+	);
+	for (const diffStatus of ['0', '1']) {
+		const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
+			cwd: root,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				PATH: `${bin}:${process.env.PATH}`,
+				OVERRIDE_V1_RELEASE_HOLDS: 'false',
+				RELEASE_AUTHORIZATION_SHA: 'original',
+				DITHERETTE_RELEASE_SHA: 'workflow',
+				GITHUB_SHA: 'workflow',
+				DIFF_STATUS: diffStatus,
+				GITHUB_WORKSPACE: root
+			}
+		});
+		if (diffStatus === '0') {
+			assert.equal(run.status, 0, run.stdout + run.stderr);
+			assert.match(run.stdout, /release\.mjs publish-check/);
+		} else {
+			assert.notEqual(run.status, 0);
+			assert.doesNotMatch(run.stdout, /release\.mjs publish-check/);
+		}
+	}
+});
+
+test('authorization accepts an original release from a detached newer workflow checkout', async (t) => {
+	const { root, git } = await fixture(t);
+	await mkdir(join(root, 'packages/ditherette'), { recursive: true });
+	for (const path of ['package.json', 'packages/ditherette/package.json']) {
+		await writeFile(join(root, path), JSON.stringify({ version: '0.1.0-rc.0' }));
+	}
+	git('add', '.');
+	git('commit', '-m', 'before release');
+	for (const path of ['package.json', 'packages/ditherette/package.json']) {
+		await writeFile(join(root, path), JSON.stringify({ version: '1.0.0' }));
+	}
+	git('add', '.');
+	git('commit', '-m', 'release');
+	const sha = git('rev-parse', 'HEAD');
+	await writeFile(join(root, 'workflow.yml'), 'publication retry\n');
+	git('add', '.');
+	git('commit', '-m', 'workflow retry');
+	const source = git('rev-parse', 'HEAD');
+	git('checkout', '--detach');
+	git('branch', '-D', 'main');
+	// Changesets is external; require the real planner to establish its checkout baseline.
+	await mkdir(join(root, 'node_modules/@changesets/cli'), { recursive: true });
+	await writeFile(
+		join(root, 'node_modules/@changesets/cli/bin.js'),
+		`
+const { execFileSync } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
+require('node:assert/strict').equal(execFileSync('git', ['rev-parse', 'main'], {encoding:'utf8'}).trim(), process.env.GITHUB_SHA);
+writeFileSync(process.argv[process.argv.indexOf('--output') + 1], JSON.stringify({releases:[]}));
+`
+	);
+	const repository = 'mia-cx/ditherette';
+	const run = spawnSync(
+		process.execPath,
+		[fileURLToPath(new URL('./release-plan.mjs', import.meta.url))],
+		{
+			cwd: root,
+			encoding: 'utf8',
+			input: JSON.stringify([
+				{
+					merged_at: '2026-10-26',
+					merge_commit_sha: sha,
+					base: { ref: 'main', repo: { full_name: repository } },
+					head: { ref: 'changeset-release/main', repo: { full_name: repository } }
+				}
+			]),
+			env: {
+				...process.env,
+				GITHUB_ACTIONS: 'true',
+				GITHUB_SHA: source,
+				GITHUB_REPOSITORY: repository,
+				DITHERETTE_RELEASE_SHA: sha,
+				DITHERETTE_RELEASE_RETRY: 'true'
+			}
+		}
+	);
+	assert.equal(run.status, 0, run.stdout + run.stderr);
+	assert.match(run.stdout, /release=true\nnpm=true\nweb=true\npending=false/);
+	assert.equal(git('rev-parse', 'HEAD'), source);
 });
 
 test('validation fetches a squash-merged PR head and falls back when that ref is unavailable', async (t) => {
@@ -337,26 +459,32 @@ fs.writeFileSync(process.env.RELEASE_RECORD, JSON.stringify({ args, notes: fs.re
 `,
 			{ mode: 0o755 }
 		);
-		const script = runStep(await workflow(name), step).replace(
-			/\$\{\{ (?:needs\.version\.outputs\.sha|inputs\.sha) \}\}/g,
-			sha
-		);
-		const run = (fail) =>
-			spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
-				cwd: root,
-				encoding: 'utf8',
-				env: {
-					...process.env,
-					PATH: `${bin}:${process.env.PATH}`,
-					RUNNER_TEMP: join(root, 'temporary'),
-					RELEASE_RECORD: record,
-					FAIL_CREATE: String(fail)
+		const script = runStep(await workflow(name), step);
+		const run = (fail, source = sha) =>
+			spawnSync(
+				'bash',
+				['-euo', 'pipefail', '-c', script.replace(/\$\{\{ inputs\.sha \}\}/g, source)],
+				{
+					cwd: root,
+					encoding: 'utf8',
+					env: {
+						...process.env,
+						PATH: `${bin}:${process.env.PATH}`,
+						RUNNER_TEMP: join(root, 'temporary'),
+						RELEASE_RECORD: record,
+						RELEASE_AUTHORIZATION_SHA: sha,
+						FAIL_CREATE: String(fail)
+					}
 				}
-			});
+			);
 		assert.equal(run(true).status, 1);
 		assert.equal(git('rev-list', '-n', '1', tag), sha);
-		const retry = run(false);
+		await writeFile(join(root, 'DIRECTION.md'), 'Equivalent retry workflow.\n');
+		git('add', '.');
+		git('commit', '-m', 'retry workflow');
+		const retry = run(false, git('rev-parse', 'HEAD'));
 		assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+		assert.equal(git('rev-list', '-n', '1', tag), sha, 'recovery must not move the existing tag');
 		const release = JSON.parse(await readFile(record, 'utf8'));
 		assert.equal(release.args[2], tag);
 		assert.equal(release.args[release.args.indexOf('--target') + 1], sha);
