@@ -459,26 +459,32 @@ fs.writeFileSync(process.env.RELEASE_RECORD, JSON.stringify({ args, notes: fs.re
 `,
 			{ mode: 0o755 }
 		);
-		const script = runStep(await workflow(name), step).replace(
-			/\$\{\{ (?:needs\.version\.outputs\.sha|inputs\.sha) \}\}/g,
-			sha
-		);
-		const run = (fail) =>
-			spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
-				cwd: root,
-				encoding: 'utf8',
-				env: {
-					...process.env,
-					PATH: `${bin}:${process.env.PATH}`,
-					RUNNER_TEMP: join(root, 'temporary'),
-					RELEASE_RECORD: record,
-					FAIL_CREATE: String(fail)
+		const script = runStep(await workflow(name), step);
+		const run = (fail, source = sha) =>
+			spawnSync(
+				'bash',
+				['-euo', 'pipefail', '-c', script.replace(/\$\{\{ inputs\.sha \}\}/g, source)],
+				{
+					cwd: root,
+					encoding: 'utf8',
+					env: {
+						...process.env,
+						PATH: `${bin}:${process.env.PATH}`,
+						RUNNER_TEMP: join(root, 'temporary'),
+						RELEASE_RECORD: record,
+						RELEASE_AUTHORIZATION_SHA: sha,
+						FAIL_CREATE: String(fail)
+					}
 				}
-			});
+			);
 		assert.equal(run(true).status, 1);
 		assert.equal(git('rev-list', '-n', '1', tag), sha);
-		const retry = run(false);
+		await writeFile(join(root, 'DIRECTION.md'), 'Equivalent retry workflow.\n');
+		git('add', '.');
+		git('commit', '-m', 'retry workflow');
+		const retry = run(false, git('rev-parse', 'HEAD'));
 		assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+		assert.equal(git('rev-list', '-n', '1', tag), sha, 'recovery must not move the existing tag');
 		const release = JSON.parse(await readFile(record, 'utf8'));
 		assert.equal(release.args[2], tag);
 		assert.equal(release.args[release.args.indexOf('--target') + 1], sha);

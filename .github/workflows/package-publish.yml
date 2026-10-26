@@ -122,16 +122,20 @@ jobs:
       - name: Tag and release the published version
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_AUTHORIZATION_SHA: ${{ inputs.release_authorization_sha || inputs.sha }}
         run: |
           version="$(jq -r .version packages/ditherette/package.json)"
           tag="ditherette@$version"
           sha="${{ inputs.sha }}"
           git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null || true
           if target="$(git rev-list -n 1 "refs/tags/$tag" 2>/dev/null)" && [ -n "$target" ]; then
-            if [ "$target" != "$sha" ]; then
+            if [ "$target" != "$sha" ] && [ "$target" != "$RELEASE_AUTHORIZATION_SHA" ]; then
               echo "::error::Tag $tag exists at $target, not $sha." >&2
               exit 1
             fi
+            # An earlier attempt may have tagged the original authorized release.
+            # Keep that immutable tag when recovering its missing GitHub release.
+            sha="$target"
           else
             git tag "$tag" "$sha"
             git push origin "refs/tags/$tag"
