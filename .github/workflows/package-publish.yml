@@ -7,6 +7,11 @@ on:
         description: Full commit SHA to publish
         required: true
         type: string
+      override_v1_release_holds:
+        description: Apply the approved original-v1 size and qualification exception
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -70,17 +75,35 @@ jobs:
       - name: Verify source, artifact, sizes, and recorded release holds
         env:
           DITHERETTE_RELEASE_SHA: ${{ inputs.sha }}
+          OVERRIDE_V1_RELEASE_HOLDS: ${{ inputs.override_v1_release_holds }}
         run: |
           # Each Actions step receives the job environment again, including the cache override.
           unset CARGO_INCREMENTAL
           node scripts/release-plan.mjs current npm
-          node packages/ditherette/scripts/release.mjs publish-check "$GITHUB_WORKSPACE/target/release"
+          if [ "${OVERRIDE_V1_RELEASE_HOLDS:-false}" = true ]; then
+            # Mia explicitly approved these two publication exceptions on 2026-10-26.
+            # Keep source/artifact verification and every other publication check.
+            test "$DITHERETTE_RELEASE_SHA" = 259b6258d5060523699d5e0b1d7bf24eb1c4e9d7
+            test "$(jq -r .version packages/ditherette/package.json)" = 1.0.0
+            node packages/ditherette/scripts/release.mjs verify "$GITHUB_WORKSPACE/target/release"
+            node --input-type=module <<'JS'
+          import { requirePublication } from './packages/ditherette/scripts/release-contract.mjs';
+          requirePublication({ holds: [] }, [], process.env, '1.0.0', '259b6258d5060523699d5e0b1d7bf24eb1c4e9d7');
+          console.log('Applying Mia-approved v1.0.0 size-budget and WebKit qualification exceptions.');
+          JS
+          else
+            node packages/ditherette/scripts/release.mjs publish-check "$GITHUB_WORKSPACE/target/release"
+          fi
       - name: Check for an identical published version
         id: registry
         run: node scripts/release-registry.mjs target/release/ditherette.tgz
       - name: Publish the tested tarball through trusted publishing
         if: steps.registry.outputs.exists != 'true'
-        run: npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
+        env:
+          PUBLISH_SHA: ${{ inputs.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$PUBLISH_SHA"
+          GITHUB_SHA="$PUBLISH_SHA" npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
       - name: Tag and release the published version
         env:
           GH_TOKEN: ${{ github.token }}
