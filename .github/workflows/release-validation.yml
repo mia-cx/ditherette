@@ -63,7 +63,12 @@ jobs:
             crates/ditherette-bench-oracle
             tools/spec-freeze/syntax
       - name: Install pinned browser engines
-        run: pnpm --filter ditherette exec playwright install --with-deps chromium firefox webkit
+        run: |
+          # The runner's Azure mirror can stall browser dependency downloads.
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt
+          printf '%s\n' 'https://security.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-security-mirrors.txt
+          printf '%s\n' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'Acquire::Retries "2";' | sudo tee /etc/apt/apt.conf.d/99ditherette-network
+          pnpm --filter ditherette exec playwright install --with-deps chromium firefox webkit
       - name: Fetch locked dependencies for offline oracle preparation
         run: |
           cargo fetch --locked --manifest-path tools/spec-freeze/syntax/Cargo.toml

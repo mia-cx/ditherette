@@ -91,6 +91,7 @@ jobs:
             # Only publication automation, its tests, and direction may differ.
             git diff --quiet "$RELEASE_AUTHORIZATION_SHA" "$DITHERETTE_RELEASE_SHA" -- . \
               ':!.github/workflows/release.yml' ':!.github/workflows/package-publish.yml' \
+              ':!.github/workflows/release-validation.yml' \
               ':!scripts/release-plan.mjs' ':!scripts/release-workflow.test.mjs' ':!DIRECTION.md'
           fi
           if [ "${OVERRIDE_V1_RELEASE_HOLDS:-false}" = true ]; then
