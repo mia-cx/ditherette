@@ -176,10 +176,8 @@ export async function createGpuEffects(options?: GpuEffectsOptions): Promise<Gpu
 	let fallback = 'NoAdapter';
 	if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
 		try {
-			// A variable URL keeps the optional artifact out of ordinary bundles. Hosts
-			// serve dist/wasm/gpu alongside this module when they opt into the backend.
-			const url = new URL('./wasm/gpu/ditherette_wasm.factory.js', import.meta.url);
-			const factory = (await import(/* @vite-ignore */ url.href)) as {
+			// A static specifier lets bundlers split the optional glue into a lazy chunk.
+			const factory = (await import('./wasm/gpu/ditherette_wasm.factory.js')) as {
 				createScalarBindings(): GpuEffectsBindings & {
 					default(input: { module_or_path?: InitInput }): Promise<unknown>;
 				};

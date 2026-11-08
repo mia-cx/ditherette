@@ -346,8 +346,7 @@ export async function createGpuDither(options?: GpuDitherOptions): Promise<GpuDi
 	let fallback = 'NoAdapter';
 	if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
 		try {
-			const url = new URL('./wasm/gpu/ditherette_wasm.factory.js', import.meta.url);
-			const factory = (await import(/* @vite-ignore */ url.href)) as {
+			const factory = (await import('./wasm/gpu/ditherette_wasm.factory.js')) as {
 				createScalarBindings(): GpuDitherBindings & {
 					default(input: { module_or_path?: InitInput }): Promise<unknown>;
 				};

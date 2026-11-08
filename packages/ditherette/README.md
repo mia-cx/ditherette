@@ -254,8 +254,9 @@ pnpm package:build
 
 GPU execution remains opt-in at the factory. Including its assets does not clear
 the package's size review or release-qualification gates.
-Serve `dist/wasm/gpu/` alongside the package modules, including generated snippets and Wasm.
-The optional module loads by URL relative to `gpu-effects.js`, so bundling hosts must preserve that asset location.
+The GPU glue loads through a lazy `import('./wasm/gpu/ditherette_wasm.factory.js')`, so
+bundlers split it into its own chunk, including single-file bundles. Unbundled hosts serve
+`dist/wasm/gpu/` alongside the package modules, including generated snippets and Wasm.
 
 ```ts
 import { createDitherette } from 'ditherette';
