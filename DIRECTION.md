@@ -6,6 +6,8 @@ Keep that workflow clear and fast, including large images.
 
 ## Current state
 
+- The completed CPU/GPU stack is merged. `ditherette@1.0.0` is published on npm
+  as `latest` with signed provenance from `c98a7834` (2026-10-26).
 - CI now delivers verified main commits to https://ditherette.mia.cx on Cloudflare,
   after fresh conformance at the exact commit. npm publication has separate gates.
 - Public guides cover Wplace templates and colours, dithering, and fixed-palette
@@ -54,14 +56,6 @@ Keep that workflow clear and fast, including large images.
   and reconstruction first, then matching/diffusion; investigate Yliluoma separately.
   Shared-host timings are diagnostic, not qualified benchmarks. The reviewed
   integration and host memory bounds await merge.
-  A further CPU selector candidate expands hot three-channel loops, prunes
-  uncompetitive reconstruction paths and converts colours lazily in the existing
-  row workspace. Exact mask, checkpoint and budget checks pass; review and
-  deployment remain separate.
-  The follow-up expands fixed neighbourhood visits and reuses consecutive RGB
-  conversions within the call. Boundary scans also reuse overlapping column bounds
-  and expand coarse probes without changing masks, checkpoints or storage.
-  Further CPU gains remain worthwhile alongside GPU work.
   Mia's CPU target is Adaptive below twice the matching ordinary dither call.
   The CPU candidate reuses source-only coverage across algorithm, strength, palette and matching changes;
   invalidate it for processed-input, sample-size or contrast-tolerance changes.
@@ -128,9 +122,8 @@ analytics while the pull requests complete their merge gates.
 
 ## Priorities
 
-Mia's 2026-10-23 priority is to merge the completed stack and release v1.0.0.
-Resolve CI, review and release-qualification blockers first; further profiling
-and optimization follow the release.
+The v1.0.0 merge and publication milestone is complete. Further profiling and
+optimization follow the release.
 
 1. Make direct production delivery reliable and keep dependencies secure.
    Use the completed profile to prioritize exact Adaptive selector/reconstruction
