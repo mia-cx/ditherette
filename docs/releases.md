@@ -26,7 +26,7 @@ Release planning runs for every push without a shared queue. Release-PR updates 
 - Keep the existing `production` GitHub environment and `CLOUDFLARE_API_TOKEN`. The token needs Workers Scripts and D1 edit access. CI retains the existing Cloudflare account ID and Wrangler's `production` environment. This change needs no new credential or approval screen.
 - Configure the `npm-publish` GitHub environment and npm trusted publishing for `mia-cx/ditherette`, calling workflow `release.yml`. The npm publisher's environment field is optional; if set, use `npm-publish`. npm validates the calling workflow when a reusable workflow publishes. No npm token is stored in this pipeline.
 - The first candidate uses an approved local npm bootstrap without provenance because trusted publishing needs the package to exist first. Build and verify the exact archive before publishing it under `rc`. Configure trusted publishing before an ordinary release.
-- Resolve the remaining S41/WebKit hold in `packages/ditherette/release-policy.json` before ordinary publication. The first candidate's package size has been reviewed, and the 10% size-growth gate stays in place.
+- `packages/ditherette/release-policy.json` records the reviewed package size and any release holds. Its baseline is the measured 1.0.2 archive, and the 10% size-growth gate stays in place. Publication fails while any hold is recorded.
 
 Merging a verified implementation starts website delivery. npm publication still requires a merged Changesets version PR.
 

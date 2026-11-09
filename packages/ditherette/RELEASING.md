@@ -2,9 +2,8 @@
 
 The public package is the unscoped `ditherette` browser ESM package. The npm
 package and Rust crate share a version. Scalar processing is the default;
-optional threads remain experimental. The recorded S41/WebKit hold blocks
-ordinary publication, while the first approved RC uses the separate procedure
-below.
+optional threads remain experimental, and release validation does not certify
+threaded WebKit. The first approved RC used the separate procedure below.
 
 ## Prepare and inspect
 
@@ -22,9 +21,10 @@ archive, installs that archive offline, and compares every installed file with
 the packed bytes. The report records source and archive digests plus raw, gzip,
 and brotli sizes. It rejects stale developer files and build overrides.
 
-The first RC's reviewed tar baseline is 1,358,336 raw bytes, 467,608 gzip
-bytes, and 315,843 brotli bytes. The size gate flags new files and growth
-above 10% from this baseline. Review and record any later baseline change.
+The reviewed tar baseline is the measured 1.0.2 archive, with scalar, threaded
+and GPU artifacts: 4,019,200 raw bytes, 1,419,563 gzip bytes, and 760,068
+brotli bytes. The size gate flags new files and growth above 10% from this
+baseline. Review and record any later baseline change.
 
 ## First RC bootstrap
 
@@ -52,7 +52,6 @@ when its own version increases and its release checks pass.
 The npm trusted publisher must name `mia-cx/ditherette`, the calling workflow
 `release.yml`, and the protected `npm-publish` environment. npm documents the
 package prerequisite in [its trusted publishing guide](https://docs.npmjs.com/trusted-publishers/).
-The remaining S41/WebKit hold must be resolved before an ordinary release.
 Changesets promotion from the RC restores the `latest` package tag and aligns
 the Rust crate version.
 
