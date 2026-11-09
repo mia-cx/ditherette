@@ -109,6 +109,17 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 	assert.deepEqual(sizeReview(sizes, policy), []);
 	assert.equal(sizeReview({ ...sizes, tarball: { ...baseline, gzip: 111 } }, policy).length, 1);
 	assert.equal(sizeReview({ ...sizes, files: [{ path: 'new', ...baseline }] }, policy).length, 1);
+	const snippet = (hash) =>
+		`dist/wasm/gpu/snippets/ditherette-wasm-${hash}/src/wasm/gpu_helpers.js`;
+	const snippetPolicy = {
+		...policy,
+		baseline: { [snippet('0b3e086aab697f3b')]: baseline, $tarball: baseline }
+	};
+	const renamed = {
+		files: [{ path: snippet('730d83264370b896'), ...baseline }],
+		tarball: baseline
+	};
+	assert.deepEqual(sizeReview(renamed, snippetPolicy), []);
 	assert.equal(sizeReview(sizes, { ...policy, baseline: null }).length, 1);
 	assert.throws(
 		() => sizeReview(sizes, { ...policy, baseline: { file: { ...baseline, brotli: undefined } } }),

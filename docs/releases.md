@@ -26,7 +26,7 @@ Release planning runs for every push without a shared queue. Release-PR updates 
 - Keep the existing `production` GitHub environment and `CLOUDFLARE_API_TOKEN`. The token needs Workers Scripts and D1 edit access. CI retains the existing Cloudflare account ID and Wrangler's `production` environment. This change needs no new credential or approval screen.
 - Configure the `npm-publish` GitHub environment and npm trusted publishing for `mia-cx/ditherette`, calling workflow `release.yml`. The npm publisher's environment field is optional; if set, use `npm-publish`. npm validates the calling workflow when a reusable workflow publishes. No npm token is stored in this pipeline.
 - The first candidate uses an approved local npm bootstrap without provenance because trusted publishing needs the package to exist first. Build and verify the exact archive before publishing it under `rc`. Configure trusted publishing before an ordinary release.
-- Resolve the remaining S41/WebKit hold in `packages/ditherette/release-policy.json` before ordinary publication. The first candidate's package size has been reviewed, and the 10% size-growth gate stays in place.
+- `packages/ditherette/release-policy.json` records the reviewed package size and any release holds. Its baseline is the measured 1.0.2 archive, and the 10% size-growth gate stays in place. Publication fails while any hold is recorded.
 
 Merging a verified implementation starts website delivery. npm publication still requires a merged Changesets version PR.
 
@@ -36,7 +36,7 @@ The first npm candidate is `0.1.0-rc.0`, published only under `rc`. npm candidat
 
 The first candidate's reviewed package baseline is 1,358,336 raw bytes, 467,608 gzip bytes, and 315,843 brotli bytes. This is 14.1%, 14.6%, and 13.8% above the earlier baseline after the performance work. The scalar Wasm is 447,703 raw bytes; the optional threaded Wasm is 625,739 raw bytes. Future builds retain the 10% growth gate against this reviewed baseline.
 
-The RC scope is scalar processing by default, with optional threads experimental. The retained WebKit threaded-cleanup limitation remains documented. The ordinary release hold stays in place. The first candidate's one-time local publication omits provenance with Mia's approval; ordinary publication still requires it.
+The RC scope is scalar processing by default, with optional threads experimental. The retained WebKit threaded-cleanup limitation remains documented. Ordinary releases record no hold for it. The first candidate's one-time local publication omits provenance with Mia's approval; ordinary publication still requires it.
 
 ## Website retries
 
