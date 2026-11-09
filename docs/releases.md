@@ -36,7 +36,7 @@ The first npm candidate is `0.1.0-rc.0`, published only under `rc`. npm candidat
 
 The first candidate's reviewed package baseline is 1,358,336 raw bytes, 467,608 gzip bytes, and 315,843 brotli bytes. This is 14.1%, 14.6%, and 13.8% above the earlier baseline after the performance work. The scalar Wasm is 447,703 raw bytes; the optional threaded Wasm is 625,739 raw bytes. Future builds retain the 10% growth gate against this reviewed baseline.
 
-The RC scope is scalar processing by default, with optional threads experimental. The retained WebKit threaded-cleanup limitation remains documented. The ordinary release hold stays in place. The first candidate's one-time local publication omits provenance with Mia's approval; ordinary publication still requires it.
+The RC scope is scalar processing by default, with optional threads experimental. The retained WebKit threaded-cleanup limitation remains documented. Ordinary releases record no hold for it. The first candidate's one-time local publication omits provenance with Mia's approval; ordinary publication still requires it.
 
 ## Website retries
 

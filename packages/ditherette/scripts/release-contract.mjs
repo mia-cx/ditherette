@@ -93,6 +93,10 @@ export function validateFiles(files) {
 	);
 }
 
+/** wasm-bindgen hashes the crate version into snippet directories, so every release renames them. */
+const sizePath = (path) =>
+	path.replace(/\/snippets\/ditherette-wasm-[0-9a-f]{16}\//, '/snippets/*/');
+
 /** Any new file or raw/compressed growth above 10% requires a reviewed budget update. */
 export function sizeReview(sizes, policy) {
 	assert.equal(policy.schema, 1);
@@ -105,9 +109,12 @@ export function sizeReview(sizes, policy) {
 				true,
 				`Baseline ${path}.${metric} must be finite.`
 			);
+	const baselines = new Map(
+		Object.entries(policy.baseline).map(([path, baseline]) => [sizePath(path), baseline])
+	);
 	const findings = [];
 	for (const item of [...sizes.files, { path: '$tarball', ...sizes.tarball }]) {
-		const baseline = policy.baseline[item.path];
+		const baseline = baselines.get(sizePath(item.path));
 		if (!baseline) {
 			findings.push(`${item.path}: new size item`);
 			continue;
