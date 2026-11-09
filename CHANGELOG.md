@@ -1,5 +1,12 @@
 # ditherette-web
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [326dbb4]
+  - ditherette@1.0.2
+
 ## 1.0.1
 
 ### Patch Changes
