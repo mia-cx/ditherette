@@ -121,7 +121,10 @@ test('releaseValidated requires the exact release PR head and validation workflo
 		event: 'pull_request',
 		path: '.github/workflows/release-validation.yml',
 		head_sha: pr.head.sha,
-		pull_requests: [{ number: pr.number }],
+		head_branch: pr.head.ref,
+		head_repository: { full_name: pr.head.repo.full_name },
+		// GitHub lists only open PRs here, so a merged release PR's run has none.
+		pull_requests: [],
 		status: 'completed',
 		conclusion: 'success',
 		...over
@@ -131,7 +134,11 @@ test('releaseValidated requires the exact release PR head and validation workflo
 	assert.equal(releaseValidated([run({ status: 'in_progress', conclusion: null })], pr), false);
 	assert.equal(releaseValidated([run({ path: '.github/workflows/ci.yml' })], pr), false);
 	assert.equal(releaseValidated([run({ head_sha: 'c'.repeat(40) })], pr), false);
-	assert.equal(releaseValidated([run({ pull_requests: [{ number: 124 }] })], pr), false);
+	assert.equal(releaseValidated([run({ head_branch: 'feature' })], pr), false);
+	assert.equal(
+		releaseValidated([run({ head_repository: { full_name: 'fork/ditherette' } })], pr),
+		false
+	);
 	assert.equal(releaseValidated([], pr), false);
 });
 

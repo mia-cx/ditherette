@@ -72,14 +72,18 @@ export function releasePullRequest(pullRequests, context) {
 	);
 }
 
-/** Only this PR head's successful validation workflow can authorize reuse of its tested tree. */
+/**
+ * Only this PR head's successful validation workflow can authorize reuse of its tested tree.
+ * Match the run's head branch and repository: GitHub empties `pull_requests` once the PR merges.
+ */
 export function releaseValidated(workflowRuns, pullRequest) {
 	return workflowRuns.some(
 		(run) =>
 			run.event === 'pull_request' &&
 			run.path?.split('@')[0] === '.github/workflows/release-validation.yml' &&
 			run.head_sha === pullRequest.head.sha &&
-			run.pull_requests?.some((pr) => pr.number === pullRequest.number) &&
+			run.head_branch === pullRequest.head.ref &&
+			run.head_repository?.full_name === pullRequest.head.repo.full_name &&
 			run.status === 'completed' &&
 			run.conclusion === 'success'
 	);

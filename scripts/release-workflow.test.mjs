@@ -322,7 +322,9 @@ test('validation fetches a squash-merged PR head and falls back when that ref is
 					event: 'pull_request',
 					path: '.github/workflows/release-validation.yml',
 					head_sha: head,
-					pull_requests: [{ number: 123 }],
+					head_branch: 'changeset-release/main',
+					head_repository: { full_name: repository },
+					pull_requests: [],
 					status: 'completed',
 					conclusion: 'success'
 				}
