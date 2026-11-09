@@ -1,9 +1,9 @@
 import { beforeEach, expect, it } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { effectLayers } from '$lib/stores/effects';
+import { addEffect, effectLayers } from '$lib/stores/effects';
 import Studio from './Studio.svelte';
-import { studioLayout } from './workspace';
+import { openEffectWindow, studioLayout } from './workspace';
 import { collapsedGroups } from '$lib/components/dock/dock';
 
 const props = { onChooseImage: () => {}, onSelectFile: () => {} };
@@ -24,18 +24,17 @@ beforeEach(async () => {
 	collapsedGroups.set({});
 });
 
-/** Add through the keyboard, which the menu supports alongside the pointer. */
-async function addEffect(label: string) {
+/** Choose by pointer: the opening menu focuses its first item, which a hand-set focus would race. */
+async function addFromMenu(label: string) {
 	(page.getByRole('button', { name: 'Add effect' }).element() as HTMLElement).focus();
 	await userEvent.keyboard('{Enter}');
-	(page.getByRole('menuitem', { name: label }).element() as HTMLElement).focus();
-	await userEvent.keyboard('{Enter}');
+	await page.getByRole('menuitem', { name: label }).click();
 }
 
 it('opens one window per effect instance and titles it with the instance name', async () => {
 	await renderStudio();
-	await addEffect('Levels');
-	await addEffect('Levels');
+	await addFromMenu('Levels');
+	await addFromMenu('Levels');
 	await expect.poll(tabTitles).toEqual(expect.arrayContaining(['Levels', 'Levels 2']));
 
 	const name = page.getByRole('textbox', { name: 'Effect name' });
@@ -50,7 +49,11 @@ it('opens one window per effect instance and titles it with the instance name', 
 
 it('restores the latest layout, even when the studio closes before saving', async () => {
 	const first = await renderStudio();
-	await addEffect('Curves');
+	// The dock accepts windows once its default windows show. Add as the Effects panel does.
+	await expect.poll(tabTitles).toContain('Effects');
+	openEffectWindow(addEffect('curves').id);
+	// Unmount once the window shows, well inside the 250 ms save delay.
+	await expect.poll(tabTitles).toContain('Curves');
 	await first.unmount();
 	expect(JSON.stringify(studioLayout.get())).toContain('effect:');
 
