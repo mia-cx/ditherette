@@ -549,6 +549,9 @@ test('resolved JSON feature changes fail even with unchanged frozen source', () 
 		mutation(root, path, changed, () => {
 			// A valid updated lock demonstrates a feature failure, not a stale-lock failure.
 			for (const manifest of [path, 'crates/ditherette-bench/Cargo.toml']) {
+				const jsonVersion = dependencies[`${manifest}:x86_64-unknown-linux-gnu`].find(
+					(entry) => entry.name === 'serde_json'
+				).version;
 				run(
 					'cargo',
 					[
@@ -559,7 +562,7 @@ test('resolved JSON feature changes fail even with unchanged frozen source', () 
 						'-p',
 						'serde_json',
 						'--precise',
-						'1.0.149'
+						jsonVersion
 					],
 					tmpdir()
 				);
