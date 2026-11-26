@@ -29,6 +29,9 @@ test('exports an indexed PNG and restores the workbench after reload', async ({ 
 	await page.getByRole('option', { name: /^Bayer 2×2/ }).click();
 	await strength.fill('50');
 
+	await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+	await page.getByRole('menuitemcheckbox', { name: 'Share anonymous export data' }).click();
+
 	const downloadButton = page.getByRole('button', { name: 'Download PNG' });
 	const downloaded = page.waitForEvent('download');
 	await downloadButton.click();
