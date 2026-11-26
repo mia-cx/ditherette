@@ -8,13 +8,16 @@ test('exports an indexed PNG and restores the workbench after reload', async ({ 
 	await page.goto('/');
 
 	const dither = page.getByRole('region', { name: 'Dithering controls' });
-	const algorithm = dither.getByRole('combobox');
+	const algorithm = dither.getByRole('button', { name: /^(None|Bayer 2×2) / });
 	const strength = dither.getByRole('spinbutton', { name: 'Strength' });
 	await expect(algorithm).toBeVisible();
 
+	const preview = page.getByRole('figure', {
+		name: 'Source and processed output comparison preview'
+	});
 	const [chooser] = await Promise.all([
 		page.waitForEvent('filechooser'),
-		page.getByRole('button', { name: 'Choose file' }).click()
+		preview.getByRole('button', { name: 'Choose file' }).click()
 	]);
 	await chooser.setFiles(
 		fileURLToPath(new URL('../src/lib/assets/guides/source.png', import.meta.url))
