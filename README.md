@@ -65,9 +65,9 @@ You can preview the production build with `npm run preview`.
 
 ## Threaded Wasm build prerequisites
 
-`pnpm wasm:build:threads` requires `nightly-2024-08-02`, its `wasm32-unknown-unknown` target, and `rust-src`.
+`pnpm build`, `pnpm package:build` and `pnpm wasm:build:threads` require `nightly-2024-08-02`, its `wasm32-unknown-unknown` target, and `rust-src`.
 The root `rust-toolchain.toml` configures stable Rust; it does not provision this separate nightly.
-Install these prerequisites once before running the threaded build:
+Install these prerequisites once before building:
 
 ```sh
 rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown

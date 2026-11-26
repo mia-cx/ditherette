@@ -44,7 +44,9 @@ async function build(variant, benchSubjects) {
 		env: {
 			...process.env,
 			RUSTUP_TOOLCHAIN: toolchain,
-			CARGO_ENCODED_RUSTFLAGS: rustFlags.join('\x1f'),
+			RUSTFLAGS: undefined,
+			CARGO_ENCODED_RUSTFLAGS: undefined,
+			CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS: rustFlags.join(' '),
 			CARGO_TARGET_DIR:
 				process.env.CARGO_TARGET_DIR ?? fileURLToPath(new URL(`target/${variant}`, crate))
 		}

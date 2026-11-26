@@ -22,6 +22,9 @@ beforeEach(() => {
 });
 
 const focus = (element: Element) => (element as HTMLElement).focus();
+const mac = /Mac|iPhone|iPad/.test(navigator.userAgent);
+const mod = mac ? 'Meta' : 'Control';
+const undoKey = () => userEvent.keyboard(`{${mod}>}z{/${mod}}`);
 
 it('opens with the command shortcut and drives the preview with bare keys', async () => {
 	const onChooseImage = vi.fn();
@@ -67,7 +70,7 @@ it('sets the dither algorithm from Image > Dither', async () => {
 	await expect.poll(() => ditherSettings.get().algorithm).toBe('sierra-lite');
 });
 
-it('undoes and redoes settings with Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y', async () => {
+it('undoes and redoes settings with the command modifier, and Ctrl+Y off macOS', async () => {
 	const stop = startSettingsHistory();
 	try {
 		await render(AppBar, {
@@ -77,25 +80,26 @@ it('undoes and redoes settings with Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y', async () 
 			onClear: () => {}
 		});
 		updateDitherSettings({ algorithm: 'atkinson' });
-		await userEvent.keyboard('{Control>}z{/Control}');
+		await undoKey();
 		expect(ditherSettings.get().algorithm).toBe('none');
-		await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+		await userEvent.keyboard(`{${mod}>}{Shift>}z{/Shift}{/${mod}}`);
 		expect(ditherSettings.get().algorithm).toBe('atkinson');
-		await userEvent.keyboard('{Control>}z{/Control}');
-		await userEvent.keyboard('{Control>}y{/Control}');
-		expect(ditherSettings.get().algorithm).toBe('atkinson');
+		if (!mac) {
+			await undoKey();
+			await userEvent.keyboard('{Control>}y{/Control}');
+			expect(ditherSettings.get().algorithm).toBe('atkinson');
+		}
 	} finally {
 		stop();
 	}
 });
 
-it('leaves Ctrl+Z to text editors and handled keys, and undoes from other controls', async () => {
+it('leaves undo to text editors and handled keys, and undoes from other controls', async () => {
 	const stop = startSettingsHistory();
 	const fields = document.body.appendChild(document.createElement('div'));
 	fields.innerHTML =
 		'<input type="number"><div contenteditable><span tabindex="-1">text</span></div><input type="checkbox">';
 	const handled = (event: KeyboardEvent) => event.preventDefault();
-	const undoKey = () => userEvent.keyboard('{Control>}z{/Control}');
 	try {
 		await render(AppBar, {
 			hasImage: true,
